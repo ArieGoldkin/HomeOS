@@ -23,6 +23,14 @@ describe("loadConfig", () => {
     expect(cfg.port).toBe(3000);
   });
 
+  it("defaults the Claude model and DB path, and respects overrides", () => {
+    expect(loadConfig(base).anthropicModel).toBe("claude-haiku-4-5");
+    expect(loadConfig(base).dbPath).toBe("./data/homeos.db");
+    const cfg = loadConfig({ ...base, ANTHROPIC_MODEL: "claude-opus-4-8", DB_PATH: "/tmp/h.db" });
+    expect(cfg.anthropicModel).toBe("claude-opus-4-8");
+    expect(cfg.dbPath).toBe("/tmp/h.db");
+  });
+
   it("coerces PORT to a number and respects overrides", () => {
     const cfg = loadConfig({ ...base, PORT: "8080", GRAPH_VERSION: "v22.0" });
     expect(cfg.port).toBe(8080);

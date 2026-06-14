@@ -21,6 +21,10 @@ const schema = z.object({
   // An empty allowlist means nobody could use the bot — treat it as misconfiguration.
   ALLOWLIST: csvList.pipe(z.array(z.string()).min(1)),
   PORT: z.coerce.number().int().positive().default(3000),
+  // M2: Claude parsing model + SQLite store path. The Anthropic credential itself is read
+  // straight from the environment by @anthropic-ai/sdk, so it is not modeled here.
+  ANTHROPIC_MODEL: z.string().min(1).default("claude-haiku-4-5"),
+  DB_PATH: z.string().min(1).default("./data/homeos.db"),
 });
 
 export interface Config {
@@ -30,6 +34,8 @@ export interface Config {
   graphVersion: string;
   allowlist: string[];
   port: number;
+  anthropicModel: string;
+  dbPath: string;
 }
 
 /**
@@ -52,5 +58,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     graphVersion: e.GRAPH_VERSION,
     allowlist: e.ALLOWLIST,
     port: e.PORT,
+    anthropicModel: e.ANTHROPIC_MODEL,
+    dbPath: e.DB_PATH,
   };
 }
