@@ -3,11 +3,11 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
-import { createEventStore } from "./db.ts";
-import { createIdempotencyStore } from "./idempotency.ts";
-import { anthropicRawParse, createParser } from "./parse.ts";
-import { createServer } from "./server.ts";
-import { createWhatsAppClient } from "./whatsapp.ts";
+import { createEventStore } from "./db/event-store.ts";
+import { createIdempotencyStore } from "./core/idempotency.ts";
+import { anthropicRawParse, createParser } from "./parsing/parser.ts";
+import { createServer } from "./http/server.ts";
+import { createWhatsAppClient } from "./whatsapp/client.ts";
 
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).
 const config = loadConfig();

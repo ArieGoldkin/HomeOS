@@ -1,10 +1,10 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { isAllowed } from "./allowlist.ts";
-import type { EventStore } from "./db.ts";
+import type { EventStore } from "../db/event-store.ts";
 import type { IdempotencyStore } from "./idempotency.ts";
-import type { ParseMessage } from "./parse.ts";
-import type { InboundMessage } from "./webhook.ts";
-import type { SendText } from "./whatsapp.ts";
+import type { ParseMessage } from "../parsing/parser.ts";
+import type { InboundMessage } from "../http/webhook.ts";
+import type { SendText } from "../whatsapp/client.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];

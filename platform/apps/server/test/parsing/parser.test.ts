@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { anthropicRawParse, buildSystemPrompt, createParser, type RawParse } from "../src/parse.ts";
+import { anthropicRawParse, buildSystemPrompt, createParser, type RawParse } from "../../src/parsing/parser.ts";
 
 const validRaw = {
   kind: "event",

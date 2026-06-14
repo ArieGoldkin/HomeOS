@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ParsedEvent } from "@homeos/shared";
-import { handleInbound } from "../src/handler.ts";
-import type { HandlerDeps } from "../src/handler.ts";
-import type { InboundMessage } from "../src/webhook.ts";
+import { handleInbound } from "../../src/core/handler.ts";
+import type { HandlerDeps } from "../../src/core/handler.ts";
+import type { InboundMessage } from "../../src/http/webhook.ts";
 
 const allowlist = ["972501234567"];
 

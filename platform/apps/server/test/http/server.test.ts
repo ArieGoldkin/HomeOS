@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ParsedEvent } from "@homeos/shared";
-import { createServer } from "../src/server.ts";
-import type { ServerDeps } from "../src/server.ts";
+import { createServer } from "../../src/http/server.ts";
+import type { ServerDeps } from "../../src/http/server.ts";
 
 const textPayload = {
   object: "whatsapp_business_account",
