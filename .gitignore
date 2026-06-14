@@ -1,0 +1,28 @@
+# Claude coordination state (session-specific)
+.claude/coordination/
+
+# Claude session state (user-specific, not shared)
+.claude/context/
+.claude/continuity/
+.claude/feedback/
+
+# Dependencies
+node_modules/
+
+# Env / secrets — never commit real tokens
+.env
+.env.*
+!.env.example
+
+# Build / TS
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
+# /develop pipeline state (local, user-specific)
+.develop/
+
+# OS
+.DS_Store

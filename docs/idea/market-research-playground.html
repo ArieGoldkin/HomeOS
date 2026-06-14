@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HomeOS — Market Research Brief</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b27; --line:#222a3a;
+    --ink:#e6edf3; --dim:#9aa7b8; --faint:#6b7889;
+    --teal:#2dd4bf; --amber:#d29922; --red:#f85149; --blue:#388bfd; --purple:#a371f7; --green:#3fb950;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px}
+  .wrap{display:grid;grid-template-columns:230px 1fr;max-width:1240px;margin:0 auto;gap:0}
+  /* nav */
+  nav{position:sticky;top:0;align-self:start;height:100vh;padding:28px 18px;border-right:1px solid var(--line);overflow-y:auto}
+  nav .brand{font-weight:700;font-size:15px;letter-spacing:.3px;margin-bottom:4px}
+  nav .brand b{color:var(--teal)}
+  nav .sub{color:var(--faint);font-size:11px;margin-bottom:22px;font-family:var(--mono)}
+  nav a{display:block;color:var(--dim);text-decoration:none;font-size:13px;padding:7px 10px;border-radius:7px;margin:2px 0;border-left:2px solid transparent;transition:.15s}
+  nav a:hover{background:var(--panel2);color:var(--ink)}
+  nav a.active{background:var(--panel2);color:var(--teal);border-left-color:var(--teal)}
+  nav a .nn{color:var(--faint);font-family:var(--mono);font-size:11px;margin-right:7px}
+  /* main */
+  main{padding:40px 46px 120px;min-width:0}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+  .pill{font-size:11.5px;font-family:var(--mono);color:var(--dim);background:var(--panel2);border:1px solid var(--line);padding:4px 11px;border-radius:30px}
+  .pill b{color:var(--ink)}
+  h1{font-size:38px;line-height:1.1;margin:6px 0 10px;font-weight:800;
+     background:linear-gradient(100deg,#e6edf3,#2dd4bf 60%,#388bfd);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lede{color:var(--dim);font-size:16px;max-width:760px;margin-bottom:26px}
+  .callout{border-left:3px solid var(--teal);background:linear-gradient(90deg,rgba(45,212,191,.08),transparent);padding:16px 20px;border-radius:0 10px 10px 0;margin:20px 0}
+  .callout.warn{border-color:var(--amber);background:linear-gradient(90deg,rgba(210,153,34,.09),transparent)}
+  .callout.red{border-color:var(--red);background:linear-gradient(90deg,rgba(248,81,73,.09),transparent)}
+  .callout h3{margin:0 0 6px;font-size:14px;letter-spacing:.4px;text-transform:uppercase;color:var(--dim)}
+  .callout.warn h3{color:var(--amber)} .callout.red h3{color:var(--red)} .callout h3 .v{color:var(--teal)}
+  .callout p{margin:0;font-size:15.5px}
+  /* kpi */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:26px 0 8px}
+  .k{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 14px}
+  .k .v{font-size:26px;font-weight:800;font-family:var(--mono);line-height:1}
+  .k .l{font-size:11px;color:var(--faint);margin-top:7px;text-transform:uppercase;letter-spacing:.4px}
+  .k.teal .v{color:var(--teal)} .k.amber .v{color:var(--amber)} .k.red .v{color:var(--red)}
+  .k.blue .v{color:var(--blue)} .k.green .v{color:var(--green)}
+  /* sections */
+  section{padding-top:52px;margin-top:8px;border-top:1px solid transparent}
+  h2{font-size:23px;font-weight:750;margin:0 0 16px;display:flex;align-items:center;gap:12px}
+  h2 .n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;font-size:14px;font-family:var(--mono);color:#06120f;background:var(--teal);font-weight:800}
+  h2.amber .n{background:var(--amber);color:#1a1405} h2.red .n{background:var(--red);color:#fff}
+  h2.blue .n{background:var(--blue);color:#04132e} h2.purple .n{background:var(--purple);color:#fff}
+  /* vs split */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:8px 0}
+  .vs .col{border-radius:12px;padding:16px 18px;border:1px solid var(--line)}
+  .vs .before{background:rgba(248,81,73,.06);border-color:rgba(248,81,73,.3)}
+  .vs .after{background:rgba(45,212,191,.06);border-color:rgba(45,212,191,.3)}
+  .vs h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .vs .before h4{color:var(--red)} .vs .after h4{color:var(--teal)}
+  .vs p{margin:0;font-size:14.5px;color:var(--ink)}
+  /* table */
+  .tbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .chip{font-size:12px;font-family:var(--mono);color:var(--dim);background:var(--panel2);border:1px solid var(--line);padding:5px 12px;border-radius:30px;cursor:pointer;user-select:none;transition:.15s}
+  .chip:hover{color:var(--ink)} .chip.on{background:var(--teal);color:#06120f;border-color:var(--teal);font-weight:700}
+  .chip.on.consider{background:var(--amber)} .chip.on.avoid{background:var(--red);color:#fff}
+  .thint{color:var(--faint);font-size:12px;margin-left:auto;font-family:var(--mono)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;white-space:nowrap}
+  th:hover{color:var(--ink)} th .ar{color:var(--teal);font-size:10px}
+  td.name{font-weight:700;color:var(--ink)}
+  tr.us{background:rgba(56,139,253,.08)}
+  tr.us td.name{color:var(--blue)}
+  tr.dead td.name{color:var(--faint);text-decoration:line-through}
+  .yes{color:var(--green);font-weight:700} .no{color:var(--red);font-weight:700} .part{color:var(--amber);font-weight:700}
+  .vb{font-size:11px;font-family:var(--mono);padding:3px 9px;border-radius:20px;font-weight:700;white-space:nowrap}
+  .v-use{background:rgba(63,185,80,.15);color:var(--green)} .v-consider{background:rgba(210,153,34,.15);color:var(--amber)} .v-avoid{background:rgba(248,81,73,.15);color:var(--red)}
+  td.note{color:var(--dim);font-size:12.5px;max-width:230px}
+  /* grids */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px}
+  .card .top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}
+  .card h4{margin:0;font-size:15px}
+  .card p{margin:0;color:var(--dim);font-size:13.5px}
+  .badge{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;font-weight:700}
+  .b-high{background:rgba(248,81,73,.16);color:var(--red)} .b-med{background:rgba(210,153,34,.16);color:var(--amber)} .b-low{background:rgba(63,185,80,.14);color:var(--green)}
+  .b-win{background:rgba(45,212,191,.15);color:var(--teal)}
+  .conf{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:9px}
+  /* diagram */
+  .diawrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto}
+  .legend{color:var(--faint);font-size:12px;margin-top:10px;font-family:var(--mono)}
+  .legend b{color:var(--teal)}
+  /* questions */
+  ol.q{counter-reset:q;list-style:none;padding:0;margin:0}
+  ol.q li{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--purple);border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:10px;position:relative;padding-left:50px}
+  ol.q li:before{counter-increment:q;content:"Q"counter(q);position:absolute;left:14px;top:13px;font-family:var(--mono);font-size:12px;color:var(--purple);font-weight:700}
+  ol.q li b{color:var(--ink)} ol.q li .who{color:var(--faint);font-size:12px;font-family:var(--mono)}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px;font-family:var(--mono)}
+  footer a{color:var(--blue);text-decoration:none} footer a:hover{text-decoration:underline}
+  footer .pl{color:var(--dim);margin-bottom:8px}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}nav{display:none}main{padding:24px}.kpis{grid-template-columns:repeat(2,1fr)}.vs,.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="brand"><b>HomeOS</b> · Market Brief</div>
+    <div class="sub">2026-06-12</div>
+    <a href="#verdict"><span class="nn">00</span>Verdict</a>
+    <a href="#correction"><span class="nn">01</span>The Correction</a>
+    <a href="#matrix"><span class="nn">02</span>Competitive Matrix</a>
+    <a href="#wedge"><span class="nn">03</span>The Wedge</a>
+    <a href="#risks"><span class="nn">04</span>Key Risks</a>
+    <a href="#flow"><span class="nn">05</span>Decision Path</a>
+    <a href="#questions"><span class="nn">06</span>Open Questions</a>
+  </nav>
+
+  <main>
+    <div class="pills">
+      <span class="pill">🎯 <b>WhatsApp-first Hebrew family command center</b></span>
+      <span class="pill">🇮🇱 Israeli market</span>
+      <span class="pill">👤 Arie <i>(build)</i> · Hodaya <i>(product)</i></span>
+      <span class="pill">🔬 104 agents · 22 sources · 25 claims verified</span>
+    </div>
+
+    <h1>The gap is real — but it's already occupied.</h1>
+    <p class="lede">Deep research into the family-command-center landscape: global competitors, the Israeli market, WhatsApp channel viability, and willingness-to-pay. Adversarially fact-checked — 20 claims confirmed, 5 killed.</p>
+
+    <section id="verdict" style="padding-top:8px;border:0">
+      <div class="callout warn">
+        <h3>Verdict — <span class="v">Qualified GO</span></h3>
+        <p>HomeOS is viable, but <b>not as a first mover.</b> A near-identical Israeli competitor (<b>FamilyOS</b>) already exists — Hebrew-native, WhatsApp-connected, same forward-to-ingest mechanic. The category is validated and well-funded globally. Win by <b>differentiated fast-follow</b>: the kitchen-tablet display FamilyOS lacks, privacy scoping, deeper localization, and a real monetization model.</p>
+      </div>
+
+      <div class="kpis">
+        <div class="k red"><div class="v">1</div><div class="l">Direct IL competitor (FamilyOS)</div></div>
+        <div class="k amber"><div class="v">~4K</div><div class="l">FamilyOS users in 2.5 mo (free)</div></div>
+        <div class="k blue"><div class="v">$50M</div><div class="l">Skylight debt facility</div></div>
+        <div class="k green"><div class="v">$9.99</div><div class="l">/mo WTP benchmark (Ohai)</div></div>
+        <div class="k teal"><div class="v">17.5</div><div class="l">family msgs / week to parse</div></div>
+      </div>
+    </section>
+
+    <section id="correction">
+      <h2 class="red"><span class="n">1</span>The Correction</h2>
+      <p class="lede" style="margin-bottom:14px">The single most important finding flips a core assumption from the kitchen-table conversation.</p>
+      <div class="vs">
+        <div class="col before">
+          <h4>✗ What we believed</h4>
+          <p>"To the best of my knowledge there is no such system in Israel — no product supplied end-to-end, hardware + app." The Israeli/Hebrew/WhatsApp gap is wide open.</p>
+        </div>
+        <div class="col after">
+          <h4>✓ What the research found</h4>
+          <p><b>FamilyOS</b> (by Morad Stern, on base44) is live: Hebrew-native, queried over WhatsApp (<i>"מתי הטסט של הרכב?"</i>), and forwards a class-group message to auto-update the organizer — <b>our exact mechanic.</b> It has <b>no kitchen display</b>, though.</p>
+        </div>
+      </div>
+      <p class="conf" style="margin-top:14px">Confidence: <b style="color:var(--red)">HIGH (3-0)</b> on existence · <b style="color:var(--amber)">MEDIUM (2-1)</b> on the ~4K-user traction (self-reported, free signups, unaudited). Sources: Mako/N12 Dec 2025, moradstern.com.</p>
+    </section>
+
+    <section id="matrix">
+      <h2 class="blue"><span class="n">2</span>Competitive Matrix</h2>
+      <p class="lede" style="margin-bottom:14px">Click a header to sort · click a chip to filter by verdict. <span style="color:var(--blue)">HomeOS</span> highlighted; <span style="color:var(--faint);text-decoration:line-through">Milo</span> is dead.</p>
+      <div class="tbar">
+        <span class="chip on" data-f="all">All</span>
+        <span class="chip" data-f="use">🟢 Threat / leader</span>
+        <span class="chip" data-f="consider">🟡 Adjacent</span>
+        <span class="chip" data-f="avoid">🔴 Weak / dead</span>
+        <span class="thint" id="thint"></span>
+      </div>
+      <table>
+        <thead><tr>
+          <th data-k="name">Product</th>
+          <th data-k="type">Type</th>
+          <th data-k="hebrew">Hebrew</th>
+          <th data-k="wa">WhatsApp</th>
+          <th data-k="ai">AI parse</th>
+          <th data-k="price">Price</th>
+          <th data-k="note">Notes</th>
+          <th data-k="verdict">Read</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+
+    <section id="wedge">
+      <h2><span class="n">3</span>The Wedge vs FamilyOS</h2>
+      <p class="lede" style="margin-bottom:14px">AI parsing is <b>table stakes</b> (Skylight, Ohai, Milo all do it). Our defensible edge is four things FamilyOS and the incumbents don't combine.</p>
+      <div class="grid2">
+        <div class="card"><div class="top"><h4>🖥️ Kitchen-tablet display</h4><span class="badge b-win">Primary wedge</span></div><p>FamilyOS is app + web only. The ambient, shared, always-on kitchen screen — the part Hodaya cares most about — is exactly what they lack. Most concrete differentiator.</p></div>
+        <div class="card"><div class="top"><h4>🔒 Privacy-first scoping</h4><span class="badge b-win">Trust + legal</span></div><p>Bot sees only explicitly-allowed chats / forwards. Also the only ToS-legal architecture — Hodaya's red line and the safe path converge.</p></div>
+        <div class="card"><div class="top"><h4>🇮🇱 Deeper localization</h4><span class="badge b-win">Moat depth</span></div><p>Israeli holidays (חגים), gan/school rhythms, white-shirt days, chugim. The harder a US incumbent finds this, the safer we are.</p></div>
+        <div class="card"><div class="top"><h4>💰 Monetization model</h4><span class="badge b-med">Open</span></div><p>FamilyOS is free — both a threat (price pressure) and a tell (nobody's proven Israeli WTP). Ohai's $9.99/mo is the anchor to test against.</p></div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <h2 class="amber"><span class="n">4</span>Key Risks</h2>
+      <div class="grid2">
+        <div class="card"><div class="top"><h4>First mover already here</h4><span class="badge b-high">High</span></div><p>FamilyOS acquired ~4K users in 2.5 months. We must out-execute on form factor + UX, not just exist.</p><div class="conf">[high, 3-0]</div></div>
+        <div class="card"><div class="top"><h4>Commoditization by general AI</h4><span class="badge b-high">High · existential</span></div><p><b>Milo</b> (OpenAI-backed, GPT-4) <b>shut down</b> — a ~$40/mo thin LLM wrapper undercut by ChatGPT doing it free. Don't be a wrapper; the display + local depth is the moat.</p><div class="conf">[high, 3-0] · YC status: Inactive</div></div>
+        <div class="card"><div class="top"><h4>WhatsApp policy risk</h4><span class="badge b-med">Medium · verify</span></div><p>A claim that WhatsApp's Oct-2025 terms <b>ban general-purpose bots</b> (Jan 2026) was <b>refuted as uncertain (1-2)</b> — but alarming. Re-verify current policy before committing to the channel.</p><div class="conf">[refuted 1-2 — unresolved]</div></div>
+        <div class="card"><div class="top"><h4>Unknown Israeli WTP</h4><span class="badge b-med">Medium</span></div><p>No direct evidence of Israeli household willingness to pay for family-tech subscriptions. Closest competitor is free.</p><div class="conf">[gap — no source found]</div></div>
+        <div class="card"><div class="top"><h4>Hardware trap</h4><span class="badge b-low">Mitigable</span></div><p>Inventory / support / capital before validation. Mitigate: BYOD tablet in kiosk mode first, custom hardware only after retention data.</p><div class="conf">[strategy]</div></div>
+        <div class="card"><div class="top"><h4>WhatsApp per-message cost</h4><span class="badge b-low">Low at scale-0</span></div><p>Per-message pricing (Jul 2025). User-initiated replies largely free; proactive notifications cost — a unit-economics factor later.</p><div class="conf">[high, 3-0] · Meta docs</div></div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <h2 class="purple"><span class="n">5</span>Decision Path</h2>
+      <div class="diawrap">
+        <pre class="mermaid">
+flowchart LR
+  A[Market reality:<br/>FamilyOS exists] --> B{Re-verify<br/>WhatsApp bot<br/>policy}:::gate
+  B -->|blocked| X[Pivot channel<br/>or pause]:::avoid
+  B -->|clear| C[Build PoC:<br/>kitchen display +<br/>forward-to-bot]:::new
+  C --> D[Dogfood in our<br/>own home 1 month]:::edit
+  D --> E{Daily glance +<br/>forward habit?}:::gate
+  E -->|no| F[Cheap kill /<br/>still runs our home]:::reuse
+  E -->|yes| G[Pilot 5-10 IL<br/>families · test WTP]:::new
+  G --> H{Beats FamilyOS<br/>on form factor?}:::gate
+  H -->|yes| I[Monetize +<br/>localize deeper]:::new
+  classDef new fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff
+  classDef avoid fill:#2a1416,stroke:#f85149,color:#ffd7d3
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3
+        </pre>
+      </div>
+      <div class="legend">Legend: <b style="color:#2dd4bf">teal</b>=net-new build · <span style="color:#d29922">amber</span>=human/dogfood work · <span style="color:#388bfd">blue</span>=acceptable fallback · <span style="color:#a371f7">purple-dashed</span>=decision gate · <span style="color:#f85149">red</span>=stop/pivot</div>
+    </section>
+
+    <section id="questions">
+      <h2 class="purple"><span class="n">6</span>Open Questions</h2>
+      <ol class="q">
+        <li><b>Israeli willingness-to-pay</b> for a family-organizer subscription? No evidence found; FamilyOS is free. <span class="who">→ decider: Hodaya (pricing) + pilot data</span></li>
+        <li><b>FamilyOS retention / monetization</b> beyond 4K free signups — and do they plan a display form factor that would close our gap? <span class="who">→ decider: Arie (competitive recon)</span></li>
+        <li><b>Current WhatsApp Business policy</b> on personal-assistant/AI bots (mid-2026)? Existential — re-verify before building. <span class="who">→ decider: Arie (pre-build gate)</span></li>
+        <li><b>Defense vs general AI</b> (ChatGPT/Gemini/Meta AI doing forward-and-parse natively in WhatsApp)? Milo died on exactly this. <span class="who">→ decider: Arie + Hodaya (strategy)</span></li>
+        <li><b>Realistic TAM</b> for a paid Hebrew family command center; other Israeli startups in-space? <span class="who">→ decider: next research pass</span></li>
+      </ol>
+    </section>
+
+    <footer>
+      <div class="pl">Pipeline: deep-research workflow — 5 search angles → 22 sources fetched → 94 claims extracted → 25 adversarially verified (3-vote) → 20 confirmed / 5 killed → 12 findings synthesized.</div>
+      Companion artifacts:
+      <a href="market-research.md">market-research.md</a> ·
+      <a href="assessment.md">assessment.md</a> ·
+      <a href="conversation-translation-en.md">conversation-translation-en.md</a><br>
+      Refuted &amp; excluded: Skylight "9.3M users" (0-3) · "30.4 hrs/week" &amp; "63% brain space" (1-2) · Milo "industry leader" (0-3) · WhatsApp chatbot-ban terms (1-2).
+    </footer>
+  </main>
+</div>
+
+<script>
+/* ---- mermaid w/ offline fallback ---- */
+if (window.mermaid) {
+  mermaid.initialize({startOnLoad:true, theme:"dark", securityLevel:"loose",
+    themeVariables:{fontSize:"13px", fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif"}});
+} else {
+  document.querySelectorAll(".mermaid").forEach(d=>{
+    d.style.whiteSpace="pre"; d.style.fontFamily="monospace";
+    d.insertAdjacentHTML("afterbegin","<div style='color:#d29922;font-size:12px'>⚠ offline — showing diagram source</div>");
+  });
+}
+
+/* ---- competitive matrix ---- */
+const DATA=[
+  {name:"FamilyOS 🇮🇱",type:"App + web",hebrew:2,wa:2,ai:2,price:"Free",note:"Direct competitor. No kitchen display. ~4K users in 2.5mo",verdict:"use",rank:1},
+  {name:"Skylight",type:"Hardware",hebrew:0,wa:0,ai:2,price:"~$160–300 + sub",note:"Category leader. $50M facility, AI 'Sidekick'",verdict:"use",rank:2},
+  {name:"Hearth",type:"Hardware",hebrew:0,wa:0,ai:1,price:"~$500–700 + sub",note:"Wall display, 'mental load' positioning",verdict:"consider",rank:5},
+  {name:"FamilyWall",type:"App",hebrew:0,wa:0,ai:0,price:"Free–cheap",note:"5M+ installs, entrenched, manual entry",verdict:"consider",rank:6},
+  {name:"Cozi / TimeTree",type:"App",hebrew:0,wa:0,ai:0,price:"Free–cheap",note:"Mature incumbents, manual entry",verdict:"consider",rank:7},
+  {name:"Ohai.ai",type:"App / SMS",hebrew:0,wa:0,ai:2,price:"$9.99–29.99/mo",note:"Best WTP benchmark. SMS/email/voice ingest",verdict:"use",rank:3},
+  {name:"Milo",type:"App / SMS",hebrew:0,wa:1,ai:2,price:"~$40/mo",note:"WOUND DOWN. OpenAI-backed, killed by ChatGPT",verdict:"avoid",rank:8,dead:true},
+  {name:"Domus",type:"App",hebrew:0,wa:0,ai:1,price:"$1.99–3.99/mo",note:"NOT Israeli (despite the brief). English-only",verdict:"avoid",rank:9},
+  {name:"HomeOS (us)",type:"HW display + app + bot",hebrew:2,wa:2,ai:2,price:"TBD",note:"Wedge = display + privacy + localization + monetization",verdict:"use",rank:0,us:true},
+];
+const MARK={0:'<span class="no">✗</span>',1:'<span class="part">~</span>',2:'<span class="yes">✓</span>'};
+const VB={use:'<span class="vb v-use">read</span>',consider:'<span class="vb v-consider">scan</span>',avoid:'<span class="vb v-avoid">skip</span>'};
+let sortKey="rank",sortDir=1,filter="all";
+const tbody=document.getElementById("tbody"),thint=document.getElementById("thint");
+function render(){
+  let rows=DATA.filter(d=>filter==="all"||d.verdict===filter);
+  rows.sort((a,b)=>{let x=a[sortKey],y=b[sortKey];
+    if(typeof x==="string")return sortDir*x.localeCompare(y);
+    return sortDir*(x-y);});
+  tbody.innerHTML=rows.map(d=>`<tr class="${d.us?'us':''}${d.dead?' dead':''}">
+    <td class="name">${d.name}</td><td>${d.type}</td>
+    <td>${MARK[d.hebrew]}</td><td>${MARK[d.wa]}</td><td>${MARK[d.ai]}</td>
+    <td style="font-family:var(--mono);font-size:12.5px">${d.price}</td>
+    <td class="note">${d.note}</td><td>${VB[d.verdict]}</td></tr>`).join("");
+  thint.textContent=`${rows.length} of ${DATA.length} shown · sort: ${sortKey}`;
+  document.querySelectorAll("th").forEach(t=>{t.querySelector(".ar")?.remove();
+    if(t.dataset.k===sortKey)t.insertAdjacentHTML("beforeend",` <span class="ar">${sortDir>0?"▲":"▼"}</span>`);});
+}
+document.querySelectorAll("th").forEach(t=>t.onclick=()=>{
+  const k=t.dataset.k; if(k===sortKey)sortDir*=-1; else{sortKey=k;sortDir=(k==="rank")?1:-1;} render();});
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+  filter=c.dataset.f;
+  document.querySelectorAll(".chip").forEach(x=>{x.className="chip";});
+  c.className="chip on"+(filter==="consider"?" consider":filter==="avoid"?" avoid":"");
+  render();});
+render();
+
+/* ---- scroll-spy ---- */
+const navLinks=[...document.querySelectorAll("nav a")];
+const secs=navLinks.map(a=>document.querySelector(a.getAttribute("href")));
+function spy(){let i=secs.length-1;
+  for(let j=0;j<secs.length;j++){if(secs[j]&&secs[j].getBoundingClientRect().top>120){i=j-1;break;}}
+  navLinks.forEach(a=>a.classList.remove("active")); if(i>=0)navLinks[i].classList.add("active");}
+document.addEventListener("scroll",spy,{passive:true}); spy();
+</script>
+</body>
+</html>

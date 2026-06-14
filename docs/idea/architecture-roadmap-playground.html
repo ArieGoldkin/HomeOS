@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HomeOS — Architecture Roadmap</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151f; --panel2:#161b27; --line:#222a3a;
+    --ink:#e6edf3; --dim:#9aa7b8; --faint:#6b7889;
+    --teal:#2dd4bf; --amber:#d29922; --red:#f85149; --blue:#388bfd; --purple:#a371f7; --green:#3fb950;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:15px}
+  .wrap{display:grid;grid-template-columns:230px 1fr;max-width:1280px;margin:0 auto}
+  nav{position:sticky;top:0;align-self:start;height:100vh;padding:28px 18px;border-right:1px solid var(--line);overflow-y:auto}
+  nav .brand{font-weight:700;font-size:15px;margin-bottom:4px}
+  nav .brand b{color:var(--teal)}
+  nav .sub{color:var(--faint);font-size:11px;margin-bottom:22px;font-family:var(--mono)}
+  nav a{display:block;color:var(--dim);text-decoration:none;font-size:13px;padding:7px 10px;border-radius:7px;margin:2px 0;border-left:2px solid transparent;transition:.15s}
+  nav a:hover{background:var(--panel2);color:var(--ink)}
+  nav a.active{background:var(--panel2);color:var(--teal);border-left-color:var(--teal)}
+  nav a .nn{color:var(--faint);font-family:var(--mono);font-size:11px;margin-right:7px}
+  main{padding:40px 46px 120px;min-width:0}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+  .pill{font-size:11.5px;font-family:var(--mono);color:var(--dim);background:var(--panel2);border:1px solid var(--line);padding:4px 11px;border-radius:30px}
+  .pill b{color:var(--ink)}
+  h1{font-size:38px;line-height:1.1;margin:6px 0 10px;font-weight:800;
+     background:linear-gradient(100deg,#e6edf3,#2dd4bf 55%,#a371f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lede{color:var(--dim);font-size:16px;max-width:780px;margin-bottom:24px}
+  .callout{border-left:3px solid var(--teal);background:linear-gradient(90deg,rgba(45,212,191,.08),transparent);padding:16px 20px;border-radius:0 10px 10px 0;margin:18px 0}
+  .callout.warn{border-color:var(--amber);background:linear-gradient(90deg,rgba(210,153,34,.09),transparent)}
+  .callout.purple{border-color:var(--purple);background:linear-gradient(90deg,rgba(163,113,247,.09),transparent)}
+  .callout h3{margin:0 0 6px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--teal)}
+  .callout.warn h3{color:var(--amber)} .callout.purple h3{color:var(--purple)}
+  .callout p{margin:0;font-size:15.5px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:24px 0 6px}
+  .k{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 14px}
+  .k .v{font-size:24px;font-weight:800;font-family:var(--mono);line-height:1.1}
+  .k .l{font-size:11px;color:var(--faint);margin-top:7px;text-transform:uppercase;letter-spacing:.4px}
+  .k.teal .v{color:var(--teal)} .k.amber .v{color:var(--amber)} .k.blue .v{color:var(--blue)} .k.green .v{color:var(--green)} .k.purple .v{color:var(--purple)}
+  section{padding-top:52px}
+  h2{font-size:23px;font-weight:750;margin:0 0 16px;display:flex;align-items:center;gap:12px}
+  h2 .n{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;font-size:14px;font-family:var(--mono);color:#06120f;background:var(--teal);font-weight:800}
+  h2.amber .n{background:var(--amber);color:#1a1405} h2.blue .n{background:var(--blue);color:#04132e}
+  h2.purple .n{background:var(--purple);color:#fff} h2.green .n{background:var(--green);color:#06120f}
+  /* phase stepper */
+  .stepper{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .step{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;cursor:pointer;transition:.15s;user-select:none}
+  .step:hover{border-color:var(--faint)}
+  .step.on{border-color:var(--teal);background:linear-gradient(180deg,rgba(45,212,191,.1),var(--panel))}
+  .step .sn{font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .step.on .sn{color:var(--teal)}
+  .step h4{margin:3px 0 2px;font-size:14px}
+  .step p{margin:0;font-size:11.5px;color:var(--faint)}
+  .phasebody{display:grid;grid-template-columns:230px 1fr;gap:16px}
+  .ftree{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px;font-family:var(--mono);font-size:12.5px;line-height:1.9}
+  .ftree .h{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-family:var(--sans);font-weight:700}
+  .ftree .f{color:var(--faint);transition:.2s}
+  .ftree .f.live{color:var(--ink)}
+  .ftree .f.new{color:var(--teal);font-weight:700}
+  .ftree .f .tag{font-size:9.5px;color:#06120f;background:var(--teal);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+  .diawrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;min-height:280px}
+  .dia{display:none}
+  .dia.on{display:block}
+  .phasenote{margin-top:12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:13.5px;color:var(--dim)}
+  .phasenote b{color:var(--ink)}
+  .legend{color:var(--faint);font-size:12px;margin-top:10px;font-family:var(--mono)}
+  /* stack table */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  td.lay{font-weight:700;white-space:nowrap}
+  td.tech{font-family:var(--mono);font-size:12.5px;color:var(--teal);white-space:nowrap}
+  td.why{color:var(--dim);font-size:12.5px}
+  .ph{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:20px;font-weight:700;white-space:nowrap}
+  .ph.m1{background:rgba(45,212,191,.15);color:var(--teal)} .ph.m2{background:rgba(56,139,253,.15);color:var(--blue)}
+  .ph.p1{background:rgba(163,113,247,.15);color:var(--purple)} .ph.eg{background:rgba(210,153,34,.15);color:var(--amber)}
+  /* cards */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 17px}
+  .card .top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .card h4{margin:0;font-size:14.5px}
+  .card p{margin:0;color:var(--dim);font-size:13px}
+  .badge{font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;font-weight:700}
+  .b-m1{background:rgba(45,212,191,.16);color:var(--teal)} .b-m2{background:rgba(56,139,253,.16);color:var(--blue)}
+  .b-guard{background:rgba(248,81,73,.16);color:var(--red)} .b-win{background:rgba(63,185,80,.15);color:var(--green)}
+  .tasknum{display:inline-grid;place-items:center;min-width:24px;height:24px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--teal);font-weight:700}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px;font-family:var(--mono)}
+  footer a{color:var(--blue);text-decoration:none} footer a:hover{text-decoration:underline}
+  @media(max-width:920px){.wrap{grid-template-columns:1fr}nav{display:none}main{padding:24px}.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid3{grid-template-columns:1fr}.phasebody{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="brand"><b>HomeOS</b> · Roadmap</div>
+    <div class="sub">2026-06-12</div>
+    <a href="#north"><span class="nn">00</span>North Star</a>
+    <a href="#foundation"><span class="nn">01</span>Foundation Principle</a>
+    <a href="#evolution"><span class="nn">02</span>Architecture Evolution</a>
+    <a href="#stack"><span class="nn">03</span>The Stack</a>
+    <a href="#tasks"><span class="nn">04</span>PoC Task List</a>
+    <a href="#guardrails"><span class="nn">05</span>Guardrails</a>
+    <a href="#success"><span class="nn">06</span>End-Goal Criteria</a>
+  </nav>
+
+  <main>
+    <div class="pills">
+      <span class="pill">🏗️ <b>Technical plan & architecture evolution</b></span>
+      <span class="pill">👤 Arie builds · Hodaya defines product</span>
+      <span class="pill">💰 ≤$100/mo · evenings</span>
+      <span class="pill">🧱 Foundation-first</span>
+    </div>
+
+    <h1>Build once. Grow it into the product.</h1>
+    <p class="lede">From a 3-file echo bot to the family command center — every phase reuses the previous phase's code. The PoC isn't a throwaway: it's the first slice of the real system.</p>
+
+    <section id="north" style="padding-top:6px">
+      <div class="callout">
+        <h3>The End Goal</h3>
+        <p>A <b>multi-family product</b>: WhatsApp bot (official Business API) + cloud system + <b>ambient kitchen display</b> + companion app. Forward a gan message in Hebrew → it lands as a structured event on the kitchen board. The display form factor is the wedge vs FamilyOS; the privacy-first allowlist is the trust story. Everything between now and then exists to <b>de-risk that goal one cheap step at a time</b>.</p>
+      </div>
+      <div class="kpis">
+        <div class="k teal"><div class="v">M1</div><div class="l">Echo bot · receive→send proven</div></div>
+        <div class="k blue"><div class="v">M2</div><div class="l">Forward → parse → confirm (PoC)</div></div>
+        <div class="k purple"><div class="v">P1</div><div class="l">Kitchen display + dogfood month</div></div>
+        <div class="k amber"><div class="v">EG</div><div class="l">Multi-family product</div></div>
+        <div class="k green"><div class="v">~$5</div><div class="l">/mo infra until P1</div></div>
+      </div>
+    </section>
+
+    <section id="foundation">
+      <h2><span class="n">1</span>Foundation Principle: Nothing Thrown Away</h2>
+      <div class="callout purple">
+        <h3>Why foundation-first</h3>
+        <p>One developer, evenings only. The only way that works is if <b>every line written in M1 is still running at the end goal</b>. The webhook service is the trunk; each phase grafts a module onto it (<span style="font-family:var(--mono);font-size:13px">parse.ts, db.ts, transcribe.ts, kiosk/</span>). Two patterns are locked in from day one <i>because</i> they're painful to retrofit: <b>ack-then-process</b> webhooks and the <b>allowlist gate</b>.</p>
+      </div>
+    </section>
+
+    <section id="evolution">
+      <h2 class="blue"><span class="n">2</span>Architecture Evolution — click through the phases</h2>
+      <div class="stepper" id="stepper">
+        <div class="step on" data-p="0"><div class="sn">MILESTONE 1 · weeks 1–2</div><h4>Echo Bot</h4><p>Prove receive → send</p></div>
+        <div class="step" data-p="1"><div class="sn">MILESTONE 2 · weeks 2–4</div><h4>Forward & Parse</h4><p>Hebrew → structured event</p></div>
+        <div class="step" data-p="2"><div class="sn">PHASE 1 · month 2</div><h4>Kitchen Display</h4><p>Kiosk board + dogfood</p></div>
+        <div class="step" data-p="3"><div class="sn">END GOAL</div><h4>The Product</h4><p>Multi-family HomeOS</p></div>
+      </div>
+
+      <div class="phasebody">
+        <div class="ftree" id="ftree"><div class="h">Codebase growth</div></div>
+        <div>
+          <div class="diawrap">
+            <div class="dia on"><pre class="mermaid">
+flowchart LR
+  P[Family phone] -->|message| WA[WhatsApp]
+  WA -->|webhook POST| H[Hono service<br/>GET verify · POST receive]:::new
+  H -->|"ack 200 first ⚡"| WA
+  H -->|fetch Graph API| R[Echo reply]:::new
+  T[cloudflared tunnel]:::edit -.exposes.- H
+  classDef new fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0
+            </pre></div>
+            <div class="dia"><pre class="mermaid">
+flowchart LR
+  P[Family phone] -->|forward gan msg<br/>or voice note| WA[WhatsApp]
+  WA --> H[Hono service]:::reuse
+  H -->|ack 200, then async| Q{media?}:::gate
+  Q -->|voice| W[mlx_whisper<br/>Hebrew STT]:::new
+  Q -->|text| C
+  W --> C[Claude parse<br/>Zod structured output]:::new
+  C --> D[(SQLite<br/>events · tasks)]:::new
+  D --> H2[Hebrew confirm reply<br/>הוספתי ליומן ✓]:::new
+  H2 --> WA
+  classDef new fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3
+            </pre></div>
+            <div class="dia"><pre class="mermaid">
+flowchart LR
+  WA[WhatsApp bot] --> H[Hono service<br/>on Railway]:::reuse
+  H --> C[Claude parse]:::reuse
+  C --> D[(SQLite + hebcal<br/>holidays)]:::reuse
+  D -->|SSE / 60s poll| K[Kitchen tablet<br/>kiosk · RTL board<br/>today + tasks]:::new
+  D --> M[Metrics:<br/>forwards/day · corrections]:::new
+  F[Family dogfoods<br/>1 month]:::edit -.judges.- K
+  classDef new fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0
+            </pre></div>
+            <div class="dia"><pre class="mermaid">
+flowchart LR
+  subgraph perFamily[per family · allowlist-scoped]
+    P[Phones: bot +<br/>notifications] --- K[Ambient kitchen<br/>display]:::new
+    K --- A[Companion app<br/>month view · config]:::new
+  end
+  perFamily <--> CORE[HomeOS cloud<br/>multi-tenant · auth<br/>same parse pipeline]:::reuse
+  CORE <--> WAB[Official WhatsApp<br/>Business API<br/>real number ✓]:::edit
+  CORE <--> GC[Google Calendar<br/>opt-in sync]:::new
+  CORE --> BIZ[Subscription billing<br/>vs free FamilyOS]:::gate
+  classDef new fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:2px
+  classDef reuse fill:#11203a,stroke:#388bfd,color:#cfe2ff
+  classDef edit fill:#2a230f,stroke:#d29922,color:#f5e6c0
+  classDef gate fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-dasharray:4 3
+            </pre></div>
+          </div>
+          <div class="legend">Legend: <b style="color:#2dd4bf">teal</b>=new this phase · <span style="color:#388bfd">blue</span>=reused from earlier phase · <span style="color:#d29922">amber</span>=infra/human step · <span style="color:#a371f7">purple-dashed</span>=decision/branch</div>
+          <div class="phasenote" id="phasenote"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <h2 class="green"><span class="n">3</span>The Decided Stack</h2>
+      <table>
+        <thead><tr><th>Layer</th><th>Technology</th><th>Enters at</th><th>Why this fit</th></tr></thead>
+        <tbody>
+          <tr><td class="lay">Runtime</td><td class="tech">Node 22 LTS + tsx</td><td><span class="ph m1">M1</span></td><td class="why">Boring = reliable; every SDK/host supports it; native .env; no build step in dev</td></tr>
+          <tr><td class="lay">Web framework</td><td class="tech">Hono</td><td><span class="ph m1">M1</span></td><td class="why">Tiny, TS-first, portable across runtimes; two routes is all M1 needs</td></tr>
+          <tr><td class="lay">WhatsApp</td><td class="tech">raw fetch → Graph API</td><td><span class="ph m1">M1</span></td><td class="why">No SDK — the send call is one POST; free test number, 5 family recipients</td></tr>
+          <tr><td class="lay">Local dev</td><td class="tech">cloudflared tunnel</td><td><span class="ph m1">M1</span></td><td class="why">Free stable HTTPS URL for Meta's webhook (ngrok free URLs rotate)</td></tr>
+          <tr><td class="lay">Hosting</td><td class="tech">Railway (~$5/mo)</td><td><span class="ph m1">M1</span></td><td class="why">git push → deployed, HTTPS out of the box, least ops for a solo dev</td></tr>
+          <tr><td class="lay">LLM parsing</td><td class="tech">@anthropic-ai/sdk + Zod</td><td><span class="ph m2">M2</span></td><td class="why">Claude structured outputs → {kind, title_he, date_iso, …}; Asia/Jerusalem anchored</td></tr>
+          <tr><td class="lay">Voice (Hebrew)</td><td class="tech">mlx_whisper · large-v3</td><td><span class="ph m2">M2</span></td><td class="why">Already installed, free, strong Hebrew; cloud Whisper API is the fallback</td></tr>
+          <tr><td class="lay">Store</td><td class="tech">SQLite + Drizzle</td><td><span class="ph m2">M2</span></td><td class="why">One family = one file; Litestream backup later; Postgres only at multi-tenant</td></tr>
+          <tr><td class="lay">Display</td><td class="tech">React RTL + SSE · kiosk mode</td><td><span class="ph p1">P1</span></td><td class="why">BYOD tablet + Fully Kiosk = "smart enough, dumb enough" without custom hardware</td></tr>
+          <tr><td class="lay">Calendar context</td><td class="tech">@hebcal/core</td><td><span class="ph p1">P1</span></td><td class="why">Israeli holidays + Hebrew dates on the board</td></tr>
+          <tr><td class="lay">Multi-tenant + app</td><td class="tech">auth · billing · Google Cal sync</td><td><span class="ph eg">EG</span></td><td class="why">Only after dogfooding proves the habit; same parse pipeline lifted, not rewritten</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="tasks">
+      <h2><span class="n">4</span>PoC Task List (7 tasks → 2 demos)</h2>
+      <div class="grid2">
+        <div class="card"><div class="top"><h4><span class="tasknum">1</span>&nbsp; Meta dev account + Business app + WhatsApp product</h4><span class="badge b-m1">M1</span></div><p>Auto-creates WABA + free test number. No business verification needed.</p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">2</span>&nbsp; Add 5 family recipients + system-user token</h4><span class="badge b-m1">M1</span></div><p>Test number messages only pre-added numbers; permanent token so dev doesn't break every 24h.</p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">3</span>&nbsp; Webhook endpoint (TS) + tunnel + Meta verification</h4><span class="badge b-m1">M1</span></div><p>GET echoes hub.challenge; POST logs payloads; subscribe to the <i>messages</i> field.</p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">4</span>&nbsp; 🎯 Demo 1 — Echo bot</h4><span class="badge b-win">Milestone</span></div><p>Send the bot a message, get an echo. Receive→send loop proven end-to-end.</p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">5</span>&nbsp; Media handling — voice notes + images</h4><span class="badge b-m2">M2</span></div><p>Media ID → URL → download; voice through local mlx_whisper for free Hebrew STT.</p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">6</span>&nbsp; 🎯 Demo 2 — Forward → Claude → event → Hebrew confirm</h4><span class="badge b-win">Milestone</span></div><p>Forward a real gan message; watch it become a structured event + "הוספתי ליומן ✓". <b>This is the demoable PoC.</b></p></div>
+        <div class="card"><div class="top"><h4><span class="tasknum">7</span>&nbsp; Policy guardrail — stay single-purpose</h4><span class="badge b-guard">Standing</span></div><p>Not a build step: a constraint enforced across every phase. See §5.</p></div>
+      </div>
+    </section>
+
+    <section id="guardrails">
+      <h2 class="amber"><span class="n">5</span>Guardrails Locked From Day One</h2>
+      <div class="grid3">
+        <div class="card"><div class="top"><h4>⚡ Ack-then-process</h4><span class="badge b-m1">From M1</span></div><p>Return 200 to Meta immediately, do the work async. Trivial for echo, mandatory once Whisper+Claude take seconds — cheap now, painful to retrofit. Idempotent on wa_message_id (Meta retries).</p></div>
+        <div class="card"><div class="top"><h4>🔒 Allowlist gate</h4><span class="badge b-m1">From M1</span></div><p>Only pre-approved family numbers are processed; unknown senders get a polite refusal. The privacy architecture is the product's trust story — and Hodaya's red line.</p></div>
+        <div class="card"><div class="top"><h4>🚫 Single-purpose bot</h4><span class="badge b-guard">Always</span></div><p>No open-domain chat — family scheduling/tasks only. Keeps us on the ALLOWED side of Meta's Jan-2026 general-purpose-chatbot ban. No training on user data, ever.</p></div>
+      </div>
+    </section>
+
+    <section id="success">
+      <h2 class="purple"><span class="n">6</span>End-Goal Success Criteria</h2>
+      <p class="lede" style="margin-bottom:14px">The dogfood month (end of P1) answers one question: <b>did this become a habit?</b> Three measurable gates decide whether we go multi-family.</p>
+      <div class="grid3">
+        <div class="card"><div class="top"><h4>Forward habit</h4><span class="badge b-win">≥ 1 / day</span></div><p>Forwarding to the bot becomes the default reflex for gan messages, bills, family plans.</p></div>
+        <div class="card"><div class="top"><h4>Parse accuracy</h4><span class="badge b-win">~80%+</span></div><p>Events land correctly dated without correction. Every correction feeds the golden eval dataset.</p></div>
+        <div class="card"><div class="top"><h4>Board glances</h4><span class="badge b-win">Daily</span></div><p>The family actually looks at the kitchen display — the form-factor bet (our wedge vs FamilyOS) validated.</p></div>
+      </div>
+      <div class="callout warn" style="margin-top:16px">
+        <h3>If the gates pass</h3>
+        <p>P1 → End Goal: real WhatsApp number + business verification, multi-tenant auth, companion app, opt-in Google Calendar sync, billing. <b>Same parse pipeline, same service — lifted, not rewritten.</b> If they fail: we learned for ~$5/mo, and it still runs our own home.</p>
+      </div>
+    </section>
+
+    <footer>
+      <div style="color:var(--dim);margin-bottom:8px">Decisions behind this plan: stack chosen 2026-06-12 (Node 22 + Hono + Railway) · ack-then-process from day one · WhatsApp 2026 AI policy verified (single-purpose allowed).</div>
+      Companion artifacts:
+      <a href="whatsapp-poc-research.md">whatsapp-poc-research.md</a> ·
+      <a href="market-research.md">market-research.md</a> ·
+      <a href="market-research-playground.html">market brief</a> ·
+      <a href="assessment.md">assessment.md</a>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* mermaid with offline fallback */
+if (window.mermaid) {
+  mermaid.initialize({startOnLoad:true, theme:"dark", securityLevel:"loose",
+    themeVariables:{fontSize:"13px", fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif"}});
+} else {
+  document.querySelectorAll(".mermaid").forEach(d=>{
+    d.style.whiteSpace="pre"; d.style.fontFamily="monospace";
+    d.insertAdjacentHTML("afterbegin","<div style='color:#d29922;font-size:12px'>⚠ offline — showing diagram source</div>");
+  });
+}
+
+/* phase stepper state */
+const FILES=[
+  {n:"src/index.ts",      ph:0},
+  {n:"src/webhook.ts",    ph:0},
+  {n:"src/whatsapp.ts",   ph:0},
+  {n:"src/parse.ts",      ph:1},
+  {n:"src/transcribe.ts", ph:1},
+  {n:"src/db.ts",         ph:1},
+  {n:"src/kiosk/  (React board)", ph:2},
+  {n:"src/metrics.ts",    ph:2},
+  {n:"src/auth.ts · billing.ts",  ph:3},
+  {n:"src/gcal.ts",       ph:3},
+  {n:"companion app",     ph:3},
+];
+const NOTES=[
+  "<b>M1 — prove the loop.</b> 3 files, 1 dependency (hono). GET handshake, POST receive, one fetch to reply. Ack-then-process + allowlist already in place. Cost: $0 (tunnel) → $5/mo (Railway).",
+  "<b>M2 — the demoable PoC.</b> The Hono service is untouched; we add parse.ts (Claude+Zod), transcribe.ts (mlx_whisper), db.ts (SQLite). Forward a gan message → structured event → Hebrew confirmation. Every correction becomes golden-dataset eval data.",
+  "<b>P1 — the wedge appears.</b> Same backend grows a kiosk React board (RTL, SSE, hebcal holidays) on a BYOD tablet. Then the only thing that matters: one month of real family use, measured.",
+  "<b>End goal — lift, don't rewrite.</b> The parse pipeline and service go multi-tenant: real business number, auth, companion app, opt-in Google Calendar, billing. The kitchen display is the differentiator FamilyOS lacks; the allowlist is the trust story."
+];
+const ftree=document.getElementById("ftree"), note=document.getElementById("phasenote");
+const steps=[...document.querySelectorAll(".step")], dias=[...document.querySelectorAll(".dia")];
+function setPhase(p){
+  steps.forEach(s=>s.classList.toggle("on", +s.dataset.p===p));
+  dias.forEach((d,i)=>d.classList.toggle("on", i===p));
+  ftree.innerHTML='<div class="h">Codebase growth</div>'+FILES.map(f=>{
+    const live=f.ph<=p, isNew=f.ph===p;
+    return `<div class="f ${live?'live':''} ${isNew?'new':''}">${live?'▸':'·'} ${f.n}${isNew?'<span class="tag">NEW</span>':''}</div>`;
+  }).join("");
+  note.innerHTML=NOTES[p];
+}
+steps.forEach(s=>s.onclick=()=>setPhase(+s.dataset.p));
+setPhase(0);
+
+/* scroll-spy */
+const navLinks=[...document.querySelectorAll("nav a")];
+const secs=navLinks.map(a=>document.querySelector(a.getAttribute("href")));
+function spy(){let i=secs.length-1;
+  for(let j=0;j<secs.length;j++){if(secs[j]&&secs[j].getBoundingClientRect().top>120){i=j-1;break;}}
+  navLinks.forEach(a=>a.classList.remove("active")); if(i>=0)navLinks[i].classList.add("active");}
+document.addEventListener("scroll",spy,{passive:true}); spy();
+</script>
+</body>
+</html>

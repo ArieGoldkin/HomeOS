@@ -1,0 +1,20 @@
+{
+  "name": "homeos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "HomeOS — WhatsApp-first Hebrew family command center (monorepo)",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "dev": "pnpm --filter @homeos/server dev",
+    "start": "pnpm --filter @homeos/server start",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
