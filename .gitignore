@@ -21,6 +21,12 @@ dist/
 # Test coverage
 coverage/
 
+# SQLite data (runtime, per-family)
+*.db
+*.db-shm
+*.db-wal
+data/
+
 # /develop pipeline state (local, user-specific)
 .develop/
 

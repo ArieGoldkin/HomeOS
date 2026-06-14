@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isAllowed, normalizePhone } from "../src/allowlist.ts";
+import { isAllowed, normalizePhone } from "../../src/core/allowlist.ts";
 
 describe("normalizePhone", () => {
   it("strips +, spaces, and dashes to digits only", () => {

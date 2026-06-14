@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { handleInbound } from "./handler.ts";
-import type { HandlerDeps } from "./handler.ts";
+import { handleInbound } from "../core/handler.ts";
+import type { HandlerDeps } from "../core/handler.ts";
 import { extractMessages, verifyChallenge } from "./webhook.ts";
 
 export interface ServerDeps {

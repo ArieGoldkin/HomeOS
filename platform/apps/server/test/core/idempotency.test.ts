@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createIdempotencyStore } from "../src/idempotency.ts";
+import { createIdempotencyStore } from "../../src/core/idempotency.ts";
 
 describe("createIdempotencyStore", () => {
   it("returns false for a new id and true on repeat", () => {

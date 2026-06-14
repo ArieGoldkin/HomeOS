@@ -7,10 +7,12 @@ shared.
 
 ## Status
 
-**M1 in progress — the echo bot.** The pnpm monorepo is scaffolded under `platform/` and the
-WhatsApp webhook service (`@homeos/server`) is built and tested (34 tests, strict typecheck).
-Remaining for M1: the manual Meta setup + Demo 1 smoke test (see `platform/apps/server/README.md`).
-Prior research/strategy phase is complete (see `docs/idea/`).
+**M2 built — forward → parse → confirm.** The pnpm monorepo under `platform/` holds `@homeos/server`
+(WhatsApp webhook → Claude structured-output parse → SQLite → Hebrew confirm) and `@homeos/shared`
+(the `ParsedEvent` contract). 45 tests, strict typecheck, no live network/Claude in tests. Parsing
+defaults to `claude-haiku-4-5` (swappable via `ANTHROPIC_MODEL`); storage uses Node's built-in
+`node:sqlite`. Remaining: the manual Demo 2 smoke test (see `platform/apps/server/README.md`) and,
+next, **M2b** (voice notes via `mlx_whisper`). M1 (echo bot) and the research/strategy phase are complete.
 
 ## Key Context
 
@@ -28,8 +30,8 @@ Prior research/strategy phase is complete (see `docs/idea/`).
 ## Repo Layout
 
 - `platform/` — **all application code** (pnpm monorepo; node_modules isolated here, not at root):
-  - `apps/server/` — `@homeos/server`, the WhatsApp webhook service (M1). See its README.
-  - `packages/` — shared libs land here (`@homeos/shared` Event/Task schemas in M2).
+  - `apps/server/` — `@homeos/server`, the WhatsApp webhook → parse → confirm service (M1–M2). See its README.
+  - `packages/shared/` — `@homeos/shared`: the `ParsedEvent` schema/contract (server produces, P1 display consumes).
   - `apps/web/` — (P1) React RTL kitchen display, not yet built.
 - `docs/idea/` — research & strategy:
   - `assessment.md` — initial product assessment

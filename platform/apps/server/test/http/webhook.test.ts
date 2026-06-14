@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractMessages, verifyChallenge } from "../src/webhook.ts";
+import { extractMessages, verifyChallenge } from "../../src/http/webhook.ts";
 
 // Realistic WhatsApp Cloud API inbound text webhook (shape per Meta docs).
 const textPayload = {
