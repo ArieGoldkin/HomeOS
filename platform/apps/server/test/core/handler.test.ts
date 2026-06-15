@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ParsedEvent } from "@homeos/shared";
-import { handleInbound } from "../../src/core/handler.ts";
-import type { HandlerDeps } from "../../src/core/handler.ts";
+import { handleInbound, processInbound } from "../../src/core/handler.ts";
+import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 
 const allowlist = ["972501234567"];
@@ -15,9 +15,8 @@ const sampleEvent: ParsedEvent = {
   source_text: "אסיפת הורים מחר ב-18:30",
 };
 
-function makeDeps(opts: { seen?: boolean; parsed?: ParsedEvent | null } = {}) {
+function makeDeps(opts: { parsed?: ParsedEvent | null } = {}) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
-  const store = { seen: vi.fn(() => opts.seen ?? false) };
   const events = {
     saveEvent: vi.fn((e: ParsedEvent, _m: { fromPhone: string; waMessageId: string }) => ({
       id: 7,
@@ -31,13 +30,12 @@ function makeDeps(opts: { seen?: boolean; parsed?: ParsedEvent | null } = {}) {
   );
   const deps: HandlerDeps = {
     allowlist,
-    store,
     events,
     parse,
     sendText,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
   };
-  return { sendText, store, events, parse, deps };
+  return { sendText, events, parse, deps };
 }
 
 const textMsg: InboundMessage = {
@@ -56,6 +54,10 @@ describe("handleInbound (M2)", () => {
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toContain("הוספתי ליומן");
     expect(body).toContain("אסיפת הורים");
+    // F: friendly Hebrew date (he-IL, Asia/Jerusalem), not robotic ISO.
+    expect(body).toContain("ביוני"); // 2026-06-21 → "21 ביוני"
+    expect(body).toContain("18:30"); // time appended verbatim
+    expect(body).not.toContain("2026-06-21"); // ISO no longer surfaced
   });
 
   it("asks to rephrase when parsing fails, without persisting", async () => {
@@ -74,18 +76,39 @@ describe("handleInbound (M2)", () => {
     expect(body).toMatch(/הרשאה|מצטער/);
   });
 
-  it("skips duplicates (idempotent on wa_message_id)", async () => {
-    const { sendText, parse, deps } = makeDeps({ seen: true });
-    await handleInbound(textMsg, deps);
-    expect(parse).not.toHaveBeenCalled();
-    expect(sendText).not.toHaveBeenCalled();
-  });
-
   it("replies text-only for a non-text message (voice deferred to M2b)", async () => {
     const { sendText, parse, deps } = makeDeps();
     await handleInbound({ id: "wamid.2", from: "972501234567", type: "image" }, deps);
     expect(parse).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/טקסט/);
+  });
+});
+
+describe("processInbound (queue settle)", () => {
+  function makeInbound() {
+    return {
+      enqueue: vi.fn(() => true),
+      markDone: vi.fn(),
+      markFailed: vi.fn(),
+      pending: vi.fn(() => []),
+    };
+  }
+
+  it("marks the row done after a successful handle", async () => {
+    const { deps } = makeDeps();
+    const inbound = makeInbound();
+    await processInbound(textMsg, { ...deps, inbound } as ProcessDeps);
+    expect(inbound.markDone).toHaveBeenCalledWith("wamid.1");
+    expect(inbound.markFailed).not.toHaveBeenCalled();
+  });
+
+  it("marks the row failed (not done) when handling throws", async () => {
+    const { deps, sendText } = makeDeps();
+    sendText.mockRejectedValueOnce(new Error("Graph 503")); // transient send failure
+    const inbound = makeInbound();
+    await processInbound(textMsg, { ...deps, inbound } as ProcessDeps); // never throws
+    expect(inbound.markFailed).toHaveBeenCalledWith("wamid.1");
+    expect(inbound.markDone).not.toHaveBeenCalled();
   });
 });

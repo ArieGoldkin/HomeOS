@@ -39,4 +39,12 @@ describe("EventStore (in-memory SQLite)", () => {
     const b = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.B" });
     expect(b.id).toBe(a.id + 1);
   });
+
+  it("is idempotent on wa_message_id — re-saving returns the same row, no duplicate", () => {
+    const store = createEventStore(":memory:");
+    const first = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.dup" });
+    const again = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.dup" });
+    expect(again.id).toBe(first.id); // same row back, not a new insert
+    expect(store.listEvents()).toHaveLength(1); // boot-replay can't double-write
+  });
 });

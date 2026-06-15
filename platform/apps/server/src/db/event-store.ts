@@ -45,9 +45,13 @@ export function createEventStore(dbPath: string): EventStore {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(CREATE_EVENTS_TABLE);
 
+  // Idempotent per wa_message_id: a re-processed inbound (boot-replay, Meta retry) returns the
+  // existing row instead of inserting a duplicate. The no-op DO UPDATE lets RETURNING fire on conflict.
   const insert = db.prepare(
     `INSERT INTO events (kind, title_he, date_iso, time, location, source_text, from_phone, wa_message_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *;`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(wa_message_id) DO UPDATE SET wa_message_id = excluded.wa_message_id
+     RETURNING *;`,
   );
   const selectAll = db.prepare("SELECT * FROM events ORDER BY id;");
 

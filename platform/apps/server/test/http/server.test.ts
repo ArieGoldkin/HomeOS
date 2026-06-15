@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import type { ParsedEvent } from "@homeos/shared";
 import { createServer } from "../../src/http/server.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
+import type { InboundMessage } from "../../src/http/webhook.ts";
 
 const textPayload = {
   object: "whatsapp_business_account",
@@ -24,28 +24,18 @@ const textPayload = {
   ],
 };
 
-const sample: ParsedEvent = {
-  kind: "event",
-  title_he: "שלום",
-  date_iso: "2026-06-20",
-  time: null,
-  location: null,
-  source_text: "שלום",
-};
-
 function makeApp() {
-  const sendText = vi.fn(async (_to: string, _body: string) => {});
-  const store = { seen: vi.fn(() => false) };
-  const events = {
-    saveEvent: vi.fn((e: ParsedEvent, _m: { fromPhone: string; waMessageId: string }) => ({ id: 1, ...e })),
-    listEvents: vi.fn(() => []),
+  const process = vi.fn(async (_msg: InboundMessage) => {});
+  // Inbound queue stand-in: dedupes on id like the real PRIMARY KEY does.
+  const seen = new Set<string>();
+  const inbound = {
+    enqueue: vi.fn((msg: InboundMessage) => (seen.has(msg.id) ? false : (seen.add(msg.id), true))),
+    markDone: vi.fn(),
+    markFailed: vi.fn(),
+    pending: vi.fn(() => [] as InboundMessage[]),
   };
-  const parse = vi.fn(async (_t: string, _d: string): Promise<ParsedEvent | null> => sample);
-  const deps: ServerDeps = {
-    verifyToken: "secret",
-    handler: { allowlist: ["972501234567"], store, events, parse, sendText },
-  };
-  return { app: createServer(deps), sendText };
+  const deps: ServerDeps = { verifyToken: "secret", inbound, process };
+  return { app: createServer(deps), process, inbound };
 }
 
 function post(app: ReturnType<typeof makeApp>["app"], body: string) {
@@ -76,20 +66,28 @@ describe("GET /webhook (verification)", () => {
 });
 
 describe("POST /webhook (inbound)", () => {
-  it("acks 200 immediately and then processes asynchronously", async () => {
-    const { app, sendText } = makeApp();
+  it("acks 200 immediately, enqueues, then dispatches processing off the ack path", async () => {
+    const { app, inbound, process } = makeApp();
     const res = await post(app, JSON.stringify(textPayload));
     expect(res.status).toBe(200); // ⚡ ack first, regardless of processing
-    await vi.waitFor(() => expect(sendText).toHaveBeenCalled());
-    const [, body] = sendText.mock.calls[0]!;
-    expect(body).toContain("הוספתי ליומן"); // confirmation, processed off the ack path
+    expect(inbound.enqueue).toHaveBeenCalledTimes(1); // persisted BEFORE the ack
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1));
+    const [msg] = process.mock.calls[0]!;
+    expect(msg).toMatchObject({ id: "wamid.1", from: "972501234567", text: "שלום" });
   });
 
-  it("acks 200 for a status-only webhook (no messages)", async () => {
-    const { app, sendText } = makeApp();
+  it("processes a duplicate delivery only once (queue dedupe before ack)", async () => {
+    const { app, process } = makeApp();
+    await post(app, JSON.stringify(textPayload));
+    await post(app, JSON.stringify(textPayload)); // Meta at-least-once retry
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1));
+  });
+
+  it("acks 200 for a status-only webhook (no messages) and dispatches nothing", async () => {
+    const { app, process } = makeApp();
     const res = await post(app, JSON.stringify({ object: "whatsapp_business_account", entry: [] }));
     expect(res.status).toBe(200);
-    expect(sendText).not.toHaveBeenCalled();
+    expect(process).not.toHaveBeenCalled();
   });
 
   it("acks 200 even on a malformed JSON body", async () => {
