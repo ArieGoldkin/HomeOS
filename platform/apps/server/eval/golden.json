@@ -1,0 +1,44 @@
+[
+  {
+    "name": "tomorrow-evening-event",
+    "input": "אסיפת הורים מחר ב-18:30 בגן רימון",
+    "today": "2026-06-15",
+    "expected": [{ "kind": "event", "date_iso": "2026-06-16", "time": "18:30" }]
+  },
+  {
+    "name": "explicit-date-and-time",
+    "input": "חוג ציור ב-20 ביוני בשעה 17:00",
+    "today": "2026-06-15",
+    "expected": [{ "kind": "event", "date_iso": "2026-06-20", "time": "17:00" }]
+  },
+  {
+    "name": "weekday-this-week (Israeli week starts Sunday)",
+    "input": "ביום רביעי צריך לבוא עם חולצה לבנה",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-17", "time": null }]
+  },
+  {
+    "name": "weekly-recurring-chug",
+    "input": "חוג כדורגל כל יום שלישי ב-16:30",
+    "today": "2026-06-15",
+    "expected": [
+      {
+        "date_iso": "2026-06-16",
+        "time": "16:30",
+        "recurrence": { "freq": "weekly", "weekday": 2 }
+      }
+    ]
+  },
+  {
+    "name": "assignee-named",
+    "input": "אבא צריך לקחת את דניאל לרופא ביום חמישי בבוקר ב-9:00",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-18", "time": "09:00", "assignee": "אבא" }]
+  },
+  {
+    "name": "multi-event-newsletter",
+    "input": "ביום ראשון יש טיול שנתי, וביום שלישי צריך חולצה לבנה",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-21" }, { "date_iso": "2026-06-16" }]
+  }
+]
