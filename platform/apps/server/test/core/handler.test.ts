@@ -1,5 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
+import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import { handleInbound, processInbound } from "../../src/core/handler.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
@@ -17,7 +18,9 @@ const sampleEvent: ParsedEvent = {
   source_text: "אסיפת הורים מחר ב-18:30",
 };
 
-function makeDeps(opts: { parsed?: ParsedEvent[] | null; cancelCount?: number } = {}) {
+function makeDeps(
+  opts: { parsed?: ParsedEvent[] | null; cancelCount?: number; parseThrows?: unknown } = {},
+) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
     saveEvent: vi.fn(
@@ -29,10 +32,10 @@ function makeDeps(opts: { parsed?: ParsedEvent[] | null; cancelCount?: number } 
     listEvents: vi.fn(() => []),
     deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
   };
-  const parse = vi.fn(
-    async (_text: string, _today: string): Promise<ParsedEvent[] | null> =>
-      opts.parsed === undefined ? [sampleEvent] : opts.parsed,
-  );
+  const parse = vi.fn(async (_text: string, _today: string): Promise<ParsedEvent[] | null> => {
+    if (opts.parseThrows) throw opts.parseThrows;
+    return opts.parsed === undefined ? [sampleEvent] : opts.parsed;
+  });
   const deps: HandlerDeps = {
     allowlist,
     events,
@@ -94,6 +97,15 @@ describe("handleInbound (M2)", () => {
     expect(body).toMatch(/לנסח|להבין/);
   });
 
+  it("on a transient parse error, says 'try again' (not rephrase) and rethrows", async () => {
+    const { sendText, events, deps } = makeDeps({ parseThrows: new TransientError("blip") });
+    await expect(handleInbound(textMsg, deps)).rejects.toBeInstanceOf(TransientError);
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toMatch(/תקלה זמנית|נסו שוב/);
+    expect(body).not.toMatch(/לנסח/); // never the "rephrase" message for an API blip
+  });
+
   it("undoes the last message on ביטול (deletes + confirms, never parses)", async () => {
     const { sendText, events, parse, deps } = makeDeps({ cancelCount: 2 });
     await handleInbound({ ...textMsg, text: "ביטול" }, deps);
@@ -147,12 +159,20 @@ describe("processInbound (queue settle)", () => {
     expect(inbound.markFailed).not.toHaveBeenCalled();
   });
 
-  it("marks the row failed (not done) when handling throws", async () => {
+  it("marks the row failed (not done) when handling throws a non-transient error", async () => {
     const { deps, sendText } = makeDeps();
-    sendText.mockRejectedValueOnce(new Error("Graph 503")); // transient send failure
+    sendText.mockRejectedValueOnce(new Error("boom")); // a plain (permanent) failure
     const inbound = makeInbound();
     await processInbound(textMsg, { ...deps, inbound } as ProcessDeps); // never throws
     expect(inbound.markFailed).toHaveBeenCalledWith("wamid.1");
     expect(inbound.markDone).not.toHaveBeenCalled();
+  });
+
+  it("leaves the row pending on a transient error (replayable, not failed)", async () => {
+    const { deps } = makeDeps({ parseThrows: new TransientError("blip") });
+    const inbound = makeInbound();
+    await processInbound(textMsg, { ...deps, inbound } as ProcessDeps); // never throws
+    expect(inbound.markDone).not.toHaveBeenCalled();
+    expect(inbound.markFailed).not.toHaveBeenCalled(); // stays pending → boot-replay retries
   });
 });

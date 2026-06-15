@@ -1,12 +1,24 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { type ParsedEvent, parsedMessageSchema } from "@homeos/shared";
+import { isTransient, TransientError } from "../core/errors.ts";
 
 /** Raw extraction call: (system, userText) → the model's structured object (or null). */
 export type RawParse = (system: string, userText: string) => Promise<unknown>;
 
-/** High-level parser the handler depends on: (text, today) → validated events (or null on failure). */
+/**
+ * High-level parser the handler depends on: (text, today) → validated events, or `null` when the
+ * call succeeded but the message couldn't be turned into a valid event (→ "please rephrase").
+ * Throws `TransientError` when the provider hiccuped even after a retry (→ "try again", replayable).
+ */
 export type ParseMessage = (text: string, todayIso: string) => Promise<ParsedEvent[] | null>;
+
+interface ParserOptions {
+  /** Extra attempts on a transient error (default 1 → up to 2 calls total). */
+  retries?: number;
+  /** Injectable backoff sleep (tests pass an instant no-op). */
+  sleep?: (ms: number) => Promise<void>;
+}
 
 export function buildSystemPrompt(todayIso: string): string {
   return [
@@ -30,22 +42,32 @@ export function buildSystemPrompt(todayIso: string): string {
 
 /**
  * Orchestrates extraction: build the prompt with today's Jerusalem date, call the injected raw
- * parser, and validate against the shared message schema. Returns the events list (possibly empty),
- * or null when the call failed / the shape was invalid (caller falls back to "please rephrase").
+ * parser, and validate against the shared message schema. A valid call with a bad/empty shape →
+ * `null` (rephrase). A transient provider error → one backoff retry, then `TransientError` (the
+ * caller must distinguish "the API hiccuped" from "the user said something unparseable").
  */
-export function createParser(rawParse: RawParse): ParseMessage {
+export function createParser(rawParse: RawParse, opts: ParserOptions = {}): ParseMessage {
+  const retries = opts.retries ?? 1;
+  const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+
   return async function parseMessage(
     text: string,
     todayIso: string,
   ): Promise<ParsedEvent[] | null> {
-    let raw: unknown;
-    try {
-      raw = await rawParse(buildSystemPrompt(todayIso), text);
-    } catch {
-      return null;
+    const system = buildSystemPrompt(todayIso);
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const raw = await rawParse(system, text);
+        const result = parsedMessageSchema.safeParse(raw);
+        return result.success ? result.data.events : null; // valid call, bad shape → rephrase
+      } catch (err) {
+        if (!isTransient(err)) return null; // permanent (e.g. 4xx) → rephrase fallback
+        lastErr = err;
+        if (attempt < retries) await sleep(200 * (attempt + 1)); // backoff, then retry
+      }
     }
-    const result = parsedMessageSchema.safeParse(raw);
-    return result.success ? result.data.events : null;
+    throw new TransientError("parse failed after transient retries", lastErr);
   };
 }
 
