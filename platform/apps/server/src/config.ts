@@ -32,6 +32,8 @@ const schema = z.object({
   // the Asia/Jerusalem hour to send it.
   ADMIN_PHONE: z.string().min(1).optional(),
   DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(21),
+  // Nightly WAL-safe backup hour (item I), Asia/Jerusalem.
+  BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(3),
 });
 
 export interface Config {
@@ -47,6 +49,7 @@ export interface Config {
   appSecret?: string;
   adminPhone?: string;
   digestHour: number;
+  backupHour: number;
 }
 
 /**
@@ -75,5 +78,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     appSecret: e.APP_SECRET,
     adminPhone: e.ADMIN_PHONE,
     digestHour: e.DIGEST_HOUR,
+    backupHour: e.BACKUP_HOUR,
   };
 }

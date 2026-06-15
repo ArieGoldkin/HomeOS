@@ -9,6 +9,7 @@ import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
 import { createServer } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
+import { noopUploader, scheduleBackup } from "./infra/backup.ts";
 import { anthropicRawParse, createParser } from "./parsing/parser.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
 
@@ -67,6 +68,10 @@ if (adminPhone) {
     log,
   });
 }
+
+// 💾 Nightly WAL-safe backup. The offsite uploader (R2/B2) is wired at the Railway cutover;
+// until then it is a no-op so the snapshot mechanism + schedule run harmlessly in dev.
+scheduleBackup({ dbPath: config.dbPath, uploader: noopUploader, hour: config.backupHour, log });
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`HomeOS server (M2: parse → confirm) listening on :${info.port}`);

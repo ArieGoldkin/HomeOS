@@ -1,6 +1,10 @@
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { SendText } from "../whatsapp/client.ts";
+import { scheduleDaily } from "./scheduler.ts";
+
+// Re-exported so existing importers keep their path; the helper now lives in the shared scheduler.
+export { msUntilNextRun } from "./scheduler.ts";
 
 export interface DigestDeps {
   events: EventStore;
@@ -43,25 +47,6 @@ export function buildDigest(stats: DigestStats): string {
   return lines.join("\n");
 }
 
-/** ms from `now` until the next `hour:00` in Asia/Jerusalem (wraps to tomorrow if already past). */
-export function msUntilNextRun(now: Date, hour: number): number {
-  const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Jerusalem",
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  // en-GB 24h renders "HH:MM:SS"; "24" at midnight → normalize to 0.
-  const parts = fmt.format(now).split(":").map(Number);
-  const h = (parts[0] ?? 0) % 24;
-  const m = parts[1] ?? 0;
-  const s = parts[2] ?? 0;
-  let secondsUntil = (hour - h) * 3600 - m * 60 - s;
-  if (secondsUntil <= 0) secondsUntil += 24 * 3600;
-  return secondsUntil * 1000;
-}
-
 /** Compute the last-24h stats and send one digest. Exposed for testing + boot. */
 export async function runDigestOnce(deps: DigestDeps): Promise<void> {
   const now = (deps.now ?? (() => new Date()))();
@@ -77,23 +62,10 @@ export async function runDigestOnce(deps: DigestDeps): Promise<void> {
   await deps.sendText(deps.adminPhone, buildDigest(stats));
 }
 
-/**
- * Schedule the digest at `hour` Asia/Jerusalem, then every 24h. Returns a stop() to cancel the
- * timer (used in shutdown/tests). A send failure is swallowed (logged) so the loop keeps running.
- */
+/** Schedule the digest at `hour` Asia/Jerusalem, then daily — via the shared scheduler. */
 export function scheduleDigest(deps: DigestDeps): { stop: () => void } {
-  const now = deps.now ?? (() => new Date());
-  let timer: ReturnType<typeof setTimeout>;
-
-  const tick = async () => {
-    try {
-      await runDigestOnce(deps);
-    } catch (err) {
-      deps.log?.("digest send failed", { error: String(err) });
-    }
-    timer = setTimeout(() => void tick(), DAY_MS);
-  };
-
-  timer = setTimeout(() => void tick(), msUntilNextRun(now(), deps.hour));
-  return { stop: () => clearTimeout(timer) };
+  return scheduleDaily(deps.hour, () => runDigestOnce(deps), {
+    now: deps.now,
+    onError: (err) => deps.log?.("digest send failed", { error: String(err) }),
+  });
 }
