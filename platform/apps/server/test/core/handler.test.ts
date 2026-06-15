@@ -31,6 +31,7 @@ function makeDeps(
     ),
     listEvents: vi.fn(() => []),
     deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
+    countSince: vi.fn(() => 0),
   };
   const parse = vi.fn(async (_text: string, _today: string): Promise<ParsedEvent[] | null> => {
     if (opts.parseThrows) throw opts.parseThrows;
@@ -148,6 +149,7 @@ describe("processInbound (queue settle)", () => {
       markDone: vi.fn(),
       markFailed: vi.fn(),
       pending: vi.fn(() => []),
+      statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
     };
   }
 

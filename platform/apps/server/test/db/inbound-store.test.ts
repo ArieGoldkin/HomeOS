@@ -47,4 +47,23 @@ describe("InboundStore (in-memory SQLite)", () => {
     store.enqueue({ id: "wamid.img", from: "9725", type: "image" });
     expect(store.pending()[0]).toEqual({ id: "wamid.img", from: "9725", type: "image" });
   });
+
+  it("statsSince counts by status (done/failed/pending) within the window", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue({ ...msg, id: "a" });
+    store.enqueue({ ...msg, id: "b" });
+    store.enqueue({ ...msg, id: "c" });
+    store.enqueue({ ...msg, id: "d" }); // stays pending
+    store.markDone("a");
+    store.markDone("b");
+    store.markFailed("c");
+    expect(store.statsSince("2000-01-01 00:00:00")).toEqual({ done: 2, failed: 1, pending: 1 });
+  });
+
+  it("statsSince excludes rows received before the cutoff", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue(msg);
+    store.markDone(msg.id);
+    expect(store.statsSince("2999-01-01 00:00:00")).toEqual({ done: 0, failed: 0, pending: 0 });
+  });
 });
