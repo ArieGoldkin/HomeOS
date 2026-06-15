@@ -1,12 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { CREATE_INBOUND_TABLE, type InboundRow } from "./schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
+import { CREATE_INBOUND_TABLE, type InboundRow } from "./schema.ts";
 
 // node:sqlite is a newer builtin that bundlers (Vite/Vitest) don't externalize cleanly;
 // loading it via createRequire keeps it a runtime resolution Node handles directly.
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 /**
  * The inbound queue seam (item A: "make the DB the queue"). The webhook persists here BEFORE

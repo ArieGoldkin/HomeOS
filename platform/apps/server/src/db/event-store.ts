@@ -6,7 +6,9 @@ import { CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
 
 // node:sqlite is a newer builtin that bundlers (Vite/Vitest) don't externalize cleanly;
 // loading it via createRequire keeps it a runtime resolution Node handles directly.
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as typeof import("node:sqlite");
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 export interface EventMeta {
   fromPhone: string;

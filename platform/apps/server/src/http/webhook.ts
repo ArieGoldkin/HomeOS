@@ -23,7 +23,9 @@ const envelopeSchema = z.object({
     .array(
       z.object({
         changes: z
-          .array(z.object({ value: z.object({ messages: z.array(z.unknown()).optional() }).optional() }))
+          .array(
+            z.object({ value: z.object({ messages: z.array(z.unknown()).optional() }).optional() }),
+          )
           .optional(),
       }),
     )

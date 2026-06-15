@@ -3,12 +3,12 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
+import { processInbound } from "./core/handler.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
-import { processInbound } from "./core/handler.ts";
-import { anthropicRawParse, createParser } from "./parsing/parser.ts";
 import { createServer } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
+import { anthropicRawParse, createParser } from "./parsing/parser.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
 
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).

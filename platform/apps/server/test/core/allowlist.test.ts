@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { isAllowed, normalizePhone } from "../../src/core/allowlist.ts";
 
 describe("normalizePhone", () => {

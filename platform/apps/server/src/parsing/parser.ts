@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { parsedMessageSchema, type ParsedEvent } from "@homeos/shared";
+import { type ParsedEvent, parsedMessageSchema } from "@homeos/shared";
 
 /** Raw extraction call: (system, userText) → the model's structured object (or null). */
 export type RawParse = (system: string, userText: string) => Promise<unknown>;
@@ -34,7 +34,10 @@ export function buildSystemPrompt(todayIso: string): string {
  * or null when the call failed / the shape was invalid (caller falls back to "please rephrase").
  */
 export function createParser(rawParse: RawParse): ParseMessage {
-  return async function parseMessage(text: string, todayIso: string): Promise<ParsedEvent[] | null> {
+  return async function parseMessage(
+    text: string,
+    todayIso: string,
+  ): Promise<ParsedEvent[] | null> {
     let raw: unknown;
     try {
       raw = await rawParse(buildSystemPrompt(todayIso), text);

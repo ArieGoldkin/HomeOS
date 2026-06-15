@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { anthropicRawParse, buildSystemPrompt, createParser, type RawParse } from "../../src/parsing/parser.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  anthropicRawParse,
+  buildSystemPrompt,
+  createParser,
+  type RawParse,
+} from "../../src/parsing/parser.ts";
 
 const validEvent = {
   kind: "event",
@@ -25,7 +30,9 @@ describe("buildSystemPrompt", () => {
 
 describe("createParser", () => {
   it("returns the validated events and passes today's date to the model", async () => {
-    const rawParse = vi.fn(async (_system: string, _text: string): Promise<unknown> => validMessage);
+    const rawParse = vi.fn(
+      async (_system: string, _text: string): Promise<unknown> => validMessage,
+    );
     const parse = createParser(rawParse);
     const result = await parse("אסיפת הורים מחר ב-18:30 בגן רימון", "2026-06-20");
     expect(result).toHaveLength(1);

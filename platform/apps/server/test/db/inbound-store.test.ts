@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 
