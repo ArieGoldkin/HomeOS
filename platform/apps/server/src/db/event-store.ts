@@ -27,6 +27,8 @@ export interface EventStore {
   listEvents(): SavedEvent[];
   /** Delete all events from the sender's most recent message (the `ביטול` undo). Returns the count. */
   deleteLastFromSender(fromPhone: string): number;
+  /** Count events created at/after `sinceIso` (SQLite UTC datetime). Feeds the daily digest. */
+  countSince(sinceIso: string): number;
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -76,6 +78,7 @@ export function createEventStore(dbPath: string): EventStore {
          SELECT wa_message_id FROM events WHERE from_phone = ? ORDER BY id DESC LIMIT 1
        );`,
   );
+  const countSinceStmt = db.prepare("SELECT COUNT(*) AS c FROM events WHERE created_at >= ?;");
 
   return {
     saveEvent(event, meta) {
@@ -100,6 +103,9 @@ export function createEventStore(dbPath: string): EventStore {
     },
     deleteLastFromSender(fromPhone) {
       return Number(deleteLast.run(fromPhone, fromPhone).changes);
+    },
+    countSince(sinceIso) {
+      return Number((countSinceStmt.get(sinceIso) as { c: number }).c);
     },
   };
 }

@@ -68,11 +68,13 @@ function makeApp(opts: { readToken?: string } = { readToken: "read-secret" }) {
     markDone: vi.fn(),
     markFailed: vi.fn(),
     pending: vi.fn(() => [] as InboundMessage[]),
+    statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
   };
   const events = {
     saveEvent: vi.fn(),
     listEvents: vi.fn(() => sampleEvents),
     deleteLastFromSender: vi.fn(() => 0),
+    countSince: vi.fn(() => 0),
   };
   const deps: ServerDeps = {
     verifyToken: "secret",

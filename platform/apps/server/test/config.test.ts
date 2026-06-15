@@ -36,6 +36,14 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, READ_TOKEN: "read-secret" }).readToken).toBe("read-secret");
   });
 
+  it("defaults DIGEST_HOUR to 21 and respects ADMIN_PHONE / DIGEST_HOUR overrides", () => {
+    expect(loadConfig(base).digestHour).toBe(21);
+    expect(loadConfig(base).adminPhone).toBeUndefined();
+    const cfg = loadConfig({ ...base, ADMIN_PHONE: "972509999999", DIGEST_HOUR: "8" });
+    expect(cfg.adminPhone).toBe("972509999999");
+    expect(cfg.digestHour).toBe(8);
+  });
+
   it("coerces PORT to a number and respects overrides", () => {
     const cfg = loadConfig({ ...base, PORT: "8080", GRAPH_VERSION: "v22.0" });
     expect(cfg.port).toBe(8080);

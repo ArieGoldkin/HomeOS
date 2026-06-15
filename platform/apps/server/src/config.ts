@@ -26,6 +26,10 @@ const schema = z.object({
   // Bearer token gating GET /events (the dashboard/kiosk read seam). Optional: when unset the
   // read endpoint is disabled (503) rather than exposed unauthenticated.
   READ_TOKEN: z.string().min(1).optional(),
+  // Daily self-digest (item D): where it's sent (defaults to the first allowlist number) and
+  // the Asia/Jerusalem hour to send it.
+  ADMIN_PHONE: z.string().min(1).optional(),
+  DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(21),
 });
 
 export interface Config {
@@ -38,6 +42,8 @@ export interface Config {
   anthropicModel: string;
   dbPath: string;
   readToken?: string;
+  adminPhone?: string;
+  digestHour: number;
 }
 
 /**
@@ -63,5 +69,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,
     readToken: e.READ_TOKEN,
+    adminPhone: e.ADMIN_PHONE,
+    digestHour: e.DIGEST_HOUR,
   };
 }

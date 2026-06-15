@@ -3,6 +3,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
+import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
@@ -50,6 +51,20 @@ const backlog = inbound.pending();
 if (backlog.length > 0) {
   log("replaying pending inbound on boot", { count: backlog.length });
   for (const msg of backlog) void runInbound(msg);
+}
+
+// 📊 Daily self-digest: heartbeat + quality + alert to the founder. Defaults to the first
+// allowlist number if ADMIN_PHONE isn't set.
+const adminPhone = config.adminPhone ?? config.allowlist[0];
+if (adminPhone) {
+  scheduleDigest({
+    events,
+    inbound,
+    sendText: wa.sendText,
+    adminPhone,
+    hour: config.digestHour,
+    log,
+  });
 }
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

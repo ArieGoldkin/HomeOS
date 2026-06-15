@@ -102,4 +102,14 @@ describe("EventStore (in-memory SQLite)", () => {
       expect(store.deleteLastFromSender("999")).toBe(0);
     });
   });
+
+  describe("countSince (digest)", () => {
+    it("counts events created at/after the cutoff", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.x" });
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.y" });
+      expect(store.countSince("2000-01-01 00:00:00")).toBe(2);
+      expect(store.countSince("2999-01-01 00:00:00")).toBe(0); // future cutoff → none
+    });
+  });
 });
