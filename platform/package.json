@@ -16,7 +16,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "eval": "pnpm --filter @homeos/server eval"
+    "eval": "pnpm --filter @homeos/server eval",
+    "digest:preview": "pnpm --filter @homeos/server digest:preview"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
