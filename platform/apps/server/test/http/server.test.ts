@@ -72,6 +72,7 @@ function makeApp(opts: { readToken?: string } = { readToken: "read-secret" }) {
   const events = {
     saveEvent: vi.fn(),
     listEvents: vi.fn(() => sampleEvents),
+    deleteLastFromSender: vi.fn(() => 0),
   };
   const deps: ServerDeps = {
     verifyToken: "secret",
