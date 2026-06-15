@@ -35,7 +35,14 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     log,
   });
 
-const app = createServer({ verifyToken: config.verifyToken, inbound, process: runInbound, log });
+const app = createServer({
+  verifyToken: config.verifyToken,
+  inbound,
+  process: runInbound,
+  events,
+  readToken: config.readToken,
+  log,
+});
 
 // 🔁 Boot-replay: re-process anything persisted but never finished before the last shutdown
 // or crash (the ack-then-process window). Meta only retries non-2xx, so this is our safety net.

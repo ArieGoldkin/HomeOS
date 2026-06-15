@@ -23,6 +23,9 @@ const schema = z.object({
   // straight from the environment by @anthropic-ai/sdk, so it is not modeled here.
   ANTHROPIC_MODEL: z.string().min(1).default("claude-haiku-4-5"),
   DB_PATH: z.string().min(1).default("./data/homeos.db"),
+  // Bearer token gating GET /events (the dashboard/kiosk read seam). Optional: when unset the
+  // read endpoint is disabled (503) rather than exposed unauthenticated.
+  READ_TOKEN: z.string().min(1).optional(),
 });
 
 export interface Config {
@@ -34,6 +37,7 @@ export interface Config {
   port: number;
   anthropicModel: string;
   dbPath: string;
+  readToken?: string;
 }
 
 /**
@@ -58,5 +62,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port: e.PORT,
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,
+    readToken: e.READ_TOKEN,
   };
 }
