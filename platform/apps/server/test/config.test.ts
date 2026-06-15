@@ -31,6 +31,11 @@ describe("loadConfig", () => {
     expect(cfg.dbPath).toBe("/tmp/h.db");
   });
 
+  it("leaves READ_TOKEN undefined when unset, and passes it through when set", () => {
+    expect(loadConfig(base).readToken).toBeUndefined();
+    expect(loadConfig({ ...base, READ_TOKEN: "read-secret" }).readToken).toBe("read-secret");
+  });
+
   it("coerces PORT to a number and respects overrides", () => {
     const cfg = loadConfig({ ...base, PORT: "8080", GRAPH_VERSION: "v22.0" });
     expect(cfg.port).toBe(8080);

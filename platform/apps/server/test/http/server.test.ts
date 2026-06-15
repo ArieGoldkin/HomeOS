@@ -30,7 +30,32 @@ const textPayload = {
   ],
 };
 
-function makeApp() {
+const sampleEvents = [
+  {
+    id: 2,
+    kind: "event" as const,
+    title_he: "טיול",
+    date_iso: "2026-06-25",
+    time: null,
+    location: null,
+    assignee: null,
+    recurrence: null,
+    source_text: "טיול",
+  },
+  {
+    id: 1,
+    kind: "event" as const,
+    title_he: "אסיפת הורים",
+    date_iso: "2026-06-21",
+    time: "18:30",
+    location: "גן רימון",
+    assignee: "אבא",
+    recurrence: { freq: "weekly" as const, weekday: 0 },
+    source_text: "אסיפת הורים",
+  },
+];
+
+function makeApp(opts: { readToken?: string } = { readToken: "read-secret" }) {
   const process = vi.fn(async (_msg: InboundMessage) => {});
   // Inbound queue stand-in: dedupes on id like the real PRIMARY KEY does.
   const seen = new Set<string>();
@@ -44,8 +69,18 @@ function makeApp() {
     markFailed: vi.fn(),
     pending: vi.fn(() => [] as InboundMessage[]),
   };
-  const deps: ServerDeps = { verifyToken: "secret", inbound, process };
-  return { app: createServer(deps), process, inbound };
+  const events = {
+    saveEvent: vi.fn(),
+    listEvents: vi.fn(() => sampleEvents),
+  };
+  const deps: ServerDeps = {
+    verifyToken: "secret",
+    inbound,
+    process,
+    events,
+    readToken: opts.readToken,
+  };
+  return { app: createServer(deps), process, inbound, events };
 }
 
 function post(app: ReturnType<typeof makeApp>["app"], body: string) {
@@ -104,6 +139,35 @@ describe("POST /webhook (inbound)", () => {
     const { app } = makeApp();
     const res = await post(app, "{not json");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("GET /events (read seam)", () => {
+  it("returns events as JSON (date-ordered, full shape) with a valid bearer token", async () => {
+    const { app } = makeApp({ readToken: "read-secret" });
+    const res = await app.request("/events", {
+      headers: { Authorization: "Bearer read-secret" },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      events: Array<{ title_he: string; assignee: string | null }>;
+    };
+    expect(body.events).toHaveLength(2);
+    expect(body.events[0]!.title_he).toBe("אסיפת הורים"); // 06-21 sorts before 06-25
+    expect(body.events[0]!.assignee).toBe("אבא"); // assignee + recurrence surfaced
+  });
+
+  it("returns 401 without a token or with the wrong one", async () => {
+    const { app } = makeApp({ readToken: "read-secret" });
+    expect((await app.request("/events")).status).toBe(401);
+    const wrong = await app.request("/events", { headers: { Authorization: "Bearer nope" } });
+    expect(wrong.status).toBe(401);
+  });
+
+  it("returns 503 when no read token is configured (endpoint disabled)", async () => {
+    const { app } = makeApp({ readToken: undefined });
+    const res = await app.request("/events", { headers: { Authorization: "Bearer anything" } });
+    expect(res.status).toBe(503);
   });
 });
 
