@@ -26,6 +26,8 @@ const schema = z.object({
   // Bearer token gating GET /events (the dashboard/kiosk read seam). Optional: when unset the
   // read endpoint is disabled (503) rather than exposed unauthenticated.
   READ_TOKEN: z.string().min(1).optional(),
+  // Meta app secret for X-Hub-Signature-256 HMAC verification (item H). Optional: unset = skip.
+  APP_SECRET: z.string().min(1).optional(),
   // Daily self-digest (item D): where it's sent (defaults to the first allowlist number) and
   // the Asia/Jerusalem hour to send it.
   ADMIN_PHONE: z.string().min(1).optional(),
@@ -42,6 +44,7 @@ export interface Config {
   anthropicModel: string;
   dbPath: string;
   readToken?: string;
+  appSecret?: string;
   adminPhone?: string;
   digestHour: number;
 }
@@ -69,6 +72,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,
     readToken: e.READ_TOKEN,
+    appSecret: e.APP_SECRET,
     adminPhone: e.ADMIN_PHONE,
     digestHour: e.DIGEST_HOUR,
   };

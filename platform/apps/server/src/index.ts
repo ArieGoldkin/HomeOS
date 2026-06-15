@@ -42,6 +42,7 @@ const app = createServer({
   process: runInbound,
   events,
   readToken: config.readToken,
+  appSecret: config.appSecret,
   log,
 });
 

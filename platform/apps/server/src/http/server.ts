@@ -2,7 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
-import { extractMessages, type InboundMessage, verifyChallenge } from "./webhook.ts";
+import {
+  extractMessages,
+  type InboundMessage,
+  verifyChallenge,
+  verifySignature,
+} from "./webhook.ts";
 
 export interface ServerDeps {
   verifyToken: string;
@@ -14,6 +19,8 @@ export interface ServerDeps {
   events: EventStore;
   /** Bearer token gating GET /events. When undefined the endpoint is disabled (503). */
   readToken?: string;
+  /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
+  appSecret?: string;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
@@ -58,9 +65,22 @@ export function createServer(deps: ServerDeps): Hono {
   });
 
   app.post("/webhook", async (c) => {
+    // Read the RAW body first — both for HMAC verification (must be the exact bytes Meta signed)
+    // and to parse from the same string. c.req.json() would consume the body and re-serialize.
+    const raw = await c.req.text();
+
+    // 🔒 When an app secret is configured, reject forged payloads (an unauthenticated write
+    // surface otherwise). Unset on the test number → skipped; enforced at the production cutover.
+    if (deps.appSecret !== undefined) {
+      if (!verifySignature(raw, c.req.header("x-hub-signature-256"), deps.appSecret)) {
+        log("rejected webhook with bad signature", {});
+        return c.text("Forbidden", 403);
+      }
+    }
+
     let body: unknown = null;
     try {
-      body = await c.req.json();
+      body = JSON.parse(raw);
     } catch {
       body = null; // malformed body → no messages, still ack 200 (Meta retries non-200)
     }
