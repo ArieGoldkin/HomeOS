@@ -63,6 +63,8 @@ read from the environment by the SDK; the SQLite file is created at `DB_PATH` (d
 
 ## One-time WhatsApp setup (your manual steps)
 
+> 📋 **Full step-by-step with checkboxes, the Anthropic key, Demo 2, and troubleshooting: [SETUP.md](SETUP.md).** The summary below is the short version.
+
 Meta-console actions the code can't do for you:
 
 1. **Create a Meta developer account** at <https://developers.facebook.com>, add a **Business** app,
