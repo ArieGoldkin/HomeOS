@@ -15,9 +15,23 @@ const dateIso = z
 const timeHm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "time must be HH:MM (24h)");
 
 /**
- * The M2 contract: the structured shape Claude extracts from a forwarded Hebrew message,
- * produced by the server and (in P1) consumed by the kitchen display. Dates are anchored
- * to Asia/Jerusalem upstream; `time`/`location` are null when absent (all-day / no place).
+ * Weekly recurrence (covers חוגים / after-school activities). `weekday` is 0=Sunday … 6=Saturday
+ * (the Israeli week starts Sunday). Deliberately not a full RRULE — weekly-by-weekday is enough
+ * for the family domain; richer recurrence can extend this later.
+ */
+export const recurrenceSchema = z.object({
+  freq: z.literal("weekly"),
+  weekday: z.number().int().min(0).max(6),
+});
+export type Recurrence = z.infer<typeof recurrenceSchema>;
+
+/**
+ * The contract: the structured shape Claude extracts from a forwarded Hebrew message, produced
+ * by the server/agent and consumed by the dashboard + kiosk. Dates are anchored to
+ * Asia/Jerusalem upstream; `time`/`location`/`assignee`/`recurrence` are null when absent.
+ * `assignee` is the family member it's for/assigned to (a name for now; a richer member model
+ * comes with the multi-user work). New nullable fields default to null so the contract stays
+ * robust if the model omits them.
  */
 export const parsedEventSchema = z.object({
   kind: eventKindSchema,
@@ -25,6 +39,18 @@ export const parsedEventSchema = z.object({
   date_iso: dateIso,
   time: timeHm.nullable(),
   location: z.string().min(1).nullable(),
+  assignee: z.string().min(1).nullable().default(null),
+  recurrence: recurrenceSchema.nullable().default(null),
   source_text: z.string(),
 });
 export type ParsedEvent = z.infer<typeof parsedEventSchema>;
+
+/**
+ * One forwarded message can contain several items (the weekly gan newsletter is the canonical
+ * case), so the parse result is a list. The object wrapper (vs a bare array) is what the LLM
+ * structured-output format expects and keeps room for message-level fields later.
+ */
+export const parsedMessageSchema = z.object({
+  events: z.array(parsedEventSchema),
+});
+export type ParsedMessage = z.infer<typeof parsedMessageSchema>;

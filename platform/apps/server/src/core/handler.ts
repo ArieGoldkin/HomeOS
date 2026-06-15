@@ -1,6 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { isAllowed } from "./allowlist.ts";
-import type { EventStore } from "../db/event-store.ts";
+import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { ParseMessage } from "../parsing/parser.ts";
 import type { InboundMessage } from "../http/webhook.ts";
@@ -37,14 +37,27 @@ const hebrewDate = new Intl.DateTimeFormat("he-IL", {
 });
 
 /**
- * The confirm is the product's most-seen surface in a Hebrew family product, so render
- * the resolved date in Hebrew ("יום ראשון, 21 ביוני · 18:30"), not robotic ISO. Anchoring
- * the Date at UTC noon keeps the calendar day stable across the Asia/Jerusalem offset.
+ * The confirm is the product's most-seen surface in a Hebrew family product, so render the
+ * resolved date in Hebrew ("יום ראשון, 21 ביוני · 18:30"), not robotic ISO. Anchoring the Date
+ * at UTC noon keeps the calendar day stable across the Asia/Jerusalem offset. Appends the
+ * assignee and a weekly-recurrence marker when present.
  */
-function formatConfirm(event: ParsedEvent): string {
+function formatWhen(event: ParsedEvent): string {
   const dateHe = hebrewDate.format(new Date(`${event.date_iso}T12:00:00Z`));
-  const when = event.time ? `${dateHe} · ${event.time}` : dateHe;
-  return `הוספתי ליומן ✓\n${event.title_he} · ${when}`;
+  const parts = [event.time ? `${dateHe} · ${event.time}` : dateHe];
+  if (event.recurrence) parts.push("(שבועי)");
+  if (event.assignee) parts.push(`— ${event.assignee}`);
+  return parts.join(" ");
+}
+
+/** One message can yield several events; confirm a single item inline, or list a count + bullets. */
+function formatConfirm(events: SavedEvent[]): string {
+  if (events.length === 1) {
+    const e = events[0]!;
+    return `הוספתי ליומן ✓\n${e.title_he} · ${formatWhen(e)}`;
+  }
+  const lines = events.map((e) => `• ${e.title_he} · ${formatWhen(e)}`).join("\n");
+  return `הוספתי ${events.length} פריטים ליומן ✓\n${lines}`;
 }
 
 /**
@@ -72,14 +85,18 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
   const parsed = await deps.parse(text, today);
-  if (!parsed) {
+  if (!parsed || parsed.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
 
-  const saved = deps.events.saveEvent(parsed, { fromPhone: msg.from, waMessageId: msg.id });
-  log("saved event", { id: saved.id, kind: saved.kind, date: saved.date_iso });
+  // One message can carry several events — persist each under its own seq (idempotent on
+  // (wa_message_id, seq)), then send a single confirm covering all of them.
+  const saved = parsed.map((event, seq) =>
+    deps.events.saveEvent(event, { fromPhone: msg.from, waMessageId: msg.id, seq }),
+  );
+  log("saved events", { id: msg.id, count: saved.length });
   await deps.sendText(msg.from, formatConfirm(saved));
 }
 

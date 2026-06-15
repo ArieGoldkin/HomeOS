@@ -12,21 +12,23 @@ const sampleEvent: ParsedEvent = {
   date_iso: "2026-06-21",
   time: "18:30",
   location: "גן רימון",
+  assignee: null,
+  recurrence: null,
   source_text: "אסיפת הורים מחר ב-18:30",
 };
 
-function makeDeps(opts: { parsed?: ParsedEvent | null } = {}) {
+function makeDeps(opts: { parsed?: ParsedEvent[] | null } = {}) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
-    saveEvent: vi.fn((e: ParsedEvent, _m: { fromPhone: string; waMessageId: string }) => ({
-      id: 7,
+    saveEvent: vi.fn((e: ParsedEvent, m: { fromPhone: string; waMessageId: string; seq?: number }) => ({
+      id: 7 + (m.seq ?? 0),
       ...e,
     })),
     listEvents: vi.fn(() => []),
   };
   const parse = vi.fn(
-    async (_text: string, _today: string): Promise<ParsedEvent | null> =>
-      opts.parsed === undefined ? sampleEvent : opts.parsed,
+    async (_text: string, _today: string): Promise<ParsedEvent[] | null> =>
+      opts.parsed === undefined ? [sampleEvent] : opts.parsed,
   );
   const deps: HandlerDeps = {
     allowlist,
@@ -60,8 +62,29 @@ describe("handleInbound (M2)", () => {
     expect(body).not.toContain("2026-06-21"); // ISO no longer surfaced
   });
 
+  it("saves every event from a multi-event message and confirms the count", async () => {
+    const second: ParsedEvent = { ...sampleEvent, title_he: "טיול שנתי", time: null };
+    const { sendText, events, deps } = makeDeps({ parsed: [sampleEvent, second] });
+    await handleInbound(textMsg, deps);
+    expect(events.saveEvent).toHaveBeenCalledTimes(2);
+    expect(events.saveEvent.mock.calls[0]![1]).toMatchObject({ seq: 0 });
+    expect(events.saveEvent.mock.calls[1]![1]).toMatchObject({ seq: 1 });
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toContain("2"); // count in the summary
+    expect(body).toContain("אסיפת הורים");
+    expect(body).toContain("טיול שנתי");
+  });
+
   it("asks to rephrase when parsing fails, without persisting", async () => {
     const { sendText, events, deps } = makeDeps({ parsed: null });
+    await handleInbound(textMsg, deps);
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toMatch(/לנסח|להבין/);
+  });
+
+  it("asks to rephrase on an empty events list (parsed, but nothing schedulable)", async () => {
+    const { sendText, events, deps } = makeDeps({ parsed: [] });
     await handleInbound(textMsg, deps);
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
