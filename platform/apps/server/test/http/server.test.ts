@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
@@ -55,7 +56,7 @@ const sampleEvents = [
   },
 ];
 
-function makeApp(opts: { readToken?: string } = { readToken: "read-secret" }) {
+function makeApp(opts: { readToken?: string; appSecret?: string } = { readToken: "read-secret" }) {
   const process = vi.fn(async (_msg: InboundMessage) => {});
   // Inbound queue stand-in: dedupes on id like the real PRIMARY KEY does.
   const seen = new Set<string>();
@@ -82,16 +83,26 @@ function makeApp(opts: { readToken?: string } = { readToken: "read-secret" }) {
     process,
     events,
     readToken: opts.readToken,
+    appSecret: opts.appSecret,
   };
   return { app: createServer(deps), process, inbound, events };
 }
 
-function post(app: ReturnType<typeof makeApp>["app"], body: string) {
+function post(
+  app: ReturnType<typeof makeApp>["app"],
+  body: string,
+  extraHeaders: Record<string, string> = {},
+) {
   return app.request("/webhook", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...extraHeaders },
     body,
   });
+}
+
+/** Compute the X-Hub-Signature-256 header Meta would send for a body. */
+function sign(body: string, secret: string): string {
+  return `sha256=${createHmac("sha256", secret).update(body, "utf8").digest("hex")}`;
 }
 
 describe("GET /webhook (verification)", () => {
@@ -142,6 +153,34 @@ describe("POST /webhook (inbound)", () => {
     const { app } = makeApp();
     const res = await post(app, "{not json");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /webhook signature (HMAC, item H)", () => {
+  const secret = "meta-app-secret";
+  const payload = JSON.stringify(textPayload);
+
+  it("processes a correctly-signed payload when an app secret is configured", async () => {
+    const { app, inbound } = makeApp({ appSecret: secret });
+    const res = await post(app, payload, { "X-Hub-Signature-256": sign(payload, secret) });
+    expect(res.status).toBe(200);
+    expect(inbound.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a forged/unsigned payload with 403 and does not process it", async () => {
+    const { app, inbound } = makeApp({ appSecret: secret });
+    const bad = await post(app, payload, { "X-Hub-Signature-256": "sha256=deadbeef" });
+    expect(bad.status).toBe(403);
+    const missing = await post(app, payload); // no signature header
+    expect(missing.status).toBe(403);
+    expect(inbound.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("skips verification when no app secret is set (test number)", async () => {
+    const { app, inbound } = makeApp({ appSecret: undefined });
+    const res = await post(app, payload); // unsigned
+    expect(res.status).toBe(200);
+    expect(inbound.enqueue).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 /** Normalized inbound message — the seam M2's parser will consume. */
@@ -70,4 +71,21 @@ export function verifyChallenge(
     return challenge;
   }
   return null;
+}
+
+/**
+ * Verify Meta's X-Hub-Signature-256 header against an HMAC-SHA256 of the RAW request body
+ * (keyed with the app secret), timing-safe. The body must be the exact bytes Meta sent — hence
+ * the raw-text seam in the POST handler, since `c.req.json()` would re-serialize and not match.
+ */
+export function verifySignature(
+  rawBody: string,
+  header: string | undefined,
+  secret: string,
+): boolean {
+  if (!header) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody, "utf8").digest("hex")}`;
+  const got = Buffer.from(header);
+  const want = Buffer.from(expected);
+  return got.length === want.length && timingSafeEqual(got, want);
 }
