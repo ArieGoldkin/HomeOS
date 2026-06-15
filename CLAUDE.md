@@ -29,7 +29,7 @@ docs/idea/                research, market study, architecture-roadmap-playgroun
 
 ```bash
 pnpm install
-pnpm test          # 57 tests — no live network or Claude calls
+pnpm test          # 68 tests — no live network or Claude calls
 pnpm typecheck     # strict TypeScript
 pnpm dev           # start the server (WhatsApp + Claude setup: apps/server/README.md)
 ```
