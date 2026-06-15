@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "eval": "tsx eval/run.ts"
+    "eval": "tsx eval/run.ts",
+    "digest:preview": "tsx eval/digest-preview.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
