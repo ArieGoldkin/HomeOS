@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { InboundStore } from "../db/inbound-store.ts";
-import { extractMessages, verifyChallenge, type InboundMessage } from "./webhook.ts";
+import { extractMessages, type InboundMessage, verifyChallenge } from "./webhook.ts";
 
 export interface ServerDeps {
   verifyToken: string;

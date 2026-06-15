@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createWhatsAppClient } from "../../src/whatsapp/client.ts";
 
 const config = { whatsappToken: "TOKEN", phoneNumberId: "PNID", graphVersion: "v21.0" };

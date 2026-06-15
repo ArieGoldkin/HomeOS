@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
 import type { ParsedEvent } from "@homeos/shared";
-import { handleInbound, processInbound } from "../../src/core/handler.ts";
+import { describe, expect, it, vi } from "vitest";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
+import { handleInbound, processInbound } from "../../src/core/handler.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 
 const allowlist = ["972501234567"];
@@ -20,10 +20,12 @@ const sampleEvent: ParsedEvent = {
 function makeDeps(opts: { parsed?: ParsedEvent[] | null } = {}) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
-    saveEvent: vi.fn((e: ParsedEvent, m: { fromPhone: string; waMessageId: string; seq?: number }) => ({
-      id: 7 + (m.seq ?? 0),
-      ...e,
-    })),
+    saveEvent: vi.fn(
+      (e: ParsedEvent, m: { fromPhone: string; waMessageId: string; seq?: number }) => ({
+        id: 7 + (m.seq ?? 0),
+        ...e,
+      }),
+    ),
     listEvents: vi.fn(() => []),
   };
   const parse = vi.fn(

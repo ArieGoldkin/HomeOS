@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
 import type { ParsedEvent } from "@homeos/shared";
+import { describe, expect, it } from "vitest";
 import { createEventStore } from "../../src/db/event-store.ts";
 
 const event: ParsedEvent = {

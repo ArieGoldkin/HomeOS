@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
-import { createServer } from "../../src/http/server.ts";
+import { describe, expect, it, vi } from "vitest";
 import type { ServerDeps } from "../../src/http/server.ts";
+import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 
 const textPayload = {
@@ -15,7 +15,13 @@ const textPayload = {
             messaging_product: "whatsapp",
             metadata: { display_phone_number: "1", phone_number_id: "P" },
             messages: [
-              { from: "972501234567", id: "wamid.1", timestamp: "1", type: "text", text: { body: "שלום" } },
+              {
+                from: "972501234567",
+                id: "wamid.1",
+                timestamp: "1",
+                type: "text",
+                text: { body: "שלום" },
+              },
             ],
           },
         },
@@ -29,7 +35,11 @@ function makeApp() {
   // Inbound queue stand-in: dedupes on id like the real PRIMARY KEY does.
   const seen = new Set<string>();
   const inbound = {
-    enqueue: vi.fn((msg: InboundMessage) => (seen.has(msg.id) ? false : (seen.add(msg.id), true))),
+    enqueue: vi.fn((msg: InboundMessage) => {
+      if (seen.has(msg.id)) return false;
+      seen.add(msg.id);
+      return true;
+    }),
     markDone: vi.fn(),
     markFailed: vi.fn(),
     pending: vi.fn(() => [] as InboundMessage[]),

@@ -4,14 +4,12 @@ import { z } from "zod";
  * Comma-separated list → trimmed, non-empty string[].
  * Phone-number normalization happens in allowlist.ts; here we only split.
  */
-const csvList = z
-  .string()
-  .transform((s) =>
-    s
-      .split(",")
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0),
-  );
+const csvList = z.string().transform((s) =>
+  s
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0),
+);
 
 const schema = z.object({
   VERIFY_TOKEN: z.string().min(1),
