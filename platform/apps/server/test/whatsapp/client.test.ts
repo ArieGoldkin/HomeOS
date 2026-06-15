@@ -31,13 +31,61 @@ describe("createWhatsAppClient.sendText", () => {
     });
   });
 
-  it("throws when the Graph API responds non-2xx", async () => {
+  it("throws immediately on a permanent 4xx (no retry)", async () => {
     const fetchMock = vi.fn(
       (_input: string | URL | Request, _init?: RequestInit): Promise<Response> =>
         Promise.resolve(new Response("bad", { status: 400, statusText: "Bad Request" })),
     );
-    const client = createWhatsAppClient(config, fetchMock as unknown as typeof fetch);
+    const client = createWhatsAppClient(config, fetchMock as unknown as typeof fetch, {
+      sleep: () => Promise.resolve(),
+    });
 
     await expect(client.sendText("x", "y")).rejects.toThrow(/400/);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 4xx is permanent — not retried
+  });
+
+  it("retries a transient 5xx and succeeds on a later attempt", async () => {
+    let n = 0;
+    const fetchMock = vi.fn(
+      (_i: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+        n += 1;
+        return Promise.resolve(
+          n < 3
+            ? new Response("oops", { status: 503, statusText: "Service Unavailable" })
+            : new Response("{}", { status: 200 }),
+        );
+      },
+    );
+    const client = createWhatsAppClient(config, fetchMock as unknown as typeof fetch, {
+      sleep: () => Promise.resolve(),
+    });
+
+    await expect(client.sendText("x", "y")).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3); // 503, 503, 200
+  });
+
+  it("gives up after exhausting retries on a persistent 5xx", async () => {
+    const fetchMock = vi.fn(
+      (_i: string | URL | Request, _init?: RequestInit): Promise<Response> =>
+        Promise.resolve(new Response("down", { status: 500, statusText: "Server Error" })),
+    );
+    const client = createWhatsAppClient(config, fetchMock as unknown as typeof fetch, {
+      retries: 2,
+      sleep: () => Promise.resolve(),
+    });
+
+    await expect(client.sendText("x", "y")).rejects.toThrow(/500/);
+    expect(fetchMock).toHaveBeenCalledTimes(3); // initial + 2 retries
+  });
+
+  it("retries a network error then rethrows if it persists", async () => {
+    const fetchMock = vi.fn((): Promise<Response> => Promise.reject(new Error("ECONNRESET")));
+    const client = createWhatsAppClient(config, fetchMock as unknown as typeof fetch, {
+      retries: 1,
+      sleep: () => Promise.resolve(),
+    });
+
+    await expect(client.sendText("x", "y")).rejects.toThrow(/ECONNRESET/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

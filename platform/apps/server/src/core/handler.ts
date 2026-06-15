@@ -5,6 +5,7 @@ import type { InboundMessage } from "../http/webhook.ts";
 import type { ParseMessage } from "../parsing/parser.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import { isAllowed } from "./allowlist.ts";
+import { TransientError } from "./errors.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
@@ -23,6 +24,7 @@ export interface ProcessDeps extends HandlerDeps {
 const REFUSAL_HE = "מצטערים, אין לך הרשאה להשתמש בשירות הזה.";
 const TEXT_ONLY_HE = "כרגע אני מבין רק הודעות טקסט 🙏 (תמיכה בהודעות קוליות בקרוב).";
 const REPHRASE_HE = "לא הצלחתי להבין את ההודעה 🤔 אפשר לנסח מחדש?";
+const TRANSIENT_HE = "אירעה תקלה זמנית 🙏 נסו שוב בעוד רגע.";
 const CANCEL_NONE_HE = "אין מה לבטל 🤷";
 /** One-word undo: deletes the events from the sender's last message so a misparse is recoverable. */
 const CANCEL_TRIGGER = "ביטול";
@@ -102,7 +104,18 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   }
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
-  const parsed = await deps.parse(text, today);
+  let parsed: ParsedEvent[] | null;
+  try {
+    parsed = await deps.parse(text, today);
+  } catch (err) {
+    if (err instanceof TransientError) {
+      // The provider hiccuped — tell the user to retry (NOT "rephrase") and rethrow so the
+      // inbound row stays `pending` for boot-replay rather than being lost or marked failed.
+      log("transient parse error", { id: msg.id });
+      await deps.sendText(msg.from, TRANSIENT_HE);
+    }
+    throw err;
+  }
   if (!parsed || parsed.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);
@@ -130,6 +143,12 @@ export async function processInbound(msg: InboundMessage, deps: ProcessDeps): Pr
     await handleInbound(msg, deps);
     deps.inbound.markDone(msg.id);
   } catch (err) {
+    if (err instanceof TransientError) {
+      // Leave the row `pending` (don't settle) so boot-replay retries it — a service blip
+      // shouldn't lose the message. NOT a DLQ; just "try again next boot".
+      log("transient failure — left pending for replay", { id: msg.id });
+      return;
+    }
     deps.inbound.markFailed(msg.id);
     log("processInbound failed", { id: msg.id, error: String(err) });
   }

@@ -63,11 +63,34 @@ describe("createParser", () => {
     expect(await createParser(rawParse)("???", "2026-06-20")).toBeNull();
   });
 
-  it("returns null when the raw parse call throws", async () => {
-    const rawParse: RawParse = async () => {
-      throw new Error("network");
-    };
-    expect(await createParser(rawParse)("???", "2026-06-20")).toBeNull();
+  it("returns null on a permanent (4xx) provider error — rephrase fallback, no retry", async () => {
+    const rawParse = vi.fn(async () => {
+      throw Object.assign(new Error("bad request"), { status: 400 });
+    });
+    const parse = createParser(rawParse, { sleep: () => Promise.resolve() });
+    expect(await parse("???", "2026-06-20")).toBeNull();
+    expect(rawParse).toHaveBeenCalledTimes(1); // permanent → not retried
+  });
+
+  it("retries a transient error then throws TransientError when it persists", async () => {
+    const rawParse = vi.fn(async () => {
+      throw Object.assign(new Error("overloaded"), { status: 529 });
+    });
+    const parse = createParser(rawParse, { retries: 1, sleep: () => Promise.resolve() });
+    await expect(parse("???", "2026-06-20")).rejects.toMatchObject({ name: "TransientError" });
+    expect(rawParse).toHaveBeenCalledTimes(2); // initial + one retry
+  });
+
+  it("recovers when a transient error clears on retry", async () => {
+    let n = 0;
+    const rawParse = vi.fn(async () => {
+      n += 1;
+      if (n === 1) throw Object.assign(new Error("503"), { status: 503 });
+      return validMessage;
+    });
+    const parse = createParser(rawParse, { retries: 1, sleep: () => Promise.resolve() });
+    expect(await parse("...", "2026-06-20")).toHaveLength(1);
+    expect(rawParse).toHaveBeenCalledTimes(2);
   });
 });
 
