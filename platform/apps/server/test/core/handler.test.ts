@@ -17,7 +17,7 @@ const sampleEvent: ParsedEvent = {
   source_text: "אסיפת הורים מחר ב-18:30",
 };
 
-function makeDeps(opts: { parsed?: ParsedEvent[] | null } = {}) {
+function makeDeps(opts: { parsed?: ParsedEvent[] | null; cancelCount?: number } = {}) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
     saveEvent: vi.fn(
@@ -27,6 +27,7 @@ function makeDeps(opts: { parsed?: ParsedEvent[] | null } = {}) {
       }),
     ),
     listEvents: vi.fn(() => []),
+    deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
   };
   const parse = vi.fn(
     async (_text: string, _today: string): Promise<ParsedEvent[] | null> =>
@@ -91,6 +92,24 @@ describe("handleInbound (M2)", () => {
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/לנסח|להבין/);
+  });
+
+  it("undoes the last message on ביטול (deletes + confirms, never parses)", async () => {
+    const { sendText, events, parse, deps } = makeDeps({ cancelCount: 2 });
+    await handleInbound({ ...textMsg, text: "ביטול" }, deps);
+    expect(parse).not.toHaveBeenCalled();
+    expect(events.deleteLastFromSender).toHaveBeenCalledWith("972501234567");
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toMatch(/בוטל/);
+    expect(body).toContain("2"); // count of removed items
+  });
+
+  it("replies 'nothing to cancel' when ביטול finds no events", async () => {
+    const { sendText, events, deps } = makeDeps({ cancelCount: 0 });
+    await handleInbound({ ...textMsg, text: "ביטול" }, deps);
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toMatch(/אין מה לבטל/);
   });
 
   it("refuses a non-allowlisted sender before parsing", async () => {

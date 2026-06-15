@@ -25,6 +25,8 @@ export interface SavedEvent extends ParsedEvent {
 export interface EventStore {
   saveEvent(event: ParsedEvent, meta: EventMeta): SavedEvent;
   listEvents(): SavedEvent[];
+  /** Delete all events from the sender's most recent message (the `ביטול` undo). Returns the count. */
+  deleteLastFromSender(fromPhone: string): number;
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -66,6 +68,14 @@ export function createEventStore(dbPath: string): EventStore {
      RETURNING *;`,
   );
   const selectAll = db.prepare("SELECT * FROM events ORDER BY id;");
+  // Undo: delete every row of the sender's most recent message (all seqs of that wa_message_id).
+  const deleteLast = db.prepare(
+    `DELETE FROM events
+     WHERE from_phone = ?
+       AND wa_message_id = (
+         SELECT wa_message_id FROM events WHERE from_phone = ? ORDER BY id DESC LIMIT 1
+       );`,
+  );
 
   return {
     saveEvent(event, meta) {
@@ -87,6 +97,9 @@ export function createEventStore(dbPath: string): EventStore {
     },
     listEvents() {
       return (selectAll.all() as unknown as EventRow[]).map(rowToSaved);
+    },
+    deleteLastFromSender(fromPhone) {
+      return Number(deleteLast.run(fromPhone, fromPhone).changes);
     },
   };
 }

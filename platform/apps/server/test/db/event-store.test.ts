@@ -74,4 +74,32 @@ describe("EventStore (in-memory SQLite)", () => {
       recurrence: { freq: "weekly", weekday: 2 },
     });
   });
+
+  describe("deleteLastFromSender (undo)", () => {
+    it("removes every event of the sender's most recent message, returning the count", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.old" });
+      // A later multi-event message from the same sender:
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.new", seq: 0 });
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.new", seq: 1 });
+
+      expect(store.deleteLastFromSender("9725")).toBe(2); // both rows of the last message
+      const left = store.listEvents();
+      expect(left).toHaveLength(1); // the earlier message survives
+      expect(left[0]!.id).toBeDefined();
+    });
+
+    it("only touches the requesting sender's events", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "111", waMessageId: "wamid.a" });
+      store.saveEvent(event, { fromPhone: "222", waMessageId: "wamid.b" });
+      expect(store.deleteLastFromSender("111")).toBe(1);
+      expect(store.listEvents()).toHaveLength(1); // 222's event untouched
+    });
+
+    it("returns 0 when the sender has nothing to cancel", () => {
+      const store = createEventStore(":memory:");
+      expect(store.deleteLastFromSender("999")).toBe(0);
+    });
+  });
 });

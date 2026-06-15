@@ -23,6 +23,14 @@ export interface ProcessDeps extends HandlerDeps {
 const REFUSAL_HE = "מצטערים, אין לך הרשאה להשתמש בשירות הזה.";
 const TEXT_ONLY_HE = "כרגע אני מבין רק הודעות טקסט 🙏 (תמיכה בהודעות קוליות בקרוב).";
 const REPHRASE_HE = "לא הצלחתי להבין את ההודעה 🤔 אפשר לנסח מחדש?";
+const CANCEL_NONE_HE = "אין מה לבטל 🤷";
+/** One-word undo: deletes the events from the sender's last message so a misparse is recoverable. */
+const CANCEL_TRIGGER = "ביטול";
+
+function cancelReply(count: number): string {
+  if (count === 0) return CANCEL_NONE_HE;
+  return count === 1 ? "בוטל ✓" : `בוטלו ${count} פריטים ✓`;
+}
 
 /** YYYY-MM-DD for "now" in Asia/Jerusalem (en-CA renders ISO; handles DST). */
 function jerusalemToday(now: Date): string {
@@ -80,6 +88,16 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   const text = msg.text?.trim();
   if (!text) {
     await deps.sendText(msg.from, TEXT_ONLY_HE);
+    return;
+  }
+
+  // Undo: a bare "ביטול" removes the sender's last message's events — caught before parse so it's
+  // never sent to Claude. The confirm (with the resolved Hebrew date) is what makes a misparse
+  // catchable; this is the recovery.
+  if (text === CANCEL_TRIGGER) {
+    const removed = deps.events.deleteLastFromSender(msg.from);
+    log("cancel", { from: msg.from, removed });
+    await deps.sendText(msg.from, cancelReply(removed));
     return;
   }
 
