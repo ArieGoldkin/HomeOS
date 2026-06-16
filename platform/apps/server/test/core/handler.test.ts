@@ -133,6 +133,17 @@ describe("handleInbound (M2)", () => {
     expect(body).toMatch(/הרשאה|מצטער/);
   });
 
+  it("rephrases an over-length message BEFORE calling parse (input cap, G2)", async () => {
+    const { sendText, parse, events, deps } = makeDeps();
+    // A 50–100KB forward (long newsletter / pasted PDF) must never reach Claude ~2×/message.
+    const huge = "א".repeat(5000);
+    await handleInbound({ ...textMsg, text: huge }, deps);
+    expect(parse).not.toHaveBeenCalled();
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    const [, body] = sendText.mock.calls[0]!;
+    expect(body).toMatch(/לנסח|להבין/);
+  });
+
   it("replies text-only for a non-text message (voice deferred to M2b)", async () => {
     const { sendText, parse, deps } = makeDeps();
     await handleInbound({ id: "wamid.2", from: "972501234567", type: "image" }, deps);

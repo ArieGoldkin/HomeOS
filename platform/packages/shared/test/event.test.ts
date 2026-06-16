@@ -58,3 +58,37 @@ describe("parsedMessageSchema", () => {
     expect(parsedMessageSchema.parse({ events: [] }).events).toEqual([]);
   });
 });
+
+// G1 — the structured channel IS a prose channel: title_he/location/assignee round-trip to the
+// family's WhatsApp via the confirm, so an unbounded field is a phishing/essay vector. G15 — in a
+// Hebrew (RTL) product, bidi-control overrides can spoof/garble that confirm. An abusive value must
+// fail validation → null → "please rephrase", so it never reaches the user.
+describe("content bounds + sanitization (G1/G15)", () => {
+  it("accepts a clean Hebrew title at the 80-char boundary", () => {
+    const title = "א".repeat(80);
+    expect(parsedEventSchema.parse({ ...valid, title_he: title }).title_he).toBe(title);
+  });
+  it("rejects an over-length title_he (>80) — no 4000-char essay round-trips", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, title_he: "א".repeat(81) })).toThrow();
+  });
+  it("rejects an over-length location (>120) and assignee (>40)", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, location: "ב".repeat(121) })).toThrow();
+    expect(() => parsedEventSchema.parse({ ...valid, assignee: "ג".repeat(41) })).toThrow();
+  });
+  it("rejects an over-length source_text (>2000)", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, source_text: "ד".repeat(2001) })).toThrow();
+  });
+  it("rejects a title_he carrying a bidi/RTL-override codepoint (U+202E)", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, title_he: "אסיפה‮גזל" })).toThrow();
+  });
+  it("rejects a title_he with control chars / embedded newline (UI-spoof)", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, title_he: "שלום\nהוספתי ליומן ✓" })).toThrow();
+  });
+  it("rejects a zero-width char smuggled into the assignee", () => {
+    expect(() => parsedEventSchema.parse({ ...valid, assignee: "אבא​" })).toThrow();
+  });
+  it("still accepts ordinary Hebrew with spaces, digits, and punctuation", () => {
+    const ok = { ...valid, title_he: "חוג כדורגל (יום א׳) 16:00", assignee: "אבא" };
+    expect(parsedEventSchema.parse(ok)).toMatchObject({ assignee: "אבא" });
+  });
+});

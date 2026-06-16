@@ -28,6 +28,12 @@ const TRANSIENT_HE = "אירעה תקלה זמנית 🙏 נסו שוב בעוד
 const CANCEL_NONE_HE = "אין מה לבטל 🤷";
 /** One-word undo: deletes the events from the sender's last message so a misparse is recoverable. */
 const CANCEL_TRIGGER = "ביטול";
+/**
+ * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
+ * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
+ * *who*, not message *size*; this is the cost/DoS ceiling on a single message.
+ */
+const MAX_INPUT = 4000;
 
 function cancelReply(count: number): string {
   if (count === 0) return CANCEL_NONE_HE;
@@ -100,6 +106,13 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     const removed = deps.events.deleteLastFromSender(msg.from);
     log("cancel", { from: msg.from, removed });
     await deps.sendText(msg.from, cancelReply(removed));
+    return;
+  }
+
+  // G2: input-length cap — short-circuit before the model ever sees an oversized payload.
+  if (text.length > MAX_INPUT) {
+    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
+    await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
 
