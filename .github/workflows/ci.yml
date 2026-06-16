@@ -30,9 +30,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # Node 24 matches local dev; node:sqlite is flag-free here (22.x still needs
+          # Single source of truth: platform/.node-version (also read by Railway/Nixpacks).
+          # Node 24 is required — node:sqlite is flag-free here (22.x still needs
           # --experimental-sqlite, which Vitest workers wouldn't pick up).
-          node-version: 24
+          node-version-file: platform/.node-version
           cache: pnpm
           cache-dependency-path: platform/pnpm-lock.yaml
 

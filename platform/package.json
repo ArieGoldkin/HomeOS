@@ -5,7 +5,7 @@
   "type": "module",
   "description": "HomeOS \u2014 WhatsApp-first Hebrew family command center (monorepo)",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "packageManager": "pnpm@10.13.1",
   "scripts": {
