@@ -1,18 +1,21 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
+import { type CallModel, createAgent } from "../../src/core/agent.ts";
 import { processInbound } from "../../src/core/handler.ts";
 import { createEventStore } from "../../src/db/event-store.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ParseMessage } from "../../src/parsing/parser.ts";
+import { extractEventsTool } from "../../src/tools/tools.ts";
 
 /**
- * Integration harness: the REAL stores (in-memory SQLite), the REAL processInbound + handler, and
- * the REAL Hono server, wired exactly like index.ts — only the Claude parser is stubbed and
- * sendText is recorded (so there's still no live network). This exercises the Phase 3 wiring the
- * unit tests mock away: persist-before-ack → queue → multi-event save under seq → confirm →
- * GET /events → ביטול undo → dedup → boot-replay.
+ * Integration harness: the REAL stores (in-memory SQLite), the REAL agent loop + processInbound +
+ * handler, and the REAL Hono server, wired exactly like index.ts — only the two Claude surfaces are
+ * stubbed (the agent's `callModel` loop AND the extractor's `parse`) and sendText is recorded, so
+ * there's no live network. Exercises the Phase 3 + agent wiring the unit tests mock away:
+ * persist-before-ack → queue → agent → multi-event save under seq → confirm → GET /events → ביטול
+ * undo → dedup → boot-replay → seq-stability.
  */
 
 const allowlist = ["972501234567"];
@@ -42,20 +45,43 @@ const evC: ParsedEvent = {
   recurrence: { freq: "weekly", weekday: 2 },
 };
 
-// Stub parser: "multi" → two events, "replay" → one, otherwise → one. Keyed on the message text.
+// Stub extractor: "multi" → two events, otherwise → one. Keyed on the message text.
 const parse: ParseMessage = async (text: string) => (text.includes("multi") ? [evB, evC] : [evA]);
 
-function makeSystem() {
+/**
+ * Stub the agent's model loop: turn 0 emits a tool_use for extract_events with the forwarded text;
+ * once a tool_result comes back, end_turn. The extractor's own Claude call is stubbed by `parse`.
+ */
+const callModel: CallModel = async (req) => {
+  const last = req.messages.at(-1);
+  if (
+    Array.isArray(last?.content) &&
+    (last.content[0] as { type?: string })?.type === "tool_result"
+  ) {
+    return { stop_reason: "end_turn", content: [] };
+  }
+  const wrapped = typeof req.messages[0]?.content === "string" ? req.messages[0].content : "";
+  const text = wrapped
+    .replace(/^Forwarded message to process:\n<forwarded>\n/, "")
+    .replace(/\n<\/forwarded>$/, "");
+  return {
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", id: "tu_int", name: "extract_events", input: { text } }],
+  };
+};
+
+function makeSystem(parseImpl: ParseMessage = parse) {
   const events = createEventStore(":memory:");
   const inbound = createInboundStore(":memory:");
   const sent: Array<{ to: string; body: string }> = [];
   const sendText = async (to: string, body: string) => {
     sent.push({ to, body });
   };
+  const agent = createAgent({ callModel, tools: [extractEventsTool(parseImpl)] });
   const runInbound = (msg: InboundMessage): Promise<void> =>
     processInbound(msg, {
       allowlist,
-      parse,
+      agent,
       events,
       sendText,
       inbound,
@@ -150,5 +176,26 @@ describe("integration: webhook → queue → store → confirm → read → undo
 
     expect(sys.events.listEvents()).toHaveLength(1);
     expect(sys.inbound.pending()).toHaveLength(0); // settled
+  });
+
+  it("re-running the same wa_message_id with a reordered extraction adds NO duplicate rows (G-seq)", async () => {
+    // A boot-replay (or Meta retry) re-extracts; a non-deterministic model could return the same
+    // events in a DIFFERENT order. saveEvent dedups on (wa_message_id, seq), so the row count must
+    // stay stable — the single-extraction invariant + composite key guard against duplicates.
+    let call = 0;
+    const flip: ParseMessage = async () => (call++ === 0 ? [evB, evC] : [evC, evB]);
+    const sys = makeSystem(flip);
+    const msg: InboundMessage = {
+      id: "wamid.seq",
+      from: "972501234567",
+      type: "text",
+      text: "two",
+    };
+
+    await sys.runInbound(msg);
+    expect(sys.events.listEvents()).toHaveLength(2);
+
+    await sys.runInbound(msg); // replay — extraction returns the reversed order this time
+    expect(sys.events.listEvents()).toHaveLength(2); // no duplicate rows
   });
 });

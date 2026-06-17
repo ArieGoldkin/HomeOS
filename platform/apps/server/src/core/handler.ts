@@ -2,14 +2,14 @@ import type { ParsedEvent } from "@homeos/shared";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { InboundMessage } from "../http/webhook.ts";
-import type { ParseMessage } from "../parsing/parser.ts";
 import type { SendText } from "../whatsapp/client.ts";
+import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
 import { TransientError } from "./errors.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
-  parse: ParseMessage;
+  agent: Agent;
   events: EventStore;
   sendText: SendText;
   /** Injectable clock (default: now) so date anchoring is testable. */
@@ -119,7 +119,9 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
   let parsed: ParsedEvent[] | null;
   try {
-    parsed = await deps.parse(text, today);
+    // The agent decides parse-vs-act and runs the extract_events tool; same ParsedEvent[]|null
+    // contract as the old direct parse. Anchor + sender are server-supplied via ToolContext (G8).
+    parsed = await deps.agent.run(text, { todayIso: today, from: msg.from, waMessageId: msg.id });
   } catch (err) {
     if (err instanceof TransientError) {
       // The provider hiccuped — tell the user to retry (NOT "rephrase") and rethrow so the
