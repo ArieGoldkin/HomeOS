@@ -70,6 +70,7 @@ function makeApp(opts: { readToken?: string; appSecret?: string } = { readToken:
     markFailed: vi.fn(),
     pending: vi.fn(() => [] as InboundMessage[]),
     statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
+    countFromSenderSince: vi.fn(() => 0),
   };
   const events = {
     saveEvent: vi.fn(),

@@ -61,6 +61,11 @@ describe("loadConfig", () => {
     expect(cfg.members).toEqual({ "972501111111": "אבא", "972502222222": "אמא" });
   });
 
+  it("defaults MAX_PER_SENDER_PER_DAY to 50 and respects overrides (G16)", () => {
+    expect(loadConfig(base).maxPerSenderPerDay).toBe(50);
+    expect(loadConfig({ ...base, MAX_PER_SENDER_PER_DAY: "100" }).maxPerSenderPerDay).toBe(100);
+  });
+
   it("throws naming the missing variable", () => {
     const incomplete = {
       VERIFY_TOKEN: "v",

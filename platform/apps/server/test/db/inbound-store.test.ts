@@ -66,4 +66,20 @@ describe("InboundStore (in-memory SQLite)", () => {
     store.markDone(msg.id);
     expect(store.statsSince("2999-01-01 00:00:00")).toEqual({ done: 0, failed: 0, pending: 0 });
   });
+
+  it("countFromSenderSince counts only the given sender's rows within the window (G16)", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue({ id: "a1", from: "972500000001", type: "text", text: "x" });
+    store.enqueue({ id: "a2", from: "972500000001", type: "text", text: "y" });
+    store.enqueue({ id: "b1", from: "972500000002", type: "text", text: "z" });
+    expect(store.countFromSenderSince("972500000001", "2000-01-01 00:00:00")).toBe(2);
+    expect(store.countFromSenderSince("972500000002", "2000-01-01 00:00:00")).toBe(1);
+    expect(store.countFromSenderSince("972500000009", "2000-01-01 00:00:00")).toBe(0);
+  });
+
+  it("countFromSenderSince excludes rows received before the cutoff (day-boundary reset)", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue({ id: "a1", from: "972500000001", type: "text", text: "x" });
+    expect(store.countFromSenderSince("972500000001", "2999-01-01 00:00:00")).toBe(0);
+  });
 });

@@ -2,6 +2,7 @@ import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import { scheduleDaily } from "./scheduler.ts";
+import { sqliteUtc } from "./time.ts";
 
 // Re-exported so existing importers keep their path; the helper now lives in the shared scheduler.
 export { msUntilNextRun } from "./scheduler.ts";
@@ -26,11 +27,6 @@ export interface DigestStats {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** SQLite stores datetimes as UTC 'YYYY-MM-DD HH:MM:SS' (via datetime('now')); match that format. */
-function sqliteUtc(date: Date): string {
-  return date.toISOString().slice(0, 19).replace("T", " ");
-}
 
 /**
  * The daily Hebrew summary. Sent even on a quiet day (all zeros) so its *absence* is the alert

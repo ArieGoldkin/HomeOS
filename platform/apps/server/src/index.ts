@@ -44,6 +44,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     sendText: wa.sendText,
     inbound,
     members: config.members,
+    maxPerSenderPerDay: config.maxPerSenderPerDay,
     log,
   });
 

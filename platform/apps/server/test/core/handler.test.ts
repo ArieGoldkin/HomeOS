@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import { handleInbound, processInbound } from "../../src/core/handler.ts";
+import type { InboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ToolContext } from "../../src/tools/tools.ts";
 
@@ -25,6 +26,9 @@ function makeDeps(
     cancelCount?: number;
     agentThrows?: unknown;
     members?: Record<string, string>;
+    /** G16: when set, wires the ceiling + an inbound counter stub returning `senderCount`. */
+    maxPerSenderPerDay?: number;
+    senderCount?: number;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -45,6 +49,9 @@ function makeDeps(
     return opts.parsed === undefined ? [sampleEvent] : opts.parsed;
   });
   const agent = { run };
+  // G16 counter stub — only attached when the ceiling is configured, so the rate gate stays off
+  // for every other test (the production path always wires both via index.ts).
+  const countFromSenderSince = vi.fn((_from: string, _since: string) => opts.senderCount ?? 0);
   const deps: HandlerDeps = {
     allowlist,
     events,
@@ -52,8 +59,14 @@ function makeDeps(
     sendText,
     members: opts.members,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
+    ...(opts.maxPerSenderPerDay !== undefined
+      ? {
+          maxPerSenderPerDay: opts.maxPerSenderPerDay,
+          inbound: { countFromSenderSince } as unknown as InboundStore,
+        }
+      : {}),
   };
-  return { sendText, events, agent, deps };
+  return { sendText, events, agent, deps, countFromSenderSince };
 }
 
 const textMsg: InboundMessage = {
@@ -176,6 +189,43 @@ describe("handleInbound (M2)", () => {
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/טקסט/);
   });
+
+  describe("per-sender daily ceiling (G16)", () => {
+    it("caps a sender over the ceiling — quiet reply, no model call, nothing persisted", async () => {
+      const { sendText, agent, events, deps, countFromSenderSince } = makeDeps({
+        maxPerSenderPerDay: 50,
+        senderCount: 51, // the current message is already enqueued → this is the 51st today
+      });
+      await handleInbound(textMsg, deps);
+      expect(agent.run).not.toHaveBeenCalled();
+      expect(events.saveEvent).not.toHaveBeenCalled();
+      expect(countFromSenderSince).toHaveBeenCalledWith("972501234567", expect.any(String));
+      const [, body] = sendText.mock.calls[0]!;
+      expect(body).toMatch(/מכסת|מחר/);
+    });
+
+    it("lets a sender at exactly the ceiling through (boundary: count === max)", async () => {
+      const { agent, deps } = makeDeps({ maxPerSenderPerDay: 50, senderCount: 50 });
+      await handleInbound(textMsg, deps);
+      expect(agent.run).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not enforce a ceiling when unconfigured (off by default)", async () => {
+      const { agent, deps } = makeDeps({ senderCount: 9999 }); // no ceiling wired → no inbound counter
+      await handleInbound(textMsg, deps);
+      expect(agent.run).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts only AFTER the allowlist gate — a non-family sender is never counted", async () => {
+      const { agent, deps, countFromSenderSince } = makeDeps({
+        maxPerSenderPerDay: 1,
+        senderCount: 999,
+      });
+      await handleInbound({ ...textMsg, from: "972509999999" }, deps);
+      expect(countFromSenderSince).not.toHaveBeenCalled(); // refused before the rate check
+      expect(agent.run).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("processInbound (queue settle)", () => {
@@ -186,6 +236,7 @@ describe("processInbound (queue settle)", () => {
       markFailed: vi.fn(),
       pending: vi.fn(() => []),
       statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
+      countFromSenderSince: vi.fn(() => 0),
     };
   }
 
