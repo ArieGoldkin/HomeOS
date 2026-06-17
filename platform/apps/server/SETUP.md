@@ -16,7 +16,7 @@ WhatsApp test token expires after 24h.
 - [ ] Go to **console.anthropic.com → API keys → Create key** (name it `homeos-dev`).
 - [ ] Copy it (shown once) → `.env` as `ANTHROPIC_API_KEY=...`.
 
-> Billing is already on, so you're done. `claude-haiku-4-5` (the default) costs pennies for testing.
+> Billing is already on, so you're done. The default model is `claude-sonnet-4-6` (best Hebrew date accuracy per the golden eval); still cents-to-low-dollars/month at family volume. Swap via `ANTHROPIC_MODEL` (e.g. `claude-haiku-4-5` for cheaper testing).
 
 ---
 

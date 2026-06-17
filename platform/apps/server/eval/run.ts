@@ -18,7 +18,7 @@ import { compareMessage, type GoldenCase } from "./compare.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cases = JSON.parse(readFileSync(join(here, "golden.json"), "utf8")) as GoldenCase[];
-const model = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
+const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 const parse = createParser(anthropicRawParse(new Anthropic(), model));
 
 console.log(`Running ${cases.length} golden cases on ${model}…\n`);
