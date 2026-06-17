@@ -55,7 +55,7 @@ describe("createAgent (bounded tool-use loop)", () => {
     const out = await agent.run(TEXT, ctx);
 
     expect(callModel).toHaveBeenCalledTimes(2);
-    expect(parse).toHaveBeenCalledWith(TEXT, "2026-06-20"); // ctx.todayIso, server-supplied (G8)
+    expect(parse).toHaveBeenCalledWith(TEXT, "2026-06-20", undefined); // ctx.todayIso + senderName (G8)
     expect(out).toEqual([sampleEvent]);
     // turn 0 forces the extractor (G4)
     expect(callModel.mock.calls[0]![0].tool_choice).toMatchObject({

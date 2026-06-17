@@ -70,7 +70,7 @@ const callModel: CallModel = async (req) => {
   };
 };
 
-function makeSystem(parseImpl: ParseMessage = parse) {
+function makeSystem(parseImpl: ParseMessage = parse, members: Record<string, string> = {}) {
   const events = createEventStore(":memory:");
   const inbound = createInboundStore(":memory:");
   const sent: Array<{ to: string; body: string }> = [];
@@ -85,6 +85,7 @@ function makeSystem(parseImpl: ParseMessage = parse) {
       events,
       sendText,
       inbound,
+      members,
       now: () => new Date("2026-06-20T09:00:00Z"),
     });
   const app = createServer({
@@ -197,5 +198,23 @@ describe("integration: webhook → queue → store → confirm → read → undo
 
     await sys.runInbound(msg); // replay — extraction returns the reversed order this time
     expect(sys.events.listEvents()).toHaveLength(2); // no duplicate rows
+  });
+
+  it("a direct first-person command resolves the assignee to the sender (#14)", async () => {
+    // Extractor stub that mirrors the prompt nuance: first-person → assignee = the server-supplied
+    // sender name (which threads handler → agent → extract_events → parse via ToolContext).
+    const directParse: ParseMessage = async (_text, _today, senderName) => [
+      { ...evA, title_he: "פיזיותרפיה", assignee: senderName ?? null },
+    ];
+    const sys = makeSystem(directParse, { "972501234567": "אבא" });
+
+    await sys.runInbound({
+      id: "wamid.cmd",
+      from: "972501234567",
+      type: "text",
+      text: "יש לי פיזיותרפיה מחר, תכניס ליומן",
+    });
+
+    expect(sys.events.listEvents()[0]?.assignee).toBe("אבא");
   });
 });

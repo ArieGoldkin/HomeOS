@@ -20,7 +20,12 @@ const sampleEvent: ParsedEvent = {
 };
 
 function makeDeps(
-  opts: { parsed?: ParsedEvent[] | null; cancelCount?: number; agentThrows?: unknown } = {},
+  opts: {
+    parsed?: ParsedEvent[] | null;
+    cancelCount?: number;
+    agentThrows?: unknown;
+    members?: Record<string, string>;
+  } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
@@ -45,6 +50,7 @@ function makeDeps(
     events,
     agent,
     sendText,
+    members: opts.members,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
   };
   return { sendText, events, agent, deps };
@@ -75,6 +81,17 @@ describe("handleInbound (M2)", () => {
     expect(body).toContain("ביוני"); // 2026-06-21 → "21 ביוני"
     expect(body).toContain("18:30"); // time appended verbatim
     expect(body).not.toContain("2026-06-21"); // ISO no longer surfaced
+  });
+
+  it("resolves the sender's family-member name into ToolContext (members map, #14)", async () => {
+    const { agent, deps } = makeDeps({ members: { "972501234567": "אבא" } });
+    await handleInbound(textMsg, deps);
+    expect(agent.run).toHaveBeenCalledWith("אסיפת הורים מחר ב-18:30", {
+      todayIso: "2026-06-20",
+      from: "972501234567",
+      waMessageId: "wamid.1",
+      senderName: "אבא",
+    });
   });
 
   it("saves every event from a multi-event message and confirms the count", async () => {

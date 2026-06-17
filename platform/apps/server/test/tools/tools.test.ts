@@ -28,8 +28,15 @@ describe("extractEventsTool", () => {
     const parse = vi.fn(async () => [sampleEvent]);
     const tool = extractEventsTool(parse);
     const out = await tool.run({ text: "אסיפת הורים מחר" }, ctx);
-    expect(parse).toHaveBeenCalledWith("אסיפת הורים מחר", "2026-06-20");
+    expect(parse).toHaveBeenCalledWith("אסיפת הורים מחר", "2026-06-20", undefined);
     expect(out.events).toEqual([sampleEvent]);
+  });
+
+  it("passes the server-supplied senderName to parse (first-person → assignee, G8/#14)", async () => {
+    const parse = vi.fn(async () => [sampleEvent]);
+    const tool = extractEventsTool(parse);
+    await tool.run({ text: "יש לי פיזיותרפיה" }, { ...ctx, senderName: "אבא" });
+    expect(parse).toHaveBeenCalledWith("יש לי פיזיותרפיה", "2026-06-20", "אבא");
   });
 
   it("maps a null parse (unparseable) to an empty events list", async () => {

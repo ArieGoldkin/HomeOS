@@ -55,6 +55,12 @@ describe("loadConfig", () => {
     expect(cfg.allowlist).toEqual(["972501111111", "972502222222"]);
   });
 
+  it("defaults members to {} and parses the MEMBERS phone:name map (#14)", () => {
+    expect(loadConfig(base).members).toEqual({});
+    const cfg = loadConfig({ ...base, MEMBERS: "972501111111:אבא, 972502222222:אמא" });
+    expect(cfg.members).toEqual({ "972501111111": "אבא", "972502222222": "אמא" });
+  });
+
   it("throws naming the missing variable", () => {
     const incomplete = {
       VERIFY_TOKEN: "v",

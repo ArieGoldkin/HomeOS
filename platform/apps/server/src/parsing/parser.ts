@@ -11,7 +11,11 @@ export type RawParse = (system: string, userText: string) => Promise<unknown>;
  * call succeeded but the message couldn't be turned into a valid event (→ "please rephrase").
  * Throws `TransientError` when the provider hiccuped even after a retry (→ "try again", replayable).
  */
-export type ParseMessage = (text: string, todayIso: string) => Promise<ParsedEvent[] | null>;
+export type ParseMessage = (
+  text: string,
+  todayIso: string,
+  senderName?: string,
+) => Promise<ParsedEvent[] | null>;
 
 interface ParserOptions {
   /** Extra attempts on a transient error (default 1 → up to 2 calls total). */
@@ -20,9 +24,14 @@ interface ParserOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export function buildSystemPrompt(todayIso: string): string {
+export function buildSystemPrompt(todayIso: string, senderName?: string): string {
+  // #14: when the sender is a known family member, first-person/imperative phrasing assigns the item
+  // to them. Server-supplied name (never model-invented), so it can't be spoofed via the text (G8).
+  const assigneeRule = senderName
+    ? `- assignee: who the item is for. The sender of this message is "${senderName}"; if it is a first-person request or instruction from them (e.g. "יש לי", "תכניס לי", "תזכיר לי", "אני צריך"), set assignee to "${senderName}". Otherwise the named family member (e.g. a child's name), or null.`
+    : '- assignee: the family member it is for/assigned to if named (e.g. "אבא", a child\'s name), otherwise null.';
   return [
-    "You convert a forwarded Hebrew (or mixed Hebrew/English) family message into a list of structured calendar items.",
+    "You convert a Hebrew (or mixed Hebrew/English) family message — forwarded OR a direct request/instruction from the sender — into a list of structured calendar items.",
     "A single message may contain SEVERAL items (e.g. a weekly gan newsletter) — extract each as its own event. " +
       "If there is nothing to schedule, return an empty list.",
     `Today is ${todayIso} in the Asia/Jerusalem timezone. Resolve all relative dates ` +
@@ -33,7 +42,7 @@ export function buildSystemPrompt(todayIso: string): string {
     "- date_iso: the resolved date as YYYY-MM-DD.",
     '- time: "HH:MM" (24h) if a specific time is given, otherwise null.',
     "- location: the place if mentioned, otherwise null.",
-    '- assignee: the family member it is for/assigned to if named (e.g. "אבא", a child\'s name), otherwise null.',
+    assigneeRule,
     '- recurrence: { "freq": "weekly", "weekday": 0-6 } if it repeats weekly (e.g. חוגים; ' +
       "0=Sunday … 6=Saturday), otherwise null.",
     "- source_text: the original text for this item, copied verbatim.",
@@ -53,8 +62,9 @@ export function createParser(rawParse: RawParse, opts: ParserOptions = {}): Pars
   return async function parseMessage(
     text: string,
     todayIso: string,
+    senderName?: string,
   ): Promise<ParsedEvent[] | null> {
-    const system = buildSystemPrompt(todayIso);
+    const system = buildSystemPrompt(todayIso, senderName);
     let lastErr: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
