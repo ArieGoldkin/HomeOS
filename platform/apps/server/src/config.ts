@@ -42,8 +42,10 @@ const schema = z.object({
   MEMBERS: membersMap,
   PORT: z.coerce.number().int().positive().default(3000),
   // M2: Claude parsing model + SQLite store path. The Anthropic credential itself is read
-  // straight from the environment by @anthropic-ai/sdk, so it is not modeled here.
-  ANTHROPIC_MODEL: z.string().min(1).default("claude-haiku-4-5"),
+  // straight from the environment by @anthropic-ai/sdk, so it is not modeled here. Default is
+  // Sonnet: the golden eval showed Haiku mis-resolving core Hebrew weekday idioms ("ביום שלישי",
+  // "ערב שבת") that Sonnet resolves correctly — date accuracy is the product wedge, well inside ≤$100/mo.
+  ANTHROPIC_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
   DB_PATH: z.string().min(1).default("./data/homeos.db"),
   // Bearer token gating GET /events (the dashboard/kiosk read seam). Optional: when unset the
   // read endpoint is disabled (503) rather than exposed unauthenticated.

@@ -34,8 +34,13 @@ export function buildSystemPrompt(todayIso: string, senderName?: string): string
     "You convert a Hebrew (or mixed Hebrew/English) family message — forwarded OR a direct request/instruction from the sender — into a list of structured calendar items.",
     "A single message may contain SEVERAL items (e.g. a weekly gan newsletter) — extract each as its own event. " +
       "If there is nothing to schedule, return an empty list.",
-    `Today is ${todayIso} in the Asia/Jerusalem timezone. Resolve all relative dates ` +
-      '(e.g. "מחר", "יום ראשון הבא", "בעוד שבוע") against this date.',
+    `Today is ${todayIso} in the Asia/Jerusalem timezone. Resolve every relative date against this date.`,
+    "Hebrew weekday names are DAYS OF THE WEEK, not a count of days from today: " +
+      "יום ראשון=Sunday, יום שני=Monday, יום שלישי=Tuesday, יום רביעי=Wednesday, יום חמישי=Thursday, יום שישי=Friday, שבת=Saturday. " +
+      'So "ביום שלישי" is the next date that falls on Tuesday (it is NOT today+3). The Israeli week starts on Sunday; ' +
+      "for a weekday that already passed earlier this week, use the upcoming occurrence.",
+    'Other relative terms: "מחר"=tomorrow (+1 day), "מחרתיים"=day after tomorrow (+2 days), ' +
+      '"בעוד שבוע"=+7 days, "יום ראשון הבא"=Sunday of next week.',
     'Return an object: { "events": [ ... ] }. Each event has:',
     '- kind: "event" (happens at a time/place), "task" (something to do), or "reminder".',
     "- title_he: a short, clear Hebrew title.",
@@ -87,6 +92,10 @@ export function anthropicRawParse(client: Anthropic, model: string): RawParse {
     const res = await client.messages.parse({
       model,
       max_tokens: 2048,
+      // Deterministic extraction: date arithmetic + structured output want greedy decoding, not
+      // creative variance. Temperature 0 makes parses reproducible (so the eval is stable) and
+      // measurably tightens relative-date resolution.
+      temperature: 0,
       system,
       messages: [{ role: "user", content: userText }],
       output_config: { format: zodOutputFormat(parsedMessageSchema) },

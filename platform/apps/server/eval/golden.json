@@ -36,9 +36,127 @@
     "expected": [{ "date_iso": "2026-06-18", "time": "09:00", "assignee": "אבא" }]
   },
   {
-    "name": "multi-event-newsletter",
+    "name": "multi-event-newsletter (both weekdays already passed → next week)",
     "input": "ביום ראשון יש טיול שנתי, וביום שלישי צריך חולצה לבנה",
+    "today": "2026-06-17",
+    "expected": [{ "date_iso": "2026-06-21" }, { "date_iso": "2026-06-23" }]
+  },
+  {
+    "name": "today-explicit",
+    "input": "פגישת צוות היום ב-15:00",
     "today": "2026-06-15",
-    "expected": [{ "date_iso": "2026-06-21" }, { "date_iso": "2026-06-16" }]
+    "expected": [{ "kind": "event", "date_iso": "2026-06-15", "time": "15:00" }]
+  },
+  {
+    "name": "day-after-tomorrow (מחרתיים)",
+    "input": "מחרתיים יש בדיקת דם במעבדה",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-17" }]
+  },
+  {
+    "name": "in-a-week (בעוד שבוע)",
+    "input": "בעוד שבוע ניפגש לתכנון הטיול",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-22" }]
+  },
+  {
+    "name": "in-three-days (עוד שלושה ימים)",
+    "input": "עוד שלושה ימים מסיבת סיום שנה בכיתה",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-18" }]
+  },
+  {
+    "name": "erev-shabbat (Friday idiom)",
+    "input": "ארוחת ערב שבת אצל סבתא",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-19" }]
+  },
+  {
+    "name": "motzaei-shabbat (Saturday night idiom)",
+    "input": "במוצאי שבת יש הופעה בתיאטרון",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-20" }]
+  },
+  {
+    "name": "tomorrow-end-of-month-rollover",
+    "input": "מחר המועד האחרון לתשלום שכר לימוד",
+    "today": "2026-06-30",
+    "expected": [{ "date_iso": "2026-07-01" }]
+  },
+  {
+    "name": "tomorrow-end-of-year-rollover",
+    "input": "מסיבת סילבסטר מחר בערב",
+    "today": "2026-12-31",
+    "expected": [{ "date_iso": "2027-01-01" }]
+  },
+  {
+    "name": "numeric-date-DD-MM (Israeli order)",
+    "input": "טיסה ב-12/7 בבוקר",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-07-12" }]
+  },
+  {
+    "name": "explicit-month-name-future",
+    "input": "ב-1 בספטמבר מתחילים הלימודים",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-09-01" }]
+  },
+  {
+    "name": "weekly-recurring-sunday",
+    "input": "חוג התעמלות כל יום ראשון ב-17:00",
+    "today": "2026-06-15",
+    "expected": [
+      {
+        "date_iso": "2026-06-21",
+        "time": "17:00",
+        "recurrence": { "freq": "weekly", "weekday": 0 }
+      }
+    ]
+  },
+  {
+    "name": "weekly-recurring-thursday",
+    "input": "שיעור נהיגה כל יום חמישי ב-14:00",
+    "today": "2026-06-15",
+    "expected": [
+      {
+        "date_iso": "2026-06-18",
+        "time": "14:00",
+        "recurrence": { "freq": "weekly", "weekday": 4 }
+      }
+    ]
+  },
+  {
+    "name": "multi-event-three (anchored on Sunday)",
+    "input": "ביום שני אסיפת הורים, ביום רביעי חוג שחייה, וביום שישי הצגה",
+    "today": "2026-06-14",
+    "expected": [
+      { "date_iso": "2026-06-15" },
+      { "date_iso": "2026-06-17" },
+      { "date_iso": "2026-06-19" }
+    ]
+  },
+  {
+    "name": "not-schedulable (no events expected)",
+    "input": "תודה רבה על העדכון, נתראה!",
+    "today": "2026-06-15",
+    "expected": []
+  },
+  {
+    "name": "assignee-explicit-mother",
+    "input": "אמא צריכה לאסוף את נועה מהגן ביום שלישי ב-16:00",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-16", "time": "16:00", "assignee": "אמא" }]
+  },
+  {
+    "name": "evening-time-idiom (שבע וחצי בערב)",
+    "input": "ארוחת ערב חגיגית מחר בשבע וחצי בערב",
+    "today": "2026-06-15",
+    "expected": [{ "date_iso": "2026-06-16", "time": "19:30" }]
+  },
+  {
+    "name": "reminder-kind-tomorrow-morning",
+    "input": "להזכיר לי לקחת תרופה מחר בבוקר",
+    "today": "2026-06-15",
+    "expected": [{ "kind": "reminder", "date_iso": "2026-06-16" }]
   }
 ]

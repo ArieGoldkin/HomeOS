@@ -24,7 +24,7 @@ describe("loadConfig", () => {
   });
 
   it("defaults the Claude model and DB path, and respects overrides", () => {
-    expect(loadConfig(base).anthropicModel).toBe("claude-haiku-4-5");
+    expect(loadConfig(base).anthropicModel).toBe("claude-sonnet-4-6");
     expect(loadConfig(base).dbPath).toBe("./data/homeos.db");
     const cfg = loadConfig({ ...base, ANTHROPIC_MODEL: "claude-opus-4-8", DB_PATH: "/tmp/h.db" });
     expect(cfg.anthropicModel).toBe("claude-opus-4-8");
