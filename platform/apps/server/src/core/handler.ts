@@ -6,6 +6,7 @@ import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
 import { TransientError } from "./errors.ts";
+import { jerusalemDayStartSqlite } from "./time.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
@@ -14,6 +15,13 @@ export interface HandlerDeps {
   sendText: SendText;
   /** Optional phone→family-member-name map; resolves the sender for first-person → assignee (#14). */
   members?: Record<string, string>;
+  /**
+   * G16 — per-sender daily message ceiling (Asia/Jerusalem day). Unset → no limit. Enforced only
+   * when both this and `inbound` (the counter) are wired, so unit tests stay off by default.
+   */
+  maxPerSenderPerDay?: number;
+  /** Inbound queue — also the per-sender daily counter for G16. Required by `ProcessDeps`; optional here. */
+  inbound?: InboundStore;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -28,6 +36,8 @@ const TEXT_ONLY_HE = "כרגע אני מבין רק הודעות טקסט 🙏 (
 const REPHRASE_HE = "לא הצלחתי להבין את ההודעה 🤔 אפשר לנסח מחדש?";
 const TRANSIENT_HE = "אירעה תקלה זמנית 🙏 נסו שוב בעוד רגע.";
 const CANCEL_NONE_HE = "אין מה לבטל 🤷";
+/** G16: quiet reply when a sender passes the daily message ceiling — no model call is made. */
+const RATE_LIMIT_HE = "הגעת למכסת ההודעות היומית 🙏 נמשיך מחר.";
 /** One-word undo: deletes the events from the sender's last message so a misparse is recoverable. */
 const CANCEL_TRIGGER = "ביטול";
 /**
@@ -92,6 +102,21 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     log("rejected non-allowlisted sender", { from: msg.from });
     await deps.sendText(msg.from, REFUSAL_HE);
     return;
+  }
+
+  // G16: per-sender daily ceiling — the allowlist bounds *who* and the input cap (G2) bounds
+  // message *size*; this bounds *rate*, the last unbounded cost axis vs ≤$100/mo. Checked here
+  // (after the allowlist so non-family senders are never counted, before any model call). The
+  // message is already enqueued (persist-before-ack), so the count includes it; resets at
+  // Jerusalem midnight. Off unless both the ceiling and the inbound counter are wired.
+  if (deps.maxPerSenderPerDay !== undefined && deps.inbound) {
+    const since = jerusalemDayStartSqlite((deps.now ?? (() => new Date()))());
+    const count = deps.inbound.countFromSenderSince(msg.from, since);
+    if (count > deps.maxPerSenderPerDay) {
+      log("per-sender daily ceiling hit", { from: msg.from, count, max: deps.maxPerSenderPerDay });
+      await deps.sendText(msg.from, RATE_LIMIT_HE);
+      return;
+    }
   }
 
   // M2a is text-only; voice/images land in M2b.

@@ -56,6 +56,10 @@ const schema = z.object({
   DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(21),
   // Nightly WAL-safe backup hour (item I), Asia/Jerusalem.
   BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+  // G16: per-sender daily message ceiling (Asia/Jerusalem day). The allowlist bounds *who* and the
+  // input cap bounds message *size*; this bounds *rate* — the last unbounded cost axis vs ≤$100/mo.
+  // Generous default for a heavy family member; trips only on an abusive/looping device.
+  MAX_PER_SENDER_PER_DAY: z.coerce.number().int().positive().default(50),
 });
 
 export interface Config {
@@ -73,6 +77,7 @@ export interface Config {
   adminPhone?: string;
   digestHour: number;
   backupHour: number;
+  maxPerSenderPerDay: number;
 }
 
 /**
@@ -103,5 +108,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     adminPhone: e.ADMIN_PHONE,
     digestHour: e.DIGEST_HOUR,
     backupHour: e.BACKUP_HOUR,
+    maxPerSenderPerDay: e.MAX_PER_SENDER_PER_DAY,
   };
 }

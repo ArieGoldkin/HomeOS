@@ -30,6 +30,12 @@ export interface InboundStore {
   pending(): InboundMessage[];
   /** Status counts for inbounds received at/after `sinceIso` (SQLite UTC datetime). Feeds the daily digest. */
   statsSince(sinceIso: string): InboundStats;
+  /**
+   * Count one sender's inbound messages received at/after `sinceIso` (SQLite UTC datetime). Backs
+   * the G16 per-sender daily ceiling — the message is persisted before processing, so the current
+   * one is included in the count.
+   */
+  countFromSenderSince(fromPhone: string, sinceIso: string): number;
 }
 
 function rowToMsg(row: InboundRow): InboundMessage {
@@ -65,6 +71,9 @@ export function createInboundStore(dbPath: string): InboundStore {
   const statsStmt = db.prepare(
     "SELECT status, COUNT(*) AS c FROM inbound_messages WHERE received_at >= ? GROUP BY status;",
   );
+  const countFromSenderStmt = db.prepare(
+    "SELECT COUNT(*) AS c FROM inbound_messages WHERE from_phone = ? AND received_at >= ?;",
+  );
 
   return {
     enqueue(msg) {
@@ -89,6 +98,9 @@ export function createInboundStore(dbPath: string): InboundStore {
         else if (row.status === "pending") stats.pending = Number(row.c);
       }
       return stats;
+    },
+    countFromSenderSince(fromPhone, sinceIso) {
+      return Number((countFromSenderStmt.get(fromPhone, sinceIso) as { c: number }).c);
     },
   };
 }
