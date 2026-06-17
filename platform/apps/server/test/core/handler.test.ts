@@ -4,6 +4,7 @@ import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import { handleInbound, processInbound } from "../../src/core/handler.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
+import type { ToolContext } from "../../src/tools/tools.ts";
 
 const allowlist = ["972501234567"];
 
@@ -19,7 +20,7 @@ const sampleEvent: ParsedEvent = {
 };
 
 function makeDeps(
-  opts: { parsed?: ParsedEvent[] | null; cancelCount?: number; parseThrows?: unknown } = {},
+  opts: { parsed?: ParsedEvent[] | null; cancelCount?: number; agentThrows?: unknown } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
   const events = {
@@ -33,18 +34,20 @@ function makeDeps(
     deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
     countSince: vi.fn(() => 0),
   };
-  const parse = vi.fn(async (_text: string, _today: string): Promise<ParsedEvent[] | null> => {
-    if (opts.parseThrows) throw opts.parseThrows;
+  // The handler now depends on the agent, not the bare parser; run() keeps the same contract.
+  const run = vi.fn(async (_text: string, _ctx: ToolContext): Promise<ParsedEvent[] | null> => {
+    if (opts.agentThrows) throw opts.agentThrows;
     return opts.parsed === undefined ? [sampleEvent] : opts.parsed;
   });
+  const agent = { run };
   const deps: HandlerDeps = {
     allowlist,
     events,
-    parse,
+    agent,
     sendText,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
   };
-  return { sendText, events, parse, deps };
+  return { sendText, events, agent, deps };
 }
 
 const textMsg: InboundMessage = {
@@ -56,9 +59,14 @@ const textMsg: InboundMessage = {
 
 describe("handleInbound (M2)", () => {
   it("parses, persists, and sends a Hebrew confirmation", async () => {
-    const { sendText, events, parse, deps } = makeDeps();
+    const { sendText, events, agent, deps } = makeDeps();
     await handleInbound(textMsg, deps);
-    expect(parse).toHaveBeenCalledWith("אסיפת הורים מחר ב-18:30", "2026-06-20"); // Jerusalem today
+    // Jerusalem today + server-supplied sender/message id via ToolContext (G8).
+    expect(agent.run).toHaveBeenCalledWith("אסיפת הורים מחר ב-18:30", {
+      todayIso: "2026-06-20",
+      from: "972501234567",
+      waMessageId: "wamid.1",
+    });
     expect(events.saveEvent).toHaveBeenCalledTimes(1);
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toContain("הוספתי ליומן");
@@ -98,8 +106,8 @@ describe("handleInbound (M2)", () => {
     expect(body).toMatch(/לנסח|להבין/);
   });
 
-  it("on a transient parse error, says 'try again' (not rephrase) and rethrows", async () => {
-    const { sendText, events, deps } = makeDeps({ parseThrows: new TransientError("blip") });
+  it("on a transient agent error, says 'try again' (not rephrase) and rethrows", async () => {
+    const { sendText, events, deps } = makeDeps({ agentThrows: new TransientError("blip") });
     await expect(handleInbound(textMsg, deps)).rejects.toBeInstanceOf(TransientError);
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
@@ -108,9 +116,9 @@ describe("handleInbound (M2)", () => {
   });
 
   it("undoes the last message on ביטול (deletes + confirms, never parses)", async () => {
-    const { sendText, events, parse, deps } = makeDeps({ cancelCount: 2 });
+    const { sendText, events, agent, deps } = makeDeps({ cancelCount: 2 });
     await handleInbound({ ...textMsg, text: "ביטול" }, deps);
-    expect(parse).not.toHaveBeenCalled();
+    expect(agent.run).not.toHaveBeenCalled();
     expect(events.deleteLastFromSender).toHaveBeenCalledWith("972501234567");
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/בוטל/);
@@ -125,29 +133,29 @@ describe("handleInbound (M2)", () => {
     expect(body).toMatch(/אין מה לבטל/);
   });
 
-  it("refuses a non-allowlisted sender before parsing", async () => {
-    const { sendText, parse, deps } = makeDeps();
+  it("refuses a non-allowlisted sender before running the agent", async () => {
+    const { sendText, agent, deps } = makeDeps();
     await handleInbound({ ...textMsg, from: "972509999999" }, deps);
-    expect(parse).not.toHaveBeenCalled();
+    expect(agent.run).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/הרשאה|מצטער/);
   });
 
-  it("rephrases an over-length message BEFORE calling parse (input cap, G2)", async () => {
-    const { sendText, parse, events, deps } = makeDeps();
+  it("rephrases an over-length message BEFORE running the agent (input cap, G2)", async () => {
+    const { sendText, agent, events, deps } = makeDeps();
     // A 50–100KB forward (long newsletter / pasted PDF) must never reach Claude ~2×/message.
     const huge = "א".repeat(5000);
     await handleInbound({ ...textMsg, text: huge }, deps);
-    expect(parse).not.toHaveBeenCalled();
+    expect(agent.run).not.toHaveBeenCalled();
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/לנסח|להבין/);
   });
 
   it("replies text-only for a non-text message (voice deferred to M2b)", async () => {
-    const { sendText, parse, deps } = makeDeps();
+    const { sendText, agent, deps } = makeDeps();
     await handleInbound({ id: "wamid.2", from: "972501234567", type: "image" }, deps);
-    expect(parse).not.toHaveBeenCalled();
+    expect(agent.run).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/טקסט/);
   });
@@ -182,7 +190,7 @@ describe("processInbound (queue settle)", () => {
   });
 
   it("leaves the row pending on a transient error (replayable, not failed)", async () => {
-    const { deps } = makeDeps({ parseThrows: new TransientError("blip") });
+    const { deps } = makeDeps({ agentThrows: new TransientError("blip") });
     const inbound = makeInbound();
     await processInbound(textMsg, { ...deps, inbound } as ProcessDeps); // never throws
     expect(inbound.markDone).not.toHaveBeenCalled();
