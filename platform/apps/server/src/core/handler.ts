@@ -12,6 +12,8 @@ export interface HandlerDeps {
   agent: Agent;
   events: EventStore;
   sendText: SendText;
+  /** Optional phone→family-member-name map; resolves the sender for first-person → assignee (#14). */
+  members?: Record<string, string>;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -120,8 +122,14 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   let parsed: ParsedEvent[] | null;
   try {
     // The agent decides parse-vs-act and runs the extract_events tool; same ParsedEvent[]|null
-    // contract as the old direct parse. Anchor + sender are server-supplied via ToolContext (G8).
-    parsed = await deps.agent.run(text, { todayIso: today, from: msg.from, waMessageId: msg.id });
+    // contract as the old direct parse. Anchor + sender are server-supplied via ToolContext (G8);
+    // senderName (from the members map) drives first-person → assignee (#14).
+    parsed = await deps.agent.run(text, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+    });
   } catch (err) {
     if (err instanceof TransientError) {
       // The provider hiccuped — tell the user to retry (NOT "rephrase") and rethrow so the

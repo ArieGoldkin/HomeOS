@@ -43,6 +43,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     events,
     sendText: wa.sendText,
     inbound,
+    members: config.members,
     log,
   });
 

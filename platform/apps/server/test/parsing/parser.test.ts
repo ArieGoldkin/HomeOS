@@ -26,6 +26,14 @@ describe("buildSystemPrompt", () => {
     expect(p).toMatch(/Jerusalem/);
     expect(p).toMatch(/events/);
   });
+
+  it("adds the first-person→assignee nuance only when a sender name is given (#14)", () => {
+    // "רוני" is not in the default prompt, so its presence proves the sender was threaded in.
+    const withSender = buildSystemPrompt("2026-06-20", "רוני");
+    expect(withSender).toContain("רוני");
+    expect(withSender).toMatch(/sender/i);
+    expect(buildSystemPrompt("2026-06-20")).not.toContain("רוני"); // absent by default
+  });
 });
 
 describe("createParser", () => {
@@ -39,6 +47,13 @@ describe("createParser", () => {
     expect(result![0]).toMatchObject({ kind: "event", date_iso: "2026-06-21", time: "18:30" });
     const [system] = rawParse.mock.calls[0]!;
     expect(system).toContain("2026-06-20");
+  });
+
+  it("threads the sender name into the system prompt (#14)", async () => {
+    const rawParse = vi.fn(async (_s: string, _t: string): Promise<unknown> => validMessage);
+    await createParser(rawParse)("יש לי פיזיותרפיה מחר", "2026-06-20", "רוני");
+    const [system] = rawParse.mock.calls[0]!;
+    expect(system).toContain("רוני");
   });
 
   it("returns every event from a multi-event message", async () => {

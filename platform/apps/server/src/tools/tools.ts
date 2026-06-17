@@ -14,6 +14,8 @@ export interface ToolContext {
   /** Sender phone — server-supplied, never model-supplied. */
   from: string;
   waMessageId: string;
+  /** The sender's family-member name (from the MEMBERS map), if known — first-person → assignee (#14). */
+  senderName?: string;
 }
 
 /**
@@ -46,7 +48,7 @@ export function extractEventsTool(parse: ParseMessage): Tool<{ text: string }> {
       "Extract calendar items (events, tasks, reminders) from the forwarded family message text.",
     inputSchema: z.object({ text: z.string().min(1).max(MAX_TOOL_TEXT) }),
     async run({ text }, ctx) {
-      const events = await parse(text, ctx.todayIso);
+      const events = await parse(text, ctx.todayIso, ctx.senderName);
       return { events: events ?? [] }; // empty list = "nothing to schedule"
     },
   };

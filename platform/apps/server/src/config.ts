@@ -11,6 +11,26 @@ const csvList = z.string().transform((s) =>
     .filter((part) => part.length > 0),
 );
 
+/**
+ * Comma-separated `phone:name` pairs → `{ phone: name }`, the family-member map (#14). Resolves a
+ * sender's first-person phrasing to an assignee. Optional — an unset/empty value yields `{}`, so the
+ * bot degrades to the pre-#14 behaviour (assignee only when explicitly named in the text).
+ */
+const membersMap = z
+  .string()
+  .default("")
+  .transform((s) =>
+    s.split(",").reduce<Record<string, string>>((acc, pair) => {
+      const i = pair.indexOf(":");
+      if (i > 0) {
+        const phone = pair.slice(0, i).trim();
+        const name = pair.slice(i + 1).trim();
+        if (phone && name) acc[phone] = name;
+      }
+      return acc;
+    }, {}),
+  );
+
 const schema = z.object({
   VERIFY_TOKEN: z.string().min(1),
   WHATSAPP_TOKEN: z.string().min(1),
@@ -18,6 +38,8 @@ const schema = z.object({
   GRAPH_VERSION: z.string().min(1).default("v21.0"),
   // An empty allowlist means nobody could use the bot — treat it as misconfiguration.
   ALLOWLIST: csvList.pipe(z.array(z.string()).min(1)),
+  // Optional family-member map (phone:name,…) for first-person → assignee resolution (#14).
+  MEMBERS: membersMap,
   PORT: z.coerce.number().int().positive().default(3000),
   // M2: Claude parsing model + SQLite store path. The Anthropic credential itself is read
   // straight from the environment by @anthropic-ai/sdk, so it is not modeled here.
@@ -42,6 +64,7 @@ export interface Config {
   phoneNumberId: string;
   graphVersion: string;
   allowlist: string[];
+  members: Record<string, string>;
   port: number;
   anthropicModel: string;
   dbPath: string;
@@ -71,6 +94,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     phoneNumberId: e.PHONE_NUMBER_ID,
     graphVersion: e.GRAPH_VERSION,
     allowlist: e.ALLOWLIST,
+    members: e.MEMBERS,
     port: e.PORT,
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,
