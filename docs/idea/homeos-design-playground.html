@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HomeOS · Editorial Paper × shadcn — Design Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============ playground chrome (dark, system font) ============ */
+  :root{ --ui-bg:#0e0f12; --ui-panel:#16181d; --ui-line:#262a31; --ui-ink:#e6e8ec; --ui-mut:#8b92a0; --ui-acc:#d98558; --mono:ui-monospace,"SF Mono",Menlo,monospace; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--ui-bg);color:var(--ui-ink);font:14px/1.5 system-ui,-apple-system,sans-serif;overflow:hidden}
+  .app{display:grid;grid-template-columns:340px 1fr;grid-template-rows:minmax(0,1fr);height:100dvh}
+  .panel{background:var(--ui-panel);border-inline-end:1px solid var(--ui-line);overflow-y:auto;min-height:0;padding:16px 16px 80px}
+  .panel h1{font-size:14px;margin:2px 0 2px;letter-spacing:.2px}
+  .panel .tag{font-size:11px;color:var(--ui-mut);margin-bottom:14px}
+  .grp{border-top:1px solid var(--ui-line);padding:13px 0 4px}
+  .grp:first-of-type{border-top:0}
+  .grp h2{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ui-mut);margin:0 0 10px;font-weight:600}
+  .row{margin-bottom:11px}
+  .row label{display:flex;justify-content:space-between;font-size:12px;color:var(--ui-mut);margin-bottom:5px}
+  .row label b{color:var(--ui-ink);font-family:var(--mono);font-weight:500}
+  input[type=range]{width:100%;accent-color:var(--ui-acc);background:transparent}
+  .seg{display:flex;gap:4px;flex-wrap:wrap}
+  .seg button{flex:1;min-width:fit-content;background:#1d2026;color:var(--ui-mut);border:1px solid var(--ui-line);border-radius:6px;padding:6px 8px;font-size:11.5px;cursor:pointer;transition:.12s}
+  .seg button:hover{color:var(--ui-ink)}
+  .seg button[aria-pressed=true]{background:var(--ui-acc);border-color:var(--ui-acc);color:#1a0f08;font-weight:600}
+  .seg.warn button[aria-pressed=true][data-tell=1]{background:#b5482e;border-color:#b5482e;color:#fff}
+  .presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+  .presets button{background:#1d2026;border:1px solid var(--ui-line);color:var(--ui-ink);border-radius:6px;padding:6px 9px;font-size:11.5px;cursor:pointer}
+  .presets button:hover{border-color:var(--ui-acc);color:var(--ui-acc)}
+  .swatch{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;border:1px solid rgba(255,255,255,.15)}
+  .hint{font-size:11px;color:var(--ui-mut);margin-top:4px;line-height:1.45}
+  .slop{font-size:11.5px;border:1px solid var(--ui-line);border-radius:6px;padding:8px 10px;margin-top:6px;line-height:1.5}
+  .slop.bad{border-color:#b5482e;background:#2a140d;color:#f0b59c}
+  .slop.good{border-color:#2f5e44;background:#10241a;color:#9fd9b6}
+
+  /* ============ preview area ============ */
+  .main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .ptools{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--ui-line);font-size:12px;color:var(--ui-mut)}
+  .ptools .spacer{flex:1}
+  .ptools button{background:#1d2026;border:1px solid var(--ui-line);color:var(--ui-ink);border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer}
+  .ptools button:hover{border-color:var(--ui-acc)}
+  .canvas{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:28px;
+    background:#0a0b0d;background-image:radial-gradient(circle at 1px 1px, #1a1d22 1px, transparent 0);background-size:22px 22px}
+  #stage{margin-block:auto;flex:0 0 auto} /* center vertically when it fits, scroll from top when it doesn't */
+  .promptbar{border-top:1px solid var(--ui-line);background:var(--ui-panel);padding:12px 16px;max-height:30vh;overflow:auto}
+  .promptbar .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ui-mut);display:flex;align-items:center;gap:10px;margin-bottom:7px}
+  .promptbar .lbl button{margin-inline-start:auto;background:var(--ui-acc);color:#1a0f08;border:0;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
+  #prompt{font:12.5px/1.6 var(--mono);color:#cdd2da;white-space:pre-wrap;background:#0e0f12;border:1px solid var(--ui-line);border-radius:8px;padding:11px 13px}
+
+  /* ============ THE BOARD — consumes the live OKLCH tokens ============ */
+  #stage{ --who-1:#7A5C9E; --who-2:#3E6B8A; --who-3:#4F6F52; --who-5:#9B4659; --who-all:var(--muted-foreground);
+    --sp:16px; --gap:16px; --cardpad:16px;
+    color:var(--foreground);background:var(--background);font-family:var(--font-sans);
+    border:1px solid var(--border);border-radius:12px;box-shadow:0 24px 60px -24px rgba(0,0,0,.7);
+    position:relative;overflow:hidden;transition:background var(--dur) ease, color var(--dur) ease}
+  #stage[data-theme=night]{ --who-1:#B79AD6; --who-2:#7FA8C6; --who-3:#93B58C; --who-5:#C98797; }
+  #stage[data-density=compact]{ --sp:11px; --gap:10px; --cardpad:11px; }
+  #stage::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;opacity:var(--grain-opacity,0);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");mix-blend-mode:multiply}
+  #stage[data-theme=night]::before{mix-blend-mode:screen;opacity:calc(var(--grain-opacity,0)*0.6)}
+
+  .tablet{width:720px;max-width:100%} .phone{width:340px}
+  .board{padding:22px 24px 26px;position:relative;z-index:1}
+  .frameTag{font:600 10px/1 var(--font-sans);letter-spacing:.1em;color:var(--muted-foreground);padding:7px 16px;border-bottom:1px solid var(--border);display:flex;gap:7px;align-items:center}
+  .frameTag .d{width:6px;height:6px;border-radius:999px;background:var(--input)}
+
+  .masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .brand{font-family:var(--font-display);font-weight:700;font-size:1rem;color:var(--muted-foreground);letter-spacing:-.01em}
+  .mdate{text-align:end;font-family:var(--font-display);font-weight:700;line-height:1.04;letter-spacing:-.01em}
+  .mdate .ey{display:block;font-family:var(--font-sans);font-weight:600;font-size:.72rem;letter-spacing:.05em;color:var(--primary)}
+  .mdate .big{display:block;color:var(--foreground)}
+  .tablet .mdate .big{font-size:clamp(1.7rem,1.2rem+1.6vw,2.3rem)} .phone .mdate .big{font-size:1.45rem}
+  .hr{height:1px;background:var(--input);border:0;margin:0}
+
+  .spine{display:grid;grid-template-columns:auto 1fr;gap:0 16px;margin-top:4px}
+  .slot{display:contents}
+  .slot .t{font-family:var(--font-sans);font-weight:600;font-size:1.02rem;color:var(--muted-foreground);padding:var(--sp) 0;white-space:nowrap}
+  .tnum{font-variant-numeric:tabular-nums}
+  .slot .ln{border-top:1px solid var(--border)} .slot:first-child .ln,.slot:first-child .t{border-top:0}
+
+  .card{padding:var(--cardpad) 0;position:relative}
+  .agenda .card{background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:var(--cardpad);margin-bottom:4px}
+  .ttl{font-family:var(--font-display);font-weight:500;line-height:1.24;color:var(--foreground);font-size:clamp(1.08rem,1rem+.5vw,1.34rem)}
+  .phone .ttl{font-size:1.12rem}
+  .meta{display:flex;align-items:center;gap:12px;margin-top:5px;color:var(--muted-foreground);font-size:.88rem;flex-wrap:wrap}
+  .foot{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .timerow{font-weight:600;color:var(--muted-foreground);font-size:.92rem;margin-bottom:3px}
+
+  /* kind = form */
+  .card.task .ttl{display:flex;align-items:baseline;gap:8px}
+  .cbx{width:1.02em;height:1.02em;border:1.5px solid var(--input);border-radius:var(--radius);flex:0 0 auto;display:inline-block;transform:translateY(.12em)}
+  /* reminder signaling — driven by data-signal (A/B the AI tell) */
+  #stage[data-signal=border] .card.reminder{padding-inline-start:14px;border-inline-start:2px solid var(--primary)}
+  #stage[data-signal=border] .card.reminder.agendaCard,#stage[data-signal=border] .agenda .card.reminder{padding-inline-start:14px}
+  #stage[data-signal=serif] .card.reminder .ttl{color:var(--primary)}
+  .pip{width:8px;height:8px;border-radius:999px;background:var(--primary);display:inline-block;margin-inline-end:7px;transform:translateY(-1px);flex:0 0 auto}
+  #stage:not([data-signal=pip]) .ttl .pip{display:none}
+
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--radius);font-weight:600;font-size:.78rem}
+  .chip .dot{width:8px;height:8px;border-radius:999px;flex:0 0 auto}
+  .recur{color:var(--muted-foreground);font-size:.8rem;display:inline-flex;align-items:center;gap:4px}
+
+  .rail{border-inline-start:1px solid var(--border);padding-inline-start:20px}
+  .bandlbl{font:600 .7rem/1 var(--font-sans);letter-spacing:.09em;color:var(--muted-foreground);margin-bottom:11px}
+  .peek{margin-top:26px}
+  .peek .pi{display:flex;gap:9px;align-items:baseline;color:var(--muted-foreground);font-size:.9rem;padding:7px 0;border-top:1px solid var(--border)}
+  .nowline{position:relative;height:0;border-top:1.5px solid var(--primary)}
+  .nowline::before{content:attr(data-now);position:absolute;top:-9px;inset-inline-start:0;background:var(--background);padding-inline-end:8px;color:var(--primary);font:700 .68rem/1 var(--font-sans);letter-spacing:.04em}
+
+  .week .day{display:grid;grid-template-columns:auto 1fr auto;gap:11px;align-items:center;padding:var(--sp) 0;border-top:1px solid var(--border);cursor:default}
+  .week .day:first-child{border-top:0}
+  .week .dnum{font-family:var(--font-display);font-weight:500;font-size:1.12rem;color:var(--muted-foreground);width:1.5em;text-align:center}
+  .week .dname{color:var(--muted-foreground);font-size:.93rem}.week .dname small{display:block;color:var(--muted-foreground);opacity:.8;font-size:.78rem;margin-top:1px}
+  .week .day.today{background:var(--secondary);margin-inline:-14px;padding-inline:14px;border-radius:var(--radius)}
+  .week .day.today .dnum,.week .day.today .qty{color:var(--primary)} .week .day.today .dname{color:var(--foreground);font-weight:600}
+  .pips{display:flex;gap:4px}.pips i{width:7px;height:7px;border-radius:999px;display:inline-block}
+  .qty{color:var(--muted-foreground);font-size:.8rem;font-weight:600}
+
+  .empty{text-align:center;padding:42px 0}.empty .g{color:var(--input);font-size:1.5rem}
+  .empty h4{font-family:var(--font-display);font-weight:500;color:var(--muted-foreground);font-size:1.2rem;margin:10px 0 3px}
+  .empty p{color:var(--muted-foreground);opacity:.8;font-size:.84rem;margin:0}
+
+  @keyframes drawRule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes settleIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .just .draw{display:block;height:2px;background:var(--primary);transform-origin:right center;margin-bottom:11px;animation:drawRule var(--dur) cubic-bezier(.65,0,.35,1)}
+  #stage[dir=ltr] .just .draw{transform-origin:left center}
+  .just{animation:settleIn var(--dur) cubic-bezier(.22,.61,.36,1)}
+  #stage[data-motion=off] .just,#stage[data-motion=off] .just .draw{animation:none}
+  @media (prefers-reduced-motion:reduce){.just,.just .draw{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===================== CONTROLS ===================== -->
+  <aside class="panel">
+    <h1>HomeOS · Editorial Paper × shadcn</h1>
+    <div class="tag">Design playground — adjust, then copy the prompt. v0 → converge on the final look.</div>
+
+    <div class="presets" id="presets"></div>
+    <div class="slop" id="slop"></div>
+
+    <div class="grp"><h2>Surface &amp; theme</h2>
+      <div class="row"><label>Surface</label><div class="seg" id="surface"><button data-v="tablet">🖥 Kitchen tablet</button><button data-v="phone">📱 Phone</button></div></div>
+      <div class="row"><label>Theme</label><div class="seg" id="theme"><button data-v="light">Paper (light)</button><button data-v="night">Warm night</button></div></div>
+      <div class="row" id="phoneViewRow"><label>Phone view</label><div class="seg" id="phoneView"><button data-v="week">Week</button><button data-v="day">Day</button><button data-v="empty">Empty</button></div></div>
+    </div>
+
+    <div class="grp"><h2>Shape &amp; depth</h2>
+      <div class="row"><label>Radius <b id="radiusV">3px</b></label><input type="range" id="radius" min="0" max="14" step="1"></div>
+      <div class="hint">shadcn default is ~10px — the recognizable template tell. 3px reads as a paper card.</div>
+      <div class="row" style="margin-top:11px"><label>Depth</label><div class="seg" id="depth"><button data-v="hairline">Hairline only</button><button data-v="inset">+ paper edge</button><button data-v="float">+ float</button></div></div>
+      <div class="hint">🔒 No glass / no glow — locked out by design (the night theme never gets a saturated bloom).</div>
+    </div>
+
+    <div class="grp"><h2>Accent (single-accent discipline)</h2>
+      <div class="row"><label>Lightness <b id="aLV"></b></label><input type="range" id="aL" min="0.30" max="0.80" step="0.01"></div>
+      <div class="row"><label>Chroma <b id="aCV"></b></label><input type="range" id="aC" min="0" max="0.20" step="0.005"></div>
+      <div class="row"><label>Hue <b id="aHV"></b></label><input type="range" id="aH" min="0" max="360" step="1"></div>
+      <div class="hint"><span class="swatch" id="aSw"></span> This is the only hue in the system. <code>--ring</code> follows it automatically. Night auto-lightens it for contrast.</div>
+    </div>
+
+    <div class="grp"><h2>Neutrals (warm, never gray)</h2>
+      <div class="row"><label>Paper hue <b id="pHV"></b></label><input type="range" id="pH" min="40" max="110" step="1"></div>
+      <div class="row"><label>Paper chroma <b id="pCV"></b></label><input type="range" id="pC" min="0" max="0.03" step="0.001"></div>
+      <div class="row"><label>Ink warmth (hue) <b id="iHV"></b></label><input type="range" id="iH" min="30" max="90" step="1"></div>
+      <div class="hint">Drop chroma to 0 and the paper goes gray — the accidental "slop" neutral. Keep it tinted.</div>
+    </div>
+
+    <div class="grp"><h2>Type &amp; signal</h2>
+      <div class="row"><label>Font pairing</label><div class="seg" id="fonts"><button data-v="editorial">Frank Ruhl + Assistant</button><button data-v="generic">Inter / Heebo</button></div></div>
+      <div class="hint">The "Generic" control is the visceral A/B — it's what AI generators emit.</div>
+      <div class="row" style="margin-top:11px"><label>Reminder signal</label><div class="seg warn" id="signal"><button data-v="border" data-tell="1">Left border ⚠</button><button data-v="pip">Terracotta pip</button><button data-v="serif">Serif color</button></div></div>
+      <div class="hint">The colored left-border is the research's #1 "AI tell." Pip or serif-color is the non-slop choice.</div>
+    </div>
+
+    <div class="grp"><h2>Texture, motion, locale</h2>
+      <div class="row"><label>Paper grain <b id="grainV"></b></label><input type="range" id="grain" min="0" max="100" step="1"></div>
+      <div class="row"><label>Motion</label><div class="seg" id="motion"><button data-v="calm">Calm</button><button data-v="standard">Standard</button><button data-v="off">Off</button></div></div>
+      <div class="row" style="margin-top:11px"><label>Direction / language</label><div class="seg" id="rtl"><button data-v="rtl">עברית · RTL</button><button data-v="ltr">Latin · LTR</button></div></div>
+      <div class="row" style="margin-top:11px"><label>Density</label><div class="seg" id="density"><button data-v="comfortable">Comfortable</button><button data-v="compact">Compact</button></div></div>
+    </div>
+  </aside>
+
+  <!-- ===================== PREVIEW ===================== -->
+  <main class="main">
+    <div class="ptools">
+      <span id="ptoolsLabel">—</span>
+      <span class="spacer"></span>
+      <button id="replay">↻ Replay "just added"</button>
+    </div>
+    <div class="canvas"><div id="stage"></div></div>
+    <div class="promptbar">
+      <div class="lbl">Prompt for Claude <button id="copyBtn">Copy prompt</button></div>
+      <div id="prompt"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const DEFAULTS = { surface:'tablet', theme:'light', phoneView:'week', radius:3,
+  aL:0.52, aC:0.13, aH:38, pH:80, pC:0.012, iH:60,
+  depth:'inset', fonts:'editorial', signal:'pip', motion:'calm', rtl:'rtl', grain:12, density:'comfortable' };
+const state = {...DEFAULTS};
+
+const PRESETS = {
+  'Editorial Paper ✦ recommended': {...DEFAULTS},
+  'Warm night (tablet)': {...DEFAULTS, theme:'night', grain:8},
+  'Phone · day, compact': {...DEFAULTS, surface:'phone', phoneView:'day', density:'compact'},
+  'Generic shadcn (the trap)': {...DEFAULTS, fonts:'generic', radius:10, signal:'border', pC:0, grain:0, depth:'float', motion:'standard'},
+};
+
+const WHO = { aba:{he:'אבא',en:'Dad',c:'--who-2'}, hodaya:{he:'הודיה',en:'Hodaya',c:'--who-5'},
+  yoav:{he:'יואב',en:'Yoav',c:'--who-3'}, noa:{he:'נועה',en:'Noa',c:'--who-1'}, all:{he:'כל המשפחה',en:'Everyone',c:'--who-all'} };
+const EVENTS = [
+  {time:'08:00',kind:'reminder',he:'חולצה לבנה לגן',en:'White shirt for gan',who:'all'},
+  {time:'14:30',kind:'event',he:'איסוף מהגן',en:'Pickup from gan',who:'aba'},
+  {time:'16:30',kind:'event',he:'חוג כדורגל',en:'Soccer practice',who:'yoav',loc_he:'מגרש קהילתי',loc_en:'Community field',recur_he:'כל יום א׳',recur_en:'every Sun'},
+  {time:'19:00',kind:'event',he:'אסיפת הורים',en:'Parents meeting',who:'hodaya',loc_he:'גן רימון',loc_en:'Gan Rimon'},
+];
+const TASKS = [ {kind:'task',he:'לשלם חשבון חשמל',en:'Pay electricity bill',who:'aba'},
+  {kind:'task',he:'להחזיר ספרים לספרייה',en:'Return library books',who:'noa'} ];
+const WEEK = [ {n:18,he:'ראשון',en:'Sun',note_he:'היום',note_en:'Today',pips:['--who-2','--who-3','--who-5'],q:4,today:true},
+  {n:19,he:'שני',en:'Mon',pips:['--who-1'],q:2},{n:20,he:'שלישי',en:'Tue',pips:['--who-3'],q:1},
+  {n:21,he:'רביעי',en:'Wed',note_he:'חג · חולצה לבנה',note_en:'Holiday · white shirt',pips:['--who-all'],q:2},
+  {n:22,he:'חמישי',en:'Thu',pips:['--who-5'],q:1},{n:23,he:'שישי',en:'Fri',q:0},{n:24,he:'שבת',en:'Sat',q:0} ];
+
+const L = (he,en)=> state.rtl==='rtl' ? he : en;
+const css = v => getComputedStyle(document.getElementById('stage')).getPropertyValue(v);
+
+function computeTokens(s){
+  const night = s.theme==='night';
+  let aL=s.aL, aC=s.aC, aH=s.aH;
+  if(night){ aL=Math.min(aL+0.16,0.80); aC=Math.max(aC-0.012,0.02); }
+  const t={};
+  const bd = Math.min(s.pC+0.004,0.024);
+  if(!night){
+    t['--background']=`oklch(0.965 ${s.pC} ${s.pH})`;
+    t['--card']=`oklch(0.945 ${s.pC} ${s.pH})`;
+    t['--secondary']=`oklch(0.915 ${Math.min(s.pC+0.004,0.03)} ${s.pH})`;
+    t['--muted-foreground']=`oklch(0.56 0.018 ${s.iH})`;
+    t['--foreground']=`oklch(0.22 0.02 ${s.iH})`;
+    t['--border']=`oklch(0.86 ${bd} ${s.pH})`;
+    t['--input']=`oklch(0.82 ${bd} ${s.pH})`;
+    t['--paper-edge']=`oklch(0.995 ${s.pC} ${s.pH})`;
+    t['--primary-foreground']=`oklch(0.965 ${s.pC} ${s.pH})`;
+  } else {
+    const nh = Math.max(s.pH-14,40), nc=Math.min(s.pC,0.014);
+    t['--background']=`oklch(0.20 ${nc} ${nh})`;
+    t['--card']=`oklch(0.235 ${nc} ${nh})`;
+    t['--secondary']=`oklch(0.255 ${nc} ${nh})`;
+    t['--muted-foreground']=`oklch(0.66 0.02 ${s.iH+10})`;
+    t['--foreground']=`oklch(0.93 0.018 ${s.iH+18})`;
+    t['--border']=`oklch(0.31 ${nc} ${nh})`;
+    t['--input']=`oklch(0.345 ${nc} ${nh})`;
+    t['--paper-edge']=`oklch(0.30 ${nc} ${nh})`;
+    t['--primary-foreground']=`oklch(0.20 ${nc} ${nh})`;
+  }
+  t['--primary']=`oklch(${aL} ${aC} ${aH})`;
+  t['--ring']='var(--primary)';
+  t['--radius']=`${s.radius}px`;
+  t['--grain-opacity']=(s.grain/100*0.08).toFixed(3);
+  if(s.fonts==='editorial'){ t['--font-display']='"Frank Ruhl Libre", Georgia, serif'; t['--font-sans']='"Assistant", system-ui, sans-serif'; }
+  else { t['--font-display']='"Inter", system-ui, sans-serif'; t['--font-sans']='"Heebo", "Inter", system-ui, sans-serif'; }
+  if(s.depth==='hairline') t['--shadow-paper']='none';
+  else if(s.depth==='inset') t['--shadow-paper']= night?'none':'inset 0 1px 0 var(--paper-edge)';
+  else t['--shadow-paper']= night?'0 1px 2px rgba(0,0,0,.45)':'inset 0 1px 0 var(--paper-edge), 0 1px 2px rgba(31,27,22,.06), 0 3px 10px rgba(31,27,22,.06)';
+  t['--dur']= s.motion==='off'?'0.01ms': s.motion==='calm'?'440ms':'240ms';
+  return t;
+}
+
+function chip(who){ const w=WHO[who]; return `<span class="chip" style="color:var(${w.c});background:color-mix(in oklab, var(${w.c}) 14%, var(--background))"><span class="dot" style="background:var(${w.c})"></span>${L(w.he,w.en)}</span>`; }
+function cardInner(e,withTime){
+  const isTask=e.kind==='task';
+  const pip = `<span class="pip"></span>`;
+  const title = isTask ? `<span class="cbx"></span><span>${L(e.he,e.en)}</span>` : `${e.kind==='reminder'?pip:''}${L(e.he,e.en)}`;
+  const meta = e.loc_he ? `<div class="meta"><span>${L(e.loc_he,e.loc_en)}</span></div>` : '';
+  const recur = e.recur_he ? `<span class="recur">↻ ${L(e.recur_he,e.recur_en)}</span>` : '';
+  const time = withTime && e.time ? `<div class="timerow"><span class="tnum" dir="ltr">${e.time}</span></div>` : '';
+  return `${time}<div class="ttl">${title}</div>${meta}<div class="foot">${chip(e.who)}${recur}</div>`;
+}
+
+function renderTablet(){
+  const timed = EVENTS.map(e=>`<div class="slot"><div class="t"><span class="tnum" dir="ltr">${e.time}</span></div><div class="ln"><div class="card ${e.kind}">${cardInner(e,false)}</div></div></div>`);
+  // now-line after 16:30 slot (index 2)
+  timed.splice(3,0,`<div class="slot"><div class="t"></div><div class="ln" style="border:0"><div class="nowline" data-now="${L('עכשיו · 17:48','now · 17:48')}"></div></div></div>`);
+  const rail = `<div class="rail" style="flex:0 0 210px">
+      <div class="bandlbl">${L('מתישהו היום','Anytime today')}</div>
+      ${TASKS.map((t,i)=>`<div class="card task" style="${i?'border-top:1px solid var(--border)':''}">${cardInner(t,false)}</div>`).join('')}
+      <div class="peek"><div class="bandlbl">${L('מחר · יום שני','Tomorrow · Mon')}</div>
+        <div class="pi"><span class="tnum" dir="ltr">17:00</span> ${L('יום הולדת לסבתא','Grandma’s birthday')}</div>
+        <div class="pi"><span class="tnum" dir="ltr">16:00</span> ${L('חוג ציור · נועה','Art class · Noa')}</div></div>
+    </div>`;
+  return `<div class="frameTag"><span class="d"></span> KITCHEN TABLET · ALWAYS-ON</div>
+    <div class="board"><div class="masthead"><span class="brand">HomeOS</span>
+      <span class="mdate"><span class="ey">${L('היום','Today')}</span><span class="big">${L('ראשון · 18 ביוני','Sunday · 18 June')}</span></span></div>
+      <hr class="hr">
+      <div style="display:flex;gap:26px;flex-wrap:nowrap;margin-top:4px"><div style="flex:1;min-width:0"><div class="spine">${timed.join('')}</div></div>${rail}</div>
+    </div>`;
+}
+function renderPhoneWeek(){
+  const days = WEEK.map(d=>`<div class="day ${d.today?'today':''}"><span class="dnum tnum">${d.n}</span>
+    <span class="dname">${L(d.he,d.en)}${d.note_he?`<small>${L(d.note_he,d.note_en)}</small>`:''}</span>
+    <span style="display:flex;gap:8px;align-items:center">${d.pips?`<span class="pips">${d.pips.map(p=>`<i style="background:var(${p})"></i>`).join('')}</span>`:''}<span class="qty">${d.q||'—'}</span></span></div>`).join('');
+  return `<div class="frameTag"><span class="d"></span> PHONE · THIS WEEK</div>
+    <div class="board"><div class="masthead"><span class="mdate"><span class="ey" style="color:var(--muted-foreground)">${L('השבוע','This week')}</span><span class="big">${L('16–22 ביוני','16–22 June')}</span></span></div>
+    <hr class="hr" style="margin:8px 0 4px"><div class="week">${days}</div></div>`;
+}
+function renderPhoneDay(){
+  const fresh = `<div class="card just agendaCard ${EVENTS[3].kind}" id="freshCard"><span class="draw"></span><div class="timerow">${L('19:00 · נוסף הרגע','19:00 · just added')}</div><div class="ttl">${EVENTS[3].kind==='reminder'?'<span class="pip"></span>':''}${L(EVENTS[3].he,EVENTS[3].en)}</div><div class="meta"><span>${L(EVENTS[3].loc_he,EVENTS[3].loc_en)}</span></div><div class="foot">${chip(EVENTS[3].who)}</div></div>`;
+  const rest = [EVENTS[2],TASKS[0],EVENTS[0]].map(e=>`<div class="card agendaCard ${e.kind}">${cardInner(e,e.kind!=='task')}</div>`).join('');
+  return `<div class="frameTag"><span class="d"></span> PHONE · DAY (${L('ראשון 18','Sun 18')})</div>
+    <div class="board agenda"><div class="masthead"><span class="mdate"><span class="ey">${L('היום','Today')}</span><span class="big">${L('ראשון 18','Sun 18')}</span></span></div>
+    <hr class="hr" style="margin:8px 0 14px">${fresh}${rest}</div>`;
+}
+function renderPhoneEmpty(){
+  return `<div class="frameTag"><span class="d"></span> PHONE · EMPTY DAY</div>
+    <div class="board"><div class="masthead"><span class="mdate"><span class="ey" style="color:var(--muted-foreground)">${L('שבת','Sat')}</span><span class="big">${L('שבת 24','Sat 24')}</span></span></div>
+    <hr class="hr" style="margin:8px 0 14px"><div class="empty"><div class="g">—</div><h4>${L('היום פנוי','Today is clear')}</h4><p>${L('הודעות שתעבירו לבוט יופיעו כאן.','Messages you forward to the bot appear here.')}</p></div></div>`;
+}
+
+function renderPreview(){
+  const stage=document.getElementById('stage');
+  const tk=computeTokens(state);
+  for(const k in tk) stage.style.setProperty(k,tk[k]);
+  stage.setAttribute('data-theme',state.theme);
+  stage.setAttribute('data-signal',state.signal);
+  stage.setAttribute('data-motion',state.motion);
+  stage.setAttribute('data-density',state.density);
+  stage.setAttribute('dir', state.rtl==='rtl'?'rtl':'ltr');
+  stage.setAttribute('lang', state.rtl==='rtl'?'he':'en');
+  stage.className = state.surface==='tablet'?'tablet':'phone';
+  let html;
+  if(state.surface==='tablet') html=renderTablet();
+  else html = state.phoneView==='week'?renderPhoneWeek(): state.phoneView==='day'?renderPhoneDay():renderPhoneEmpty();
+  stage.innerHTML=html;
+  document.getElementById('aSw').style.background=`oklch(${state.aL} ${state.aC} ${state.aH})`;
+  document.getElementById('ptoolsLabel').textContent = state.surface==='tablet'?'Kitchen tablet · TODAY ambient':'Phone · '+state.phoneView;
+  document.getElementById('phoneViewRow').style.opacity = state.surface==='phone'?1:.4;
+  renderSlop();
+}
+
+function renderSlop(){
+  const tells=[];
+  if(state.fonts==='generic') tells.push('generic Inter/Heebo type');
+  if(state.signal==='border') tells.push('colored left-border on cards (the #1 tell)');
+  if(state.pC<=0.002) tells.push('gray neutrals (no warmth)');
+  if(state.radius>=8) tells.push('SaaS-pill radius');
+  const el=document.getElementById('slop');
+  if(tells.length){ el.className='slop bad'; el.innerHTML='⚠ <b>AI-slop tells active:</b> '+tells.join(' · ')+'.'; }
+  else { el.className='slop good'; el.innerHTML='✓ Clean — none of the high-signal AI tells are active.'; }
+}
+
+function updatePrompt(){
+  const p=[], d=DEFAULTS, s=state;
+  p.push(`Build the HomeOS family board in the "Editorial Paper × shadcn" system — React + Vite + Tailwind v4 + shadcn (copy-in, scaffolded from the Sera style with RTL on), warm OKLCH tokens, Hebrew-first.`);
+  const look=[];
+  look.push(`${s.theme==='night'?'warm night':'warm paper-light'} theme`);
+  look.push(`a single terracotta accent at oklch(${s.aL} ${s.aC} ${s.aH}) with --ring following it`);
+  look.push(`${s.radius}px radius`);
+  look.push(`${s.depth==='hairline'?'hairline-only depth (no shadows)':s.depth==='inset'?'hairlines + a 1px inset paper-edge':'hairlines + one soft float shadow'}, no glass/glow`);
+  look.push(s.fonts==='editorial'?`Frank Ruhl Libre (serif display) + Assistant (sans body)`:`(generic Inter/Heebo — NOT recommended)`);
+  look.push(`reminders signalled by ${s.signal==='border'?'a colored left-border (⚠ flagged as the #1 AI tell — reconsider)':s.signal==='pip'?'a leading terracotta pip':'a serif accent-colored title'}`);
+  look.push(`${s.density} density`);
+  if(s.grain>0) look.push(`a subtle paper grain (${s.grain}%)`);
+  look.push(`${s.motion} motion`);
+  look.push(s.rtl==='rtl'?`Hebrew RTL (logical properties, Sunday-first week)`:`Latin LTR preview`);
+  p.push(`Target surface: ${s.surface==='tablet'?'the always-on kitchen tablet (TODAY ambient, glanceable at 2m, no Motion JS — View Transitions + CSS only)':'the phone companion ('+s.phoneView+' view, Motion v12 micro-interactions allowed)'}.`);
+  p.push(`Look: ${look.join('; ')}.`);
+  const warm = `Neutrals are warm-tinted (paper hue ${s.pH}, chroma ${s.pC}, ink hue ${s.iH}) — never gray.`;
+  p.push(warm);
+  if(s.signal==='border'||s.fonts==='generic'||s.pC<=0.002||s.radius>=8) p.push(`NOTE: some AI-slop tells are currently active — see the slop check before committing.`);
+  document.getElementById('prompt').textContent=p.join('\n\n');
+}
+
+function updateAll(){ renderPreview(); updatePrompt(); syncControls(); }
+
+// ---- control wiring ----
+function seg(id){ const box=document.getElementById(id); box.querySelectorAll('button').forEach(b=>b.onclick=()=>{ state[id==='phoneView'?'phoneView':id]=b.dataset.v; updateAll(); }); }
+['surface','theme','phoneView','depth','fonts','signal','motion','rtl','density'].forEach(seg);
+function slider(id,fmt){ const el=document.getElementById(id); el.oninput=()=>{ state[id]= id==='radius'||id==='grain'?+el.value:+el.value; updateAll(); }; return el; }
+['radius','aL','aC','aH','pH','pC','iH','grain'].forEach(id=>slider(id));
+
+function syncControls(){
+  ['surface','theme','phoneView','depth','fonts','signal','motion','rtl','density'].forEach(id=>{
+    document.querySelectorAll(`#${id} button`).forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===state[id]));
+  });
+  const set=(id,v)=>{document.getElementById(id).value=v;};
+  set('radius',state.radius);set('aL',state.aL);set('aC',state.aC);set('aH',state.aH);
+  set('pH',state.pH);set('pC',state.pC);set('iH',state.iH);set('grain',state.grain);
+  document.getElementById('radiusV').textContent=state.radius+'px';
+  document.getElementById('aLV').textContent=state.aL.toFixed(2);
+  document.getElementById('aCV').textContent=state.aC.toFixed(3);
+  document.getElementById('aHV').textContent=state.aH+'°';
+  document.getElementById('pHV').textContent=state.pH+'°';
+  document.getElementById('pCV').textContent=state.pC.toFixed(3);
+  document.getElementById('iHV').textContent=state.iH+'°';
+  document.getElementById('grainV').textContent=state.grain+'%';
+}
+
+// presets
+const pbox=document.getElementById('presets');
+Object.keys(PRESETS).forEach(name=>{ const b=document.createElement('button'); b.textContent=name; b.onclick=()=>{ Object.assign(state,PRESETS[name]); updateAll(); }; pbox.appendChild(b); });
+
+document.getElementById('replay').onclick=()=>{ if(state.surface==='phone'&&state.phoneView==='day'){ const f=document.getElementById('freshCard'); if(f){f.classList.remove('just');void f.offsetWidth;f.classList.add('just');} } else { state.surface='phone';state.phoneView='day';updateAll(); } };
+document.getElementById('copyBtn').onclick=()=>{ navigator.clipboard.writeText(document.getElementById('prompt').textContent).then(()=>{ const b=document.getElementById('copyBtn');const o=b.textContent;b.textContent='Copied!';setTimeout(()=>b.textContent=o,1200); }); };
+
+updateAll();
+</script>
+</body>
+</html>
