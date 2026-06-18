@@ -20,3 +20,19 @@ export function isTransient(err: unknown): boolean {
   if (typeof status === "number") return status === 429 || status >= 500;
   return true; // no HTTP status → network/connection error → retryable
 }
+
+/**
+ * Programming bugs (not provider blips) must settle as PERMANENT, never be retried or wrapped as
+ * `TransientError` — otherwise `isTransient` (true for any no-status error) would replay them forever
+ * on every boot (G10/OG10). Always check this BEFORE `isTransient` at a provider call site: a
+ * statusless `TypeError`/`RangeError`/`ReferenceError`/`SyntaxError` would otherwise look "transient".
+ * Shared by `agent.ts` (the model call) and `parser.ts` (the parse call). #57.
+ */
+export function isProgrammingError(err: unknown): boolean {
+  return (
+    err instanceof TypeError ||
+    err instanceof RangeError ||
+    err instanceof ReferenceError ||
+    err instanceof SyntaxError
+  );
+}
