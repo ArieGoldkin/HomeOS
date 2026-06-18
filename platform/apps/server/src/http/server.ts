@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
+import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes.ts";
 import {
   extractMessages,
   type InboundMessage,
@@ -21,11 +22,13 @@ export interface ServerDeps {
   readToken?: string;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
+  /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
+  google?: GoogleOAuthDeps;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
-/** Constant-time bearer check (avoids leaking the token via timing). */
-function bearerMatches(header: string | undefined, token: string): boolean {
+/** Constant-time bearer check (avoids leaking the token via timing). Reused by the OAuth routes. */
+export function bearerMatches(header: string | undefined, token: string): boolean {
   const prefix = "Bearer ";
   if (!header?.startsWith(prefix)) return false;
   const got = Buffer.from(header.slice(prefix.length));
@@ -44,6 +47,10 @@ export function createServer(deps: ServerDeps): Hono {
   const log = deps.log ?? (() => {});
 
   app.get("/health", (c) => c.json({ status: "ok" }));
+
+  // 🔌 Issue #16: Google OAuth connect/callback/disconnect. Always mounted; returns 503 when
+  // `google` is undefined (app-only deploys), exactly like the GET /events read seam.
+  registerOAuthRoutes(app, deps.google);
 
   // The read seam the dashboard + kitchen-tablet kiosk consume. Token-gated; the events are
   // returned in the shared SavedEvent[] shape (incl. assignee/recurrence), ordered by date.

@@ -8,6 +8,7 @@ import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
+import { buildGoogleDeps } from "./http/oauth-routes.ts";
 import { createServer } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
 import { noopUploader, scheduleBackup } from "./infra/backup.ts";
@@ -48,6 +49,10 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     log,
   });
 
+// 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
+// so the routes ship dark (503). The credential store opens its own connection on the same DB file.
+const googleDeps = config.google ? buildGoogleDeps(config.google, config.dbPath, log) : undefined;
+
 const app = createServer({
   verifyToken: config.verifyToken,
   inbound,
@@ -55,6 +60,7 @@ const app = createServer({
   events,
   readToken: config.readToken,
   appSecret: config.appSecret,
+  google: googleDeps,
   log,
 });
 
