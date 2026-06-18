@@ -70,3 +70,57 @@ export interface InboundRow {
   received_at: string;
   processed_at: string | null;
 }
+
+/**
+ * Per-family Google OAuth credential (#16/#58), AES-256-GCM encrypted at rest — NOT the EventStore,
+ * NOT plaintext config. `(family_id, provider)` PK reserves multi-family + multi-provider isolation
+ * (OG9) with no identity logic built now; `enc_key_version` reserves key-rotation schema with NO
+ * rotation code (OG12 — key loss ⇒ re-consent, never a plaintext fallback). `access_token_expiry` is
+ * a lexicographically-comparable SQLite-UTC string. Both token columns hold a base64 `iv|tag|ct` blob.
+ */
+export const CREATE_CREDENTIALS_TABLE = `
+  CREATE TABLE IF NOT EXISTS credentials (
+    family_id           TEXT    NOT NULL DEFAULT 'default',
+    provider            TEXT    NOT NULL DEFAULT 'google',
+    enc_refresh_token   TEXT    NOT NULL,
+    enc_access_token    TEXT    NOT NULL,
+    access_token_expiry TEXT    NOT NULL,
+    scopes              TEXT    NOT NULL,
+    enc_key_version     INTEGER NOT NULL DEFAULT 1,
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (family_id, provider)
+  );
+`;
+
+/**
+ * Single-row key canary (MF4). On first init the store writes one encrypted canary; every later boot
+ * decrypts it and FAILS LOUD if the key changed — instead of letting every credential silently
+ * degrade-to-app-only (which would look like "nobody connected"). CHECK(id = 1) keeps it a single row.
+ */
+export const CREATE_KEY_CANARY_TABLE = `
+  CREATE TABLE IF NOT EXISTS credential_key_canary (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    enc_canary TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+export interface CredentialRow {
+  family_id: string;
+  provider: string;
+  enc_refresh_token: string;
+  enc_access_token: string;
+  access_token_expiry: string;
+  scopes: string;
+  enc_key_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * The single family id used everywhere until Phase 8. A constant, NOT a resolved identity — named
+ * explicitly so OG9 ("per-family isolation") isn't hand-wavy. Phase 8 swaps it for a real resolver;
+ * the `(family_id, provider)` PK and `WHERE family_id = ?` queries are already isolation-ready.
+ */
+export const FAMILY_ID = "default";
