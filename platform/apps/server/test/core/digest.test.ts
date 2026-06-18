@@ -48,6 +48,7 @@ describe("runDigestOnce", () => {
         listEvents: vi.fn(() => []),
         deleteLastFromSender: vi.fn(() => 0),
         countSince: vi.fn(() => 4),
+        deleteByProvider: vi.fn(() => 0),
       },
       inbound: {
         enqueue: vi.fn(() => true),

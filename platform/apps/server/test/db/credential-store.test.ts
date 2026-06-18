@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -93,6 +93,19 @@ describe("CredentialStore", () => {
     createCredentialStore(path, key); // writes the canary
     expect(() => createCredentialStore(path, key)).not.toThrow();
     expect(() => createCredentialStore(path, randomBytes(32))).toThrow(/GOOGLE_TOKEN_ENC_KEY/);
+  });
+
+  it("NEVER writes the encryption key into the DB — env-only (#61/MF4)", () => {
+    const path = tmpDbPath();
+    const store = createCredentialStore(path, key);
+    store.upsert(FAMILY_ID, sample);
+    // Scan the persisted bytes (main file + WAL) — the key must not appear as raw bytes, base64, or hex.
+    const files = [path, `${path}-wal`].filter(existsSync).map((p) => readFileSync(p));
+    const all = Buffer.concat(files);
+    expect(all.includes(key)).toBe(false);
+    const text = all.toString("latin1");
+    expect(text).not.toContain(key.toString("base64"));
+    expect(text).not.toContain(key.toString("hex"));
   });
 });
 

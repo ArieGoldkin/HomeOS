@@ -42,6 +42,7 @@ const sampleEvents = [
     assignee: null,
     recurrence: null,
     source_text: "טיול",
+    source_provider: null,
   },
   {
     id: 1,
@@ -53,6 +54,7 @@ const sampleEvents = [
     assignee: "אבא",
     recurrence: { freq: "weekly" as const, weekday: 0 },
     source_text: "אסיפת הורים",
+    source_provider: null,
   },
 ];
 
@@ -77,6 +79,7 @@ function makeApp(opts: { readToken?: string; appSecret?: string } = { readToken:
     listEvents: vi.fn(() => sampleEvents),
     deleteLastFromSender: vi.fn(() => 0),
     countSince: vi.fn(() => 0),
+    deleteByProvider: vi.fn(() => 0),
   };
   const deps: ServerDeps = {
     verifyToken: "secret",

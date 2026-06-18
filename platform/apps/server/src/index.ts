@@ -51,7 +51,9 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
 
 // 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
 // so the routes ship dark (503). The credential store opens its own connection on the same DB file.
-const googleDeps = config.google ? buildGoogleDeps(config.google, config.dbPath, log) : undefined;
+const googleDeps = config.google
+  ? buildGoogleDeps(config.google, config.dbPath, events, log)
+  : undefined;
 
 const app = createServer({
   verifyToken: config.verifyToken,

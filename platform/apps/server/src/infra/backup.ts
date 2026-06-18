@@ -17,7 +17,16 @@ const { DatabaseSync } = createRequire(import.meta.url)(
  */
 export interface Uploader {
   upload(localPath: string, key: string): Promise<void>;
+  /**
+   * Optional (#61/MF4): delete offsite snapshots older than `retentionDays`, so a disconnected
+   * family's encrypted token ages out of backups (revoke at Google is the PRIMARY kill-switch; this is
+   * defense-in-depth). The real R2/B2 impl wires this at the Railway cutover; `noopUploader` skips it.
+   */
+  prune?(retentionDays: number, now: Date): Promise<void>;
 }
+
+/** Default offsite-snapshot retention window (#61/MF4). */
+export const DEFAULT_RETENTION_DAYS = 14;
 
 export const noopUploader: Uploader = {
   async upload() {
@@ -30,6 +39,8 @@ export interface BackupDeps {
   uploader: Uploader;
   /** Hour of day (0–23) to run, Asia/Jerusalem. */
   hour: number;
+  /** Offsite-snapshot retention window in days (#61/MF4); defaults to DEFAULT_RETENTION_DAYS. */
+  retentionDays?: number;
   now?: () => Date;
   /** Directory for the temporary snapshot (default: OS tmp). */
   tmpDir?: string;
@@ -71,6 +82,9 @@ export async function runBackupOnce(deps: BackupDeps): Promise<void> {
     tmpDir: deps.tmpDir,
   });
   deps.log?.("nightly backup uploaded", { dest });
+  // #61/MF4: age out old offsite snapshots (defense-in-depth on the encrypted-token-in-backup path).
+  const now = (deps.now ?? (() => new Date()))();
+  await deps.uploader.prune?.(deps.retentionDays ?? DEFAULT_RETENTION_DAYS, now);
 }
 
 /** Schedule the nightly backup at `hour` Asia/Jerusalem — via the shared scheduler. */

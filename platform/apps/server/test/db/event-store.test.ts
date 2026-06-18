@@ -103,6 +103,29 @@ describe("EventStore (in-memory SQLite)", () => {
     });
   });
 
+  describe("deleteByProvider (reversibility seam, #61/MF5)", () => {
+    it("defaults source_provider to null for forwarded events", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.fwd" });
+      expect(store.deleteByProvider("google")).toBe(0); // nothing tagged → nothing purged
+      expect(store.listEvents()).toHaveLength(1); // the forwarded event survives
+    });
+
+    it("tags a derived event and purges only that provider's rows", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.fwd" }); // untagged
+      store.saveEvent(event, {
+        fromPhone: "9725",
+        waMessageId: "wamid.gmail",
+        sourceProvider: "google",
+      });
+      expect(store.deleteByProvider("google")).toBe(1); // only the google-derived row
+      const left = store.listEvents();
+      expect(left).toHaveLength(1);
+      expect(left[0]!.source_provider).toBeNull(); // the forwarded event remains
+    });
+  });
+
   describe("countSince (digest)", () => {
     it("counts events created at/after the cutoff", () => {
       const store = createEventStore(":memory:");

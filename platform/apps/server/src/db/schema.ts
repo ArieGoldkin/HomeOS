@@ -21,10 +21,18 @@ export const CREATE_EVENTS_TABLE = `
     from_phone         TEXT    NOT NULL,
     wa_message_id      TEXT    NOT NULL,
     seq                INTEGER NOT NULL DEFAULT 0,
+    source_provider    TEXT,
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(wa_message_id, seq)
   );
 `;
+
+/**
+ * Idempotent migration: add `source_provider` to a PRE-EXISTING events table (#61/MF5). `CREATE TABLE
+ * IF NOT EXISTS` won't alter a live table, so fresh DBs get the column from the DDL above and older DBs
+ * get it here. Nullable: forwarded/WhatsApp rows stay null; #17/#18 tag derived rows so disconnect purges them.
+ */
+export const ADD_EVENTS_SOURCE_PROVIDER = "ALTER TABLE events ADD COLUMN source_provider TEXT;";
 
 /**
  * Inbound queue: every webhook message is persisted here BEFORE the 200 ack, so a crash
@@ -58,6 +66,7 @@ export interface EventRow {
   from_phone: string;
   wa_message_id: string;
   seq: number;
+  source_provider: string | null;
   created_at: string;
 }
 

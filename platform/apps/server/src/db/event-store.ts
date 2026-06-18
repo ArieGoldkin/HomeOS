@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
-import { CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
+import { ADD_EVENTS_SOURCE_PROVIDER, CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
 
 // node:sqlite is a newer builtin that bundlers (Vite/Vitest) don't externalize cleanly;
 // loading it via createRequire keeps it a runtime resolution Node handles directly.
@@ -15,10 +15,14 @@ export interface EventMeta {
   waMessageId: string;
   /** Index of this event within its message (0-based); distinguishes multi-event rows. */
   seq?: number;
+  /** Provider that produced the row ('google' for Gmail/Calendar-derived); null for forwards (#61/MF5). */
+  sourceProvider?: string;
 }
 
 export interface SavedEvent extends ParsedEvent {
   id: number;
+  /** null for forwarded events; the provider name for derived rows (#61). */
+  source_provider: string | null;
 }
 
 /** Persistence seam — handlers depend on this, not on the driver. */
@@ -29,6 +33,8 @@ export interface EventStore {
   deleteLastFromSender(fromPhone: string): number;
   /** Count events created at/after `sinceIso` (SQLite UTC datetime). Feeds the daily digest. */
   countSince(sinceIso: string): number;
+  /** Purge every row tagged with `provider` — the disconnect deletion seam (#61/MF5). Returns the count. */
+  deleteByProvider(provider: string): number;
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -45,6 +51,7 @@ function rowToSaved(row: EventRow): SavedEvent {
         ? { freq: "weekly", weekday: row.recurrence_weekday }
         : null,
     source_text: row.source_text,
+    source_provider: row.source_provider,
   };
 }
 
@@ -57,6 +64,9 @@ export function createEventStore(dbPath: string): EventStore {
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(CREATE_EVENTS_TABLE);
+  // #61: ensure source_provider exists on a pre-existing events table (CREATE IF NOT EXISTS won't add it).
+  const cols = db.prepare("PRAGMA table_info(events);").all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "source_provider")) db.exec(ADD_EVENTS_SOURCE_PROVIDER);
 
   // Idempotent per (wa_message_id, seq): a re-processed inbound (boot-replay, Meta retry) returns
   // the existing row per event instead of inserting duplicates. The no-op DO UPDATE lets RETURNING
@@ -64,8 +74,8 @@ export function createEventStore(dbPath: string): EventStore {
   const insert = db.prepare(
     `INSERT INTO events
        (kind, title_he, date_iso, time, location, assignee, recurrence_freq, recurrence_weekday,
-        source_text, from_phone, wa_message_id, seq)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source_text, from_phone, wa_message_id, seq, source_provider)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(wa_message_id, seq) DO UPDATE SET wa_message_id = excluded.wa_message_id
      RETURNING *;`,
   );
@@ -79,6 +89,7 @@ export function createEventStore(dbPath: string): EventStore {
        );`,
   );
   const countSinceStmt = db.prepare("SELECT COUNT(*) AS c FROM events WHERE created_at >= ?;");
+  const deleteByProviderStmt = db.prepare("DELETE FROM events WHERE source_provider = ?;");
 
   return {
     saveEvent(event, meta) {
@@ -95,6 +106,7 @@ export function createEventStore(dbPath: string): EventStore {
         meta.fromPhone,
         meta.waMessageId,
         meta.seq ?? 0,
+        meta.sourceProvider ?? null,
       ) as unknown as EventRow;
       return rowToSaved(row);
     },
@@ -106,6 +118,9 @@ export function createEventStore(dbPath: string): EventStore {
     },
     countSince(sinceIso) {
       return Number((countSinceStmt.get(sinceIso) as { c: number }).c);
+    },
+    deleteByProvider(provider) {
+      return Number(deleteByProviderStmt.run(provider).changes);
     },
   };
 }

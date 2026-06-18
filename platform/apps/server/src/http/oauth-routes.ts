@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import type { GoogleOAuthSettings } from "../config.ts";
 import { sqliteUtc } from "../core/time.ts";
 import { type CredentialStore, createCredentialStore } from "../db/credential-store.ts";
+import type { EventStore } from "../db/event-store.ts";
 import { FAMILY_ID } from "../db/schema.ts";
 import {
   buildGoogleAuthUrl,
@@ -22,6 +23,8 @@ import { bearerMatches } from "./server.ts";
 export interface GoogleOAuthDeps {
   client: GoogleOAuthClient;
   credentials: CredentialStore;
+  /** Read model — used by disconnect to purge provider-derived rows (#61/MF5). */
+  events: Pick<EventStore, "deleteByProvider">;
   config: GoogleClientConfig;
   adminToken: string;
   now?: () => Date;
@@ -77,12 +80,14 @@ const MAX_ERR = 256;
 export function buildGoogleDeps(
   settings: GoogleOAuthSettings,
   dbPath: string,
+  events: Pick<EventStore, "deleteByProvider">,
   log?: (msg: string, meta?: Record<string, unknown>) => void,
 ): GoogleOAuthDeps {
   const adminToken = settings["adminToken"]; // index read (matches config.ts env access)
   return {
     client: httpGoogleOAuthClient(settings),
     credentials: createCredentialStore(dbPath, settings.encKey),
+    events,
     config: settings,
     adminToken,
     log,
@@ -158,6 +163,7 @@ export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
       }
     }
     deps.credentials.delete(FAMILY_ID);
+    deps.events.deleteByProvider("google"); // purge provider-derived rows (#61/MF5; 0 until #17/#18 tag them)
     return c.text("נותק. חשבון Google נותק והמידע המקומי נמחק.", 200);
   });
 }
