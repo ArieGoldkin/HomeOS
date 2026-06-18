@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import { handleInbound, processInbound } from "../../src/core/handler.ts";
+import type { SavedEvent } from "../../src/db/event-store.ts";
 import type { InboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ToolContext } from "../../src/tools/tools.ts";
@@ -19,10 +20,12 @@ const sampleEvent: ParsedEvent = {
   recurrence: null,
   source_text: "אסיפת הורים מחר ב-18:30",
 };
+// #71: the agent now returns the rows a tool already PERSISTED (SavedEvent), not raw ParsedEvent.
+const sampleSaved: SavedEvent = { id: 7, source_provider: null, ...sampleEvent };
 
 function makeDeps(
   opts: {
-    parsed?: ParsedEvent[] | null;
+    saved?: SavedEvent[] | null;
     cancelCount?: number;
     agentThrows?: unknown;
     members?: Record<string, string>;
@@ -32,9 +35,13 @@ function makeDeps(
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
+  // The store stub stays for the ביטול undo path; #71 means the HANDLER no longer calls saveEvent.
   const events = {
     saveEvent: vi.fn(
-      (e: ParsedEvent, m: { fromPhone: string; waMessageId: string; seq?: number }) => ({
+      (
+        e: ParsedEvent,
+        m: { fromPhone: string; waMessageId: string; seq?: number },
+      ): SavedEvent => ({
         id: 7 + (m.seq ?? 0),
         source_provider: null,
         ...e,
@@ -45,10 +52,10 @@ function makeDeps(
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
   };
-  // The handler now depends on the agent, not the bare parser; run() keeps the same contract.
-  const run = vi.fn(async (_text: string, _ctx: ToolContext): Promise<ParsedEvent[] | null> => {
+  // The handler depends on the agent; run() now returns the persisted SavedEvent[] (or null).
+  const run = vi.fn(async (_text: string, _ctx: ToolContext): Promise<SavedEvent[] | null> => {
     if (opts.agentThrows) throw opts.agentThrows;
-    return opts.parsed === undefined ? [sampleEvent] : opts.parsed;
+    return opts.saved === undefined ? [sampleSaved] : opts.saved;
   });
   const agent = { run };
   // G16 counter stub — only attached when the ceiling is configured, so the rate gate stays off
@@ -79,16 +86,18 @@ const textMsg: InboundMessage = {
 };
 
 describe("handleInbound (M2)", () => {
-  it("parses, persists, and sends a Hebrew confirmation", async () => {
+  it("runs the agent and sends a Hebrew confirmation (the tool persists, not the handler)", async () => {
     const { sendText, events, agent, deps } = makeDeps();
     await handleInbound(textMsg, deps);
-    // Jerusalem today + server-supplied sender/message id via ToolContext (G8).
+    // Jerusalem today + server-supplied sender/messageId/familyId + the events store via ToolContext (G8/#71).
     expect(agent.run).toHaveBeenCalledWith("אסיפת הורים מחר ב-18:30", {
       todayIso: "2026-06-20",
       from: "972501234567",
       waMessageId: "wamid.1",
+      familyId: "default",
+      events,
     });
-    expect(events.saveEvent).toHaveBeenCalledTimes(1);
+    expect(events.saveEvent).not.toHaveBeenCalled(); // #71: persistence moved into the tool
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toContain("הוספתי ליומן");
     expect(body).toContain("אסיפת הורים");
@@ -99,39 +108,39 @@ describe("handleInbound (M2)", () => {
   });
 
   it("resolves the sender's family-member name into ToolContext (members map, #14)", async () => {
-    const { agent, deps } = makeDeps({ members: { "972501234567": "אבא" } });
+    const { agent, deps, events } = makeDeps({ members: { "972501234567": "אבא" } });
     await handleInbound(textMsg, deps);
     expect(agent.run).toHaveBeenCalledWith("אסיפת הורים מחר ב-18:30", {
       todayIso: "2026-06-20",
       from: "972501234567",
       waMessageId: "wamid.1",
       senderName: "אבא",
+      familyId: "default",
+      events,
     });
   });
 
-  it("saves every event from a multi-event message and confirms the count", async () => {
-    const second: ParsedEvent = { ...sampleEvent, title_he: "טיול שנתי", time: null };
-    const { sendText, events, deps } = makeDeps({ parsed: [sampleEvent, second] });
+  it("confirms every event of a multi-event agent result with a count", async () => {
+    const second: SavedEvent = { ...sampleSaved, id: 8, title_he: "טיול שנתי", time: null };
+    const { sendText, events, deps } = makeDeps({ saved: [sampleSaved, second] });
     await handleInbound(textMsg, deps);
-    expect(events.saveEvent).toHaveBeenCalledTimes(2);
-    expect(events.saveEvent.mock.calls[0]![1]).toMatchObject({ seq: 0 });
-    expect(events.saveEvent.mock.calls[1]![1]).toMatchObject({ seq: 1 });
+    expect(events.saveEvent).not.toHaveBeenCalled(); // the tool already persisted both
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toContain("2"); // count in the summary
     expect(body).toContain("אסיפת הורים");
     expect(body).toContain("טיול שנתי");
   });
 
-  it("asks to rephrase when parsing fails, without persisting", async () => {
-    const { sendText, events, deps } = makeDeps({ parsed: null });
+  it("asks to rephrase when the agent returns null, without persisting", async () => {
+    const { sendText, events, deps } = makeDeps({ saved: null });
     await handleInbound(textMsg, deps);
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/לנסח|להבין/);
   });
 
-  it("asks to rephrase on an empty events list (parsed, but nothing schedulable)", async () => {
-    const { sendText, events, deps } = makeDeps({ parsed: [] });
+  it("asks to rephrase on an empty events list (ran, but nothing schedulable)", async () => {
+    const { sendText, events, deps } = makeDeps({ saved: [] });
     await handleInbound(textMsg, deps);
     expect(events.saveEvent).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
@@ -147,7 +156,7 @@ describe("handleInbound (M2)", () => {
     expect(body).not.toMatch(/לנסח/); // never the "rephrase" message for an API blip
   });
 
-  it("undoes the last message on ביטול (deletes + confirms, never parses)", async () => {
+  it("undoes the last message on ביטול (deletes + confirms, never runs the agent)", async () => {
     const { sendText, events, agent, deps } = makeDeps({ cancelCount: 2 });
     await handleInbound({ ...textMsg, text: "ביטול" }, deps);
     expect(agent.run).not.toHaveBeenCalled();

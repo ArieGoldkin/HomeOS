@@ -1,6 +1,7 @@
 import type { ParsedEvent } from "@homeos/shared";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
+import { FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
@@ -144,16 +145,18 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   }
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
-  let parsed: ParsedEvent[] | null;
+  let saved: SavedEvent[] | null;
   try {
-    // The agent decides parse-vs-act and runs the extract_events tool; same ParsedEvent[]|null
-    // contract as the old direct parse. Anchor + sender are server-supplied via ToolContext (G8);
-    // senderName (from the members map) drives first-person → assignee (#14).
-    parsed = await deps.agent.run(text, {
+    // The agent decides parse-vs-act, runs a tool, and the TOOL persists its own rows (#71) — the
+    // handler no longer saves. Anchor + sender + familyId + the events store are server-supplied via
+    // ToolContext (G8); senderName (from the members map) drives first-person → assignee (#14).
+    saved = await deps.agent.run(text, {
       todayIso: today,
       from: msg.from,
       waMessageId: msg.id,
       senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
     });
   } catch (err) {
     if (err instanceof TransientError) {
@@ -164,17 +167,14 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     }
     throw err;
   }
-  if (!parsed || parsed.length === 0) {
+  if (!saved || saved.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
 
-  // One message can carry several events — persist each under its own seq (idempotent on
-  // (wa_message_id, seq)), then send a single confirm covering all of them.
-  const saved = parsed.map((event, seq) =>
-    deps.events.saveEvent(event, { fromPhone: msg.from, waMessageId: msg.id, seq }),
-  );
+  // The tool already persisted each event (idempotent on (wa_message_id, seq)); the handler is now
+  // thin — just send one Hebrew confirm covering all of them.
   log("saved events", { id: msg.id, count: saved.length });
   await deps.sendText(msg.from, formatConfirm(saved));
 }

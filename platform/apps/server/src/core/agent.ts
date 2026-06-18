@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ParsedEvent } from "@homeos/shared";
 import { z } from "zod/v4";
+import type { SavedEvent } from "../db/event-store.ts";
 import type { Tool, ToolContext } from "../tools/tools.ts";
 import { isProgrammingError, isTransient, TransientError } from "./errors.ts";
 
@@ -8,8 +8,8 @@ import { isProgrammingError, isTransient, TransientError } from "./errors.ts";
  * Agent core (#13): a bounded, single-purpose tool-use loop that replaces the direct `parse` call.
  * It owns a manual `messages.create` loop (NOT the beta toolRunner) over an injected `callModel`
  * seam, so tests drive it with canned turns and never hit the network. The model only ever emits
- * structured tool calls; the loop returns `ParsedEvent[] | null` (the SAME contract as ParseMessage)
- * and NEVER the model's prose — the user-facing confirm is built by the handler from those events.
+ * structured tool calls; the loop returns the PERSISTED rows (`SavedEvent[]`) the tools saved, or
+ * `null` — and NEVER the model's prose; the user-facing confirm is built by the handler from them.
  */
 
 /** A faithful-but-minimal view of one model turn — what the loop reads. */
@@ -43,8 +43,8 @@ export interface ModelRequest {
 export type CallModel = (req: ModelRequest) => Promise<ModelResponse>;
 
 export interface Agent {
-  /** Same contract as `ParseMessage`: validated events, or `null` (→ "please rephrase"). */
-  run(text: string, ctx: ToolContext): Promise<ParsedEvent[] | null>;
+  /** The rows the tools persisted, or `null` (→ "please rephrase"). The handler only confirms them. */
+  run(text: string, ctx: ToolContext): Promise<SavedEvent[] | null>;
 }
 
 export interface AgentConfig {
@@ -113,7 +113,7 @@ export function createAgent(cfg: AgentConfig): Agent {
   async function dispatch(
     block: { id: string; name: string; input: unknown },
     ctx: ToolContext,
-    collected: ParsedEvent[],
+    collected: SavedEvent[],
   ): Promise<ToolResultBlock> {
     const tool = cfg.tools.find((t) => t.name === block.name);
     if (!tool) {
@@ -136,13 +136,13 @@ export function createAgent(cfg: AgentConfig): Agent {
         is_error: true,
       };
     }
-    const { events } = await tool.run(parsed.data, ctx);
-    collected.push(...events);
+    const { saved } = await tool.run(parsed.data, ctx);
+    collected.push(...saved);
     // Tool result is a structured COUNT ack — never echo untrusted text back into the loop (G7).
     return {
       type: "tool_result",
       tool_use_id: block.id,
-      content: JSON.stringify({ saved: events.length }),
+      content: JSON.stringify({ saved: saved.length }),
     };
   }
 
@@ -154,7 +154,7 @@ export function createAgent(cfg: AgentConfig): Agent {
           content: `Forwarded message to process:\n<forwarded>\n${text}\n</forwarded>`,
         },
       ];
-      const collected: ParsedEvent[] = [];
+      const collected: SavedEvent[] = [];
 
       for (let i = 0; i < maxIterations; i++) {
         // Turn 0 forces the extractor (no free-text first turn, G4); later turns are auto.
