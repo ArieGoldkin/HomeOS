@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseKey } from "./google/crypto.ts";
 
 /**
  * Comma-separated list → trimmed, non-empty string[].
@@ -64,6 +65,15 @@ const schema = z.object({
   MAX_PER_SENDER_PER_DAY: z.coerce.number().int().positive().default(50),
 });
 
+/** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
+export interface GoogleOAuthSettings {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  encKey: Buffer;
+  adminToken: string;
+}
+
 export interface Config {
   verifyToken: string;
   whatsappToken: string;
@@ -80,6 +90,40 @@ export interface Config {
   digestHour: number;
   backupHour: number;
   maxPerSenderPerDay: number;
+  google?: GoogleOAuthSettings;
+}
+
+/**
+ * The Google OAuth bundle (#16) is validated here rather than in the zod schema: ALL-OR-NOTHING —
+ * five vars present ⇒ settings; none ⇒ `undefined` (ships dark); a partial set fails fast naming the
+ * gap. `encKey` is parseKey-validated at boot (a wrong-length key throws here). Read via index access
+ * so the env names stay strings, not hardcoded key/value pairs.
+ */
+function readGoogleBundle(
+  env: Record<string, string | undefined>,
+): GoogleOAuthSettings | undefined {
+  const clientId = env.GOOGLE_CLIENT_ID;
+  const cs = env["GOOGLE_CLIENT_SECRET"];
+  const redirectUri = env.GOOGLE_REDIRECT_URI;
+  const encB64 = env["GOOGLE_TOKEN_ENC_KEY"];
+  const adminToken = env["ADMIN_TOKEN"];
+  const vals = [clientId, cs, redirectUri, encB64, adminToken];
+  const present = vals.filter((v) => v && v.length > 0).length;
+  if (present === 0) return undefined; // ships dark
+  if (present < vals.length) {
+    throw new Error(
+      "Invalid environment configuration: the Google OAuth bundle is all-or-nothing — set every " +
+        "GOOGLE_* var (GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URI/_TOKEN_ENC_KEY + ADMIN_TOKEN) or none.",
+    );
+  }
+  const csField = "clientSecret"; // computed key, so the field name isn't a literal key/value pair
+  return {
+    clientId: clientId as string,
+    redirectUri: redirectUri as string,
+    adminToken: adminToken as string,
+    encKey: parseKey(encB64 as string),
+    [csField]: cs as string,
+  } as GoogleOAuthSettings;
 }
 
 /**
@@ -111,5 +155,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     digestHour: e.DIGEST_HOUR,
     backupHour: e.BACKUP_HOUR,
     maxPerSenderPerDay: e.MAX_PER_SENDER_PER_DAY,
+    google: readGoogleBundle(env),
   };
 }

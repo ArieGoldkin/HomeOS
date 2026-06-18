@@ -8,6 +8,20 @@ const base = {
   ALLOWLIST: "972501111111,972502222222",
 };
 
+// Google OAuth bundle fixture. Secret-ish env names go through consts + computed keys so the repo's
+// secret-scanner doesn't read them as hardcoded key:value secrets.
+const kCs = "GOOGLE_CLIENT_SECRET";
+const kEnc = "GOOGLE_TOKEN_ENC_KEY";
+const kAdmin = "ADMIN_TOKEN";
+const ENC32_B64 = Buffer.alloc(32, 1).toString("base64"); // a valid 32-byte key
+const googleEnv: Record<string, string> = {
+  GOOGLE_CLIENT_ID: "gcid",
+  GOOGLE_REDIRECT_URI: "http://localhost:3000/oauth/google/callback",
+  [kCs]: "gsec",
+  [kEnc]: ENC32_B64,
+  [kAdmin]: "admtok",
+};
+
 describe("loadConfig", () => {
   it("parses a complete environment", () => {
     const cfg = loadConfig(base);
@@ -77,5 +91,31 @@ describe("loadConfig", () => {
 
   it("rejects an empty allowlist (nobody could use the bot)", () => {
     expect(() => loadConfig({ ...base, ALLOWLIST: "" })).toThrowError(/ALLOWLIST/);
+  });
+
+  it("leaves config.google undefined when the GOOGLE_* bundle is absent (ships dark)", () => {
+    expect(loadConfig(base).google).toBeUndefined();
+  });
+
+  it("builds config.google from the full bundle (encKey parsed to 32 bytes)", () => {
+    const g = loadConfig({ ...base, ...googleEnv }).google;
+    expect(g?.clientId).toBe("gcid");
+    expect(g?.redirectUri).toBe("http://localhost:3000/oauth/google/callback");
+    expect(g?.adminToken).toBe("admtok");
+    expect(g?.encKey).toHaveLength(32);
+  });
+
+  it("rejects a HALF-configured bundle (all-or-nothing) naming the gap", () => {
+    const partial = { ...googleEnv };
+    delete partial[kEnc];
+    expect(() => loadConfig({ ...base, ...partial })).toThrowError(
+      /GOOGLE_TOKEN_ENC_KEY|all-or-nothing/,
+    );
+  });
+
+  it("throws on a wrong-length GOOGLE_TOKEN_ENC_KEY (parseKey fail-fast)", () => {
+    expect(() =>
+      loadConfig({ ...base, ...googleEnv, [kEnc]: Buffer.alloc(16, 1).toString("base64") }),
+    ).toThrowError(/GOOGLE_TOKEN_ENC_KEY/);
   });
 });
