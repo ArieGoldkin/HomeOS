@@ -1,8 +1,15 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
+import { TransientError } from "../../src/core/errors.ts";
 import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
-import { extractEventsTool, type ToolContext } from "../../src/tools/tools.ts";
+import {
+  buildGmailQuery,
+  extractEventsTool,
+  type GmailToolDeps,
+  readGmailTool,
+  type ToolContext,
+} from "../../src/tools/tools.ts";
 
 const sampleEvent: ParsedEvent = {
   kind: "event",
@@ -121,5 +128,127 @@ describe("extractEventsTool", () => {
     };
     expect(json.type).toBe("object");
     expect(json.properties).toHaveProperty("text");
+  });
+});
+
+// A fake Gmail seam: a connected credential (non-expired), a mock read client, mock oauth client.
+function makeGoogle(over: Record<string, unknown> = {}): GmailToolDeps {
+  return {
+    client: {
+      list: vi.fn(async () => []),
+      get: vi.fn(async (_t: string, id: string) => ({
+        id,
+        subject: `subj ${id}`,
+        bodyText: `body ${id}`,
+      })),
+    },
+    oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
+    credentials: {
+      get: vi.fn(() => ({
+        accessToken: "acc",
+        refreshToken: "ref",
+        expiry: "2099-01-01 00:00:00",
+        scopes: [],
+      })),
+      updateTokens: vi.fn(),
+      delete: vi.fn(),
+    },
+    maxMessages: 10,
+    queryWindow: "newer_than:7d",
+    allowedLabels: ["family"],
+    ...over,
+  } as unknown as GmailToolDeps;
+}
+
+describe("buildGmailQuery (server-clamped, G8)", () => {
+  it("always applies the recency window", () => {
+    expect(buildGmailQuery({}, { queryWindow: "newer_than:7d" })).toBe("newer_than:7d");
+  });
+  it("honours an allowlisted label and drops a non-allowlisted one", () => {
+    const deps = { queryWindow: "newer_than:7d", allowedLabels: ["family"] };
+    expect(buildGmailQuery({ label: "family" }, deps)).toBe("newer_than:7d label:family");
+    expect(buildGmailQuery({ label: "evil" }, deps)).toBe("newer_than:7d");
+  });
+  it("sanitises fromSender so the model can't inject Gmail operators", () => {
+    expect(
+      buildGmailQuery({ fromSender: "a@b.com OR is:starred" }, { queryWindow: "newer_than:7d" }),
+    ).toBe("newer_than:7d from:a@b.comORisstarred");
+  });
+});
+
+describe("readGmailTool (#72)", () => {
+  it("is opt-in: no ctx.google → { saved: [] }, zero parse calls", async () => {
+    const parse = vi.fn();
+    const { ctx } = makeCtx();
+    expect((await readGmailTool(parse).run({}, ctx)).saved).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+  });
+
+  it("not connected (no credential) → { saved: [] }, ZERO Gmail and parse calls", async () => {
+    const google = makeGoogle({
+      credentials: { get: vi.fn(() => null), updateTokens: vi.fn(), delete: vi.fn() },
+    });
+    const parse = vi.fn();
+    const { ctx } = makeCtx({ google });
+    expect((await readGmailTool(parse).run({}, ctx)).saved).toEqual([]);
+    expect(google.client.list).not.toHaveBeenCalled();
+    expect(parse).not.toHaveBeenCalled();
+  });
+
+  it("connected: lists → fetches → parses subject+body → persists under gmail:<id> tagged google", async () => {
+    const google = makeGoogle({
+      client: {
+        list: vi.fn(async () => [
+          { id: "m1", threadId: "t1" },
+          { id: "m2", threadId: "t2" },
+        ]),
+        get: vi.fn(async (_t: string, id: string) => ({
+          id,
+          subject: `subj ${id}`,
+          bodyText: `body ${id}`,
+        })),
+      },
+    });
+    const parse = vi.fn(async () => [sampleEvent]);
+    const { ctx, saveEvent } = makeCtx({ google });
+    const out = await readGmailTool(parse).run({}, ctx);
+
+    expect(google.client.list).toHaveBeenCalledWith("acc", "newer_than:7d", 10);
+    expect(parse).toHaveBeenCalledWith("subj m1\nbody m1", "2026-06-20", undefined);
+    expect(saveEvent).toHaveBeenCalledWith(sampleEvent, {
+      fromPhone: "972501234567",
+      waMessageId: "gmail:m1",
+      seq: 0,
+      sourceProvider: "google",
+    });
+    expect(out.saved).toHaveLength(2);
+    expect(out.saved.every((e) => e.source_provider === "google")).toBe(true);
+  });
+
+  it("clamps the model's query hints (label allowlisted + fromSender sanitised)", async () => {
+    const google = makeGoogle({
+      allowedLabels: ["gan"],
+      client: { list: vi.fn(async () => []), get: vi.fn() },
+    });
+    const { ctx } = makeCtx({ google });
+    await readGmailTool(vi.fn()).run({ label: "gan", fromSender: "teacher@gan.il; DROP" }, ctx);
+    expect(google.client.list).toHaveBeenCalledWith(
+      "acc",
+      "newer_than:7d label:gan from:teacher@gan.ilDROP",
+      10,
+    );
+  });
+
+  it("propagates a Gmail TransientError out of run (→ inbound row stays pending)", async () => {
+    const google = makeGoogle({
+      client: {
+        list: vi.fn(async () => {
+          throw new TransientError("gmail 429");
+        }),
+        get: vi.fn(),
+      },
+    });
+    const { ctx } = makeCtx({ google });
+    await expect(readGmailTool(vi.fn()).run({}, ctx)).rejects.toBeInstanceOf(TransientError);
   });
 });

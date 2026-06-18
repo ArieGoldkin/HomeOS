@@ -3,6 +3,7 @@ import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
+import type { GmailToolDeps } from "../tools/tools.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
@@ -23,6 +24,8 @@ export interface HandlerDeps {
   maxPerSenderPerDay?: number;
   /** Inbound queue — also the per-sender daily counter for G16. Required by `ProcessDeps`; optional here. */
   inbound?: InboundStore;
+  /** Gmail tool deps (#72) — present only when the GOOGLE_* bundle is configured. Drives the `סנכרן מייל` sync. */
+  google?: GmailToolDeps;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -41,6 +44,14 @@ const CANCEL_NONE_HE = "אין מה לבטל 🤷";
 const RATE_LIMIT_HE = "הגעת למכסת ההודעות היומית 🙏 נמשיך מחר.";
 /** One-word undo: deletes the events from the sender's last message so a misparse is recoverable. */
 const CANCEL_TRIGGER = "ביטול";
+/** Deterministic Gmail-sync command (#72) — sibling to ביטול; forces `read_gmail` on turn 0 (keeps G4). */
+const SYNC_MAIL_TRIGGER = "סנכרן מייל";
+/** The trusted internal intent handed to the agent for the sync (NOT untrusted forwarded text). */
+const SYNC_INTENT = "Sync the family's recent matching emails into the board.";
+const NOT_CONNECTED_HE = "חשבון Google לא מחובר 🔌 כדי לסנכרן מייל צריך קודם לחבר את החשבון.";
+const SYNC_NONE_HE = "לא נמצאו אירועים חדשים במייל 📭";
+/** A permanent Gmail failure (e.g. a 4xx on a revoked/scope-changed token) — the explicit סנכרן מייל command deserves a reply, not silence. */
+const SYNC_FAILED_HE = "הסנכרון נכשל 🙁 נסו שוב מאוחר יותר.";
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
@@ -127,6 +138,8 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
+  const today = jerusalemToday((deps.now ?? (() => new Date()))());
+
   // Undo: a bare "ביטול" removes the sender's last message's events — caught before parse so it's
   // never sent to Claude. The confirm (with the resolved Hebrew date) is what makes a misparse
   // catchable; this is the recovery.
@@ -137,6 +150,54 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
+  // Gmail sync (#72): a bare "סנכרן מייל" pulls the family's recent matching emails onto the board.
+  // Deterministic route (sibling to ביטול) → an agent run that forces `read_gmail` on turn 0 (keeps
+  // G4). Opt-in: with no Google bundle or no stored credential we reply "connect first" and make ZERO
+  // Gmail/parse/model calls. The command already counted against the G16 ceiling above.
+  if (text === SYNC_MAIL_TRIGGER) {
+    if (!deps.google?.credentials.get(FAMILY_ID)) {
+      log("sync mail — not connected", { from: msg.from });
+      await deps.sendText(msg.from, NOT_CONNECTED_HE);
+      return;
+    }
+    let synced: SavedEvent[] | null;
+    try {
+      synced = await deps.agent.run(
+        SYNC_INTENT,
+        {
+          todayIso: today,
+          from: msg.from,
+          waMessageId: msg.id,
+          senderName: deps.members?.[msg.from],
+          familyId: FAMILY_ID,
+          events: deps.events,
+          google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
+        },
+        { forceTool: "read_gmail" },
+      );
+    } catch (err) {
+      if (err instanceof TransientError) {
+        // A Gmail blip (429/5xx/network) → "try again" and rethrow so the row stays pending for replay.
+        log("transient gmail sync", { id: msg.id });
+        await deps.sendText(msg.from, TRANSIENT_HE);
+      } else {
+        // A permanent Gmail failure (e.g. a 4xx on a token Google rejected mid-run) — acknowledge the
+        // user's explicit command instead of leaving them in silence, then rethrow so the row settles
+        // as failed (G10: permanent, not replayed).
+        log("gmail sync failed (permanent)", { id: msg.id, error: String(err) });
+        await deps.sendText(msg.from, SYNC_FAILED_HE);
+      }
+      throw err;
+    }
+    if (!synced || synced.length === 0) {
+      await deps.sendText(msg.from, SYNC_NONE_HE);
+      return;
+    }
+    log("synced gmail events", { from: msg.from, count: synced.length });
+    await deps.sendText(msg.from, formatConfirm(synced));
+    return;
+  }
+
   // G2: input-length cap — short-circuit before the model ever sees an oversized payload.
   if (text.length > MAX_INPUT) {
     log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
@@ -144,7 +205,6 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  const today = jerusalemToday((deps.now ?? (() => new Date()))());
   let saved: SavedEvent[] | null;
   try {
     // The agent decides parse-vs-act, runs a tool, and the TOOL persists its own rows (#71) — the

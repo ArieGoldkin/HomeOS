@@ -7,7 +7,7 @@ import { createInboundStore } from "../../src/db/inbound-store.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ParseMessage } from "../../src/parsing/parser.ts";
-import { extractEventsTool } from "../../src/tools/tools.ts";
+import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../../src/tools/tools.ts";
 
 /**
  * Integration harness: the REAL stores (in-memory SQLite), the REAL agent loop + processInbound +
@@ -60,6 +60,14 @@ const callModel: CallModel = async (req) => {
   ) {
     return { stop_reason: "end_turn", content: [] };
   }
+  // Honour turn-0 forced tool: the sync intent forces read_gmail.
+  const forced = req.tool_choice.type === "tool" ? req.tool_choice.name : "extract_events";
+  if (forced === "read_gmail") {
+    return {
+      stop_reason: "tool_use",
+      content: [{ type: "tool_use", id: "tu_gmail", name: "read_gmail", input: {} }],
+    };
+  }
   const wrapped = typeof req.messages[0]?.content === "string" ? req.messages[0].content : "";
   const text = wrapped
     .replace(/^Forwarded message to process:\n<forwarded>\n/, "")
@@ -70,14 +78,23 @@ const callModel: CallModel = async (req) => {
   };
 };
 
-function makeSystem(parseImpl: ParseMessage = parse, members: Record<string, string> = {}) {
+function makeSystem(
+  parseImpl: ParseMessage = parse,
+  members: Record<string, string> = {},
+  google?: GmailToolDeps,
+) {
   const events = createEventStore(":memory:");
   const inbound = createInboundStore(":memory:");
   const sent: Array<{ to: string; body: string }> = [];
   const sendText = async (to: string, body: string) => {
     sent.push({ to, body });
   };
-  const agent = createAgent({ callModel, tools: [extractEventsTool(parseImpl)] });
+  const agent = createAgent({
+    callModel,
+    tools: google
+      ? [extractEventsTool(parseImpl), readGmailTool(parseImpl)]
+      : [extractEventsTool(parseImpl)],
+  });
   const runInbound = (msg: InboundMessage): Promise<void> =>
     processInbound(msg, {
       allowlist,
@@ -86,6 +103,7 @@ function makeSystem(parseImpl: ParseMessage = parse, members: Record<string, str
       sendText,
       inbound,
       members,
+      google,
       now: () => new Date("2026-06-20T09:00:00Z"),
     });
   const app = createServer({
@@ -221,5 +239,54 @@ describe("integration: webhook → queue → store → confirm → read → undo
     });
 
     expect(sys.events.listEvents()[0]?.assignee).toBe("אבא");
+  });
+
+  it("syncs Gmail on 'סנכרן מייל' → board rows tagged google, idempotent on re-run, purgeable (#72)", async () => {
+    const emails = [
+      { id: "g1", subject: "אסיפת הורים", bodyText: "מחר ב-18:30" },
+      { id: "g2", subject: "חוג כדורגל", bodyText: "ביום שלישי" },
+    ];
+    const gmail = {
+      client: {
+        list: async () => emails.map((m) => ({ id: m.id, threadId: "t" })),
+        get: async (_t: string, id: string) => emails.find((m) => m.id === id),
+      },
+      oauthClient: {
+        exchangeCode: async () => ({}),
+        refresh: async () => ({}),
+        revoke: async () => {},
+      },
+      credentials: {
+        get: () => ({
+          accessToken: "acc",
+          refreshToken: "ref",
+          expiry: "2099-01-01 00:00:00",
+          scopes: [],
+        }),
+        updateTokens: () => {},
+        delete: () => {},
+      },
+      maxMessages: 10,
+      queryWindow: "newer_than:7d",
+      allowedLabels: [],
+    } as unknown as GmailToolDeps;
+    const sys = makeSystem(parse, {}, gmail);
+
+    // First sync → two rows (one per email), both tagged source_provider="google".
+    expect((await post(sys.app, webhook("wamid.s1", "סנכרן מייל"))).status).toBe(200);
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(1));
+    const rows = sys.events.listEvents();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.source_provider === "google")).toBe(true);
+    expect(sys.sent.at(-1)?.body).toContain("הוספתי");
+
+    // Re-sync (same gmail ids) → idempotent on gmail:<id>: still two rows (AC4).
+    expect((await post(sys.app, webhook("wamid.s2", "סנכרן מייל"))).status).toBe(200);
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(2));
+    expect(sys.events.listEvents()).toHaveLength(2);
+
+    // Disconnect purge — the #61 seam, now activated by the google tag.
+    expect(sys.events.deleteByProvider("google")).toBe(2);
+    expect(sys.events.listEvents()).toHaveLength(0);
   });
 });

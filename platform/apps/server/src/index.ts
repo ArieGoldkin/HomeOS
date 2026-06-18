@@ -8,12 +8,13 @@ import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
+import { httpGmailClient } from "./google/gmail.ts";
 import { buildGoogleDeps } from "./http/oauth-routes.ts";
 import { createServer } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
 import { noopUploader, scheduleBackup } from "./infra/backup.ts";
 import { anthropicRawParse, createParser } from "./parsing/parser.ts";
-import { extractEventsTool } from "./tools/tools.ts";
+import { extractEventsTool, type GmailToolDeps, readGmailTool } from "./tools/tools.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
 
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).
@@ -27,11 +28,32 @@ const events = createEventStore(config.dbPath);
 const inbound = createInboundStore(config.dbPath);
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
-// The tool-using agent: a bounded loop whose one tool (extract_events) reuses `parse`. Two model
-// surfaces, one credential — messages.create drives the loop, messages.parse does the extraction.
+
+// 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
+// so the routes ship dark (503). The credential store opens its own connection on the same DB file.
+const googleDeps = config.google
+  ? buildGoogleDeps(config.google, config.dbPath, events, log)
+  : undefined;
+
+// 📧 Gmail tool deps (#72): reuse googleDeps' oauth client + credential store (getValidAccessToken),
+// add the lean read client + the server-owned cost/scope clamps. Present only when Google is configured.
+const gmailDeps: GmailToolDeps | undefined = googleDeps
+  ? {
+      client: httpGmailClient(),
+      oauthClient: googleDeps.client,
+      credentials: googleDeps.credentials,
+      maxMessages: config.gmailMaxMessages,
+      queryWindow: config.gmailQueryWindow,
+      allowedLabels: config.gmailAllowedLabels,
+      log,
+    }
+  : undefined;
+
+// The tool-using agent: a bounded loop reusing `parse`. extract_events handles forwards; read_gmail
+// (registered only when Google is configured) handles the סנכרן מייל sync. Two model surfaces, one credential.
 const agent = createAgent({
   callModel: anthropicCallModel(anthropic, config.anthropicModel),
-  tools: [extractEventsTool(parse)],
+  tools: gmailDeps ? [extractEventsTool(parse), readGmailTool(parse)] : [extractEventsTool(parse)],
   log,
 });
 
@@ -46,14 +68,9 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     inbound,
     members: config.members,
     maxPerSenderPerDay: config.maxPerSenderPerDay,
+    google: gmailDeps,
     log,
   });
-
-// 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
-// so the routes ship dark (503). The credential store opens its own connection on the same DB file.
-const googleDeps = config.google
-  ? buildGoogleDeps(config.google, config.dbPath, events, log)
-  : undefined;
 
 const app = createServer({
   verifyToken: config.verifyToken,

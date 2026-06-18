@@ -63,6 +63,21 @@ const schema = z.object({
   // input cap bounds message *size*; this bounds *rate* — the last unbounded cost axis vs ≤$100/mo.
   // Generous default for a heavy family member; trips only on an abusive/looping device.
   MAX_PER_SENDER_PER_DAY: z.coerce.number().int().positive().default(50),
+  // Gmail ingestion (#17/#72) — only consulted when the GOOGLE_* bundle is configured. Two cost
+  // bounds on the sync command: `MAX_MESSAGES` caps emails fetched+parsed per run, `QUERY_WINDOW`
+  // is the server-side recency clamp baked into every query (G2/§6). `ALLOWED_LABELS` is the set the
+  // model's optional label hint is clamped into (G8) — empty = no label filtering allowed.
+  GMAIL_MAX_MESSAGES: z.coerce.number().int().positive().default(10),
+  GMAIL_QUERY_WINDOW: z.string().min(1).default("newer_than:7d"),
+  GMAIL_ALLOWED_LABELS: z
+    .string()
+    .default("")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0),
+    ),
 });
 
 /** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
@@ -90,6 +105,9 @@ export interface Config {
   digestHour: number;
   backupHour: number;
   maxPerSenderPerDay: number;
+  gmailMaxMessages: number;
+  gmailQueryWindow: string;
+  gmailAllowedLabels: string[];
   google?: GoogleOAuthSettings;
 }
 
@@ -155,6 +173,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     digestHour: e.DIGEST_HOUR,
     backupHour: e.BACKUP_HOUR,
     maxPerSenderPerDay: e.MAX_PER_SENDER_PER_DAY,
+    gmailMaxMessages: e.GMAIL_MAX_MESSAGES,
+    gmailQueryWindow: e.GMAIL_QUERY_WINDOW,
+    gmailAllowedLabels: e.GMAIL_ALLOWED_LABELS,
     google: readGoogleBundle(env),
   };
 }
