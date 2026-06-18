@@ -1,0 +1,285 @@
+/* ============================================================================
+ * HomeOS — "Editorial Paper × shadcn" design tokens (globals.css)
+ * ----------------------------------------------------------------------------
+ * Tailwind v4 (CSS-first, no tailwind.config.js) + shadcn/ui (copy-in).
+ * Single source of truth: every shadcn component inherits these variables, so
+ * the skin is applied mechanically (the anti-slop defense) — never per-component.
+ *
+ * Source of truth for: docs/design/DESIGN.md.
+ * Destination: copy to platform/apps/web/src/globals.css when the frontend is
+ * scaffolded (React + Vite + TS + Tailwind v4 + shadcn, scaffolded `init --rtl`).
+ *
+ * Locked from: the v0 explorer + the design-research workflow (shadcn theming,
+ * 21st.dev, 2026 trends, RTL/Hebrew, motion) + the design playground.
+ * Light is :root; the always-on tablet NIGHT variant is [data-theme="night"].
+ * Colors are OKLCH and warm-tinted — never pure #000/#FFF, never zinc/slate.
+ * ========================================================================== */
+
+@import "tailwindcss";
+
+/* Night/dark variant is driven by a data attribute (manual control on the
+ * always-on tablet), not only by prefers-color-scheme. `dark:` utilities map to it. */
+@custom-variant dark (&:where([data-theme="night"], [data-theme="night"] *));
+
+/* ----------------------------------------------------------------------------
+ * 1. SEMANTIC TOKENS — light (paper)
+ * -------------------------------------------------------------------------- */
+:root {
+  --background: oklch(0.965 0.012 80);          /* warm paper-0 (#FAF7F1) */
+  --foreground: oklch(0.22 0.02 60);            /* warm brown-ink (#1F1B16), not black */
+
+  --card: oklch(0.945 0.014 80);                /* raised paper-1 (#F4EFE6) */
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.945 0.014 80);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.52 0.13 38);               /* terracotta (#B5512E) — the ONE accent */
+  --primary-foreground: oklch(0.965 0.012 80);  /* paper on terracotta */
+
+  --secondary: oklch(0.915 0.016 78);           /* paper-2 (#ECE5D8) — absence of color, not a 2nd hue */
+  --secondary-foreground: oklch(0.34 0.02 60);  /* ink-2 (#4A443B) */
+
+  --muted: oklch(0.915 0.016 78);
+  --muted-foreground: oklch(0.56 0.018 70);     /* ink-3 (#7C7567), meta only (>=14px) */
+
+  --accent: oklch(0.915 0.016 78);              /* kept NEUTRAL on purpose (hover/selected = paper, not a hue) */
+  --accent-foreground: var(--secondary-foreground);
+
+  --destructive: oklch(0.51 0.15 28);           /* warm-red — distinct from primary, still in the warm world */
+  --destructive-foreground: oklch(0.965 0.012 80);
+
+  --border: oklch(0.86 0.016 78);               /* warm low-chroma hairline (#DED6C7) */
+  --input: oklch(0.82 0.018 78);                /* slightly stronger (#C8BEAC) */
+  --ring: var(--primary);                        /* focus ring IS terracotta — single-accent in tokens */
+
+  --radius: 0.1875rem;                           /* 3px — deliberate small editorial radius (NOT the 10px tell) */
+
+  /* charts: derive from the one accent + warm neutral steps (never a rainbow) */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.62 0.045 58);
+  --chart-3: oklch(0.70 0.030 74);
+  --chart-4: oklch(0.78 0.022 82);
+  --chart-5: oklch(0.46 0.050 48);
+
+  /* phone sidebar/nav (text labels, never emoji icons) */
+  --sidebar: oklch(0.945 0.014 80);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.915 0.016 78);
+  --sidebar-accent-foreground: var(--secondary-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* fonts: Hebrew-first; serif display is the cultural signature */
+  --font-sans: "Assistant", system-ui, -apple-system, sans-serif;
+  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif;
+  --font-display: var(--font-serif);
+
+  /* -- THREE SIGNATURE TOKENS shadcn never ships (the highest-leverage anti-slop move) -- */
+  --hairline: var(--border);                     /* semantic divider color = the editorial structure */
+  --shadow-paper: inset 0 1px 0 oklch(0.995 0.012 80); /* the ONE bespoke shadow, used everywhere (no generic drop shadows) */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.05;                          /* near-zero by default — human-authorship signal, never noisy */
+
+  /* family-board kind language — signal via a PIP or serif title-color, NEVER a colored left-border */
+  --event: var(--muted-foreground);
+  --task: var(--muted-foreground);
+  --reminder: var(--primary);
+
+  /* assignee palette — 5 muted, harmonious "ink" hues (+ a washed background each) */
+  --who-1: #7A5C9E; --who-1-wash: #ECE5F2;       /* plum */
+  --who-2: #3E6B8A; --who-2-wash: #E1E9EF;       /* slate-blue */
+  --who-3: #4F6F52; --who-3-wash: #E4EAE2;       /* sage */
+  --who-4: #A8612C; --who-4-wash: #F1E6D9;       /* ochre */
+  --who-5: #9B4659; --who-5-wash: #F1E1E4;       /* rose-brown */
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. SEMANTIC TOKENS — NIGHT (always-on tablet; warm dark, never cold zinc)
+ * -------------------------------------------------------------------------- */
+[data-theme="night"] {
+  --background: oklch(0.20 0.012 60);            /* warm near-black paper (#181410) */
+  --foreground: oklch(0.93 0.018 80);            /* warm light ink (#F2ECE0) */
+
+  --card: oklch(0.235 0.014 60);                 /* #211C16 */
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.255 0.016 60);              /* #2C261E */
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.68 0.12 45);                /* softened/lightened terracotta (#E08254) for warmth + contrast */
+  --primary-foreground: oklch(0.20 0.012 60);
+
+  --secondary: oklch(0.255 0.016 60);
+  --secondary-foreground: oklch(0.81 0.016 78);
+  --muted: oklch(0.235 0.014 60);
+  --muted-foreground: oklch(0.66 0.02 75);       /* #9A8F7C */
+
+  --accent: oklch(0.255 0.016 60);
+  --accent-foreground: oklch(0.81 0.016 78);
+
+  --destructive: oklch(0.60 0.15 28);
+  --destructive-foreground: oklch(0.20 0.012 60);
+
+  --border: oklch(0.31 0.014 60);                /* #393026 */
+  --input: oklch(0.345 0.016 60);
+  --ring: var(--primary);
+
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.66 0.05 58);
+  --chart-3: oklch(0.74 0.035 74);
+  --chart-4: oklch(0.80 0.025 82);
+  --chart-5: oklch(0.56 0.055 48);
+
+  --sidebar: oklch(0.235 0.014 60);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(0.255 0.016 60);
+  --sidebar-accent-foreground: var(--secondary-foreground);
+  --sidebar-border: var(--border);
+
+  --shadow-paper: none;                          /* dark mode lifts via tone steps, not a white edge */
+  --grain-opacity: 0.03;
+
+  /* assignee hues lifted for dark paper; washes go deep, not pale */
+  --who-1: #B79AD6; --who-1-wash: #2C2436;
+  --who-2: #7FA8C6; --who-2-wash: #1F2B34;
+  --who-3: #93B58C; --who-3-wash: #232E22;
+  --who-4: #D69A5F; --who-4-wash: #332619;
+  --who-5: #C98797; --who-5-wash: #321F24;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. @theme inline — surface the tokens as Tailwind v4 utilities
+ *    (bg-background, text-foreground, border-border, rounded-md, font-display,
+ *     shadow-paper, text-who-3, etc.). `inline` = utilities read the live vars,
+ *     so theme swaps just work.
+ * -------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-hairline: var(--hairline);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-event: var(--event);
+  --color-task: var(--task);
+  --color-reminder: var(--reminder);
+  --color-who-1: var(--who-1);
+  --color-who-2: var(--who-2);
+  --color-who-3: var(--who-3);
+  --color-who-4: var(--who-4);
+  --color-who-5: var(--who-5);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-display: var(--font-display);
+
+  /* radius scale derived from the one --radius (shadcn convention) */
+  --radius-sm: calc(var(--radius) - 1px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 5px);
+
+  /* the bespoke shadow as a utility: shadow-paper */
+  --shadow-paper: var(--shadow-paper);
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. BASE — RTL-first, warm defaults, ledger-grade numerals
+ * -------------------------------------------------------------------------- */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    /* The app root is RTL Hebrew: <html dir="rtl" lang="he"> (scaffold with `init --rtl`). */
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  /* schedule data (times, dates) reads like a well-set ledger */
+  time,
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* display face for headings/dates/event titles */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 5. SIGNATURE HELPERS
+ * -------------------------------------------------------------------------- */
+@layer components {
+  /* paper grain: a near-invisible tactility layer = human-authorship signal.
+   * Apply to the board root: <div class="paper-grain"> ... </div> */
+  .paper-grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .paper-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: var(--grain);
+    opacity: var(--grain-opacity);
+    mix-blend-mode: multiply;
+  }
+  [data-theme="night"] .paper-grain::before {
+    mix-blend-mode: screen;
+  }
+
+  /* the editorial divider — the primary structural element (used INSTEAD of boxed cards) */
+  .hairline {
+    border-color: var(--hairline);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. MOTION — restrained, composite-only, reduced-motion as table stakes
+ * -------------------------------------------------------------------------- */
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

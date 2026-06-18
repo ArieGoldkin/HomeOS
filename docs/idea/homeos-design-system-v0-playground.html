@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="he" dir="rtl" data-theme="day">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HomeOS · Editorial Paper — Design System v0 (iteration)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   HomeOS — "Editorial Paper" tokens (v0 synthesis)
+   Light = :root (default). Night = [data-theme="night"].
+   Use SEMANTIC tokens in components, never raw palette.
+   ============================================================ */
+:root{
+  /* paper / surface */
+  --paper-0:#FAF7F1; --paper-1:#F4EFE6; --paper-2:#ECE5D8; --paper-edge:#FFFFFF;
+  /* ink / text */
+  --ink-1:#1F1B16; --ink-2:#4A443B; --ink-3:#7C7567; --ink-inverse:#FAF7F1;
+  /* accent (terracotta) */
+  --accent:#B5512E; --accent-strong:#983F20; --accent-wash:#F1E2DB;
+  /* rules */
+  --rule:#DED6C7; --rule-strong:#C8BEAC;
+  /* status */
+  --ok:#4F6F52;
+  /* assignee */
+  --who-1:#7A5C9E; --who-2:#3E6B8A; --who-3:#4F6F52; --who-4:#A8612C; --who-5:#9B4659;
+  --who-1-wash:#ECE5F2; --who-2-wash:#E1E9EF; --who-3-wash:#E4EAE2; --who-4-wash:#F1E6D9; --who-5-wash:#F1E1E4;
+  /* type */
+  --font-display:"Frank Ruhl Libre",Georgia,"Times New Roman",serif;
+  --font-body:"Assistant","Segoe UI",system-ui,sans-serif;
+  /* spacing */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px; --space-7:48px; --space-8:64px;
+  /* radius */
+  --radius-1:3px; --radius-2:6px; --radius-full:999px;
+  /* elevation */
+  --elev-card:inset 0 1px 0 var(--paper-edge);
+  --elev-float:0 1px 2px rgba(31,27,22,.06),0 2px 8px rgba(31,27,22,.05);
+  /* motion */
+  --motion-instant:90ms; --motion-quick:180ms; --motion-base:280ms; --motion-slow:520ms;
+  --ease-settle:cubic-bezier(0.22,0.61,0.36,1);
+  --ease-page:cubic-bezier(0.40,0.00,0.20,1);
+  --ease-draw:cubic-bezier(0.65,0.00,0.35,1);
+}
+[data-theme="night"]{
+  --paper-0:#181410; --paper-1:#211C16; --paper-2:#2C261E; --paper-edge:#2C261E;
+  --ink-1:#F2ECE0; --ink-2:#CDC4B4; --ink-3:#9A8F7C; --ink-inverse:#181410;
+  --accent:#E08254; --accent-strong:#EE9468; --accent-wash:#3A2A20;
+  --rule:#393026; --rule-strong:#4A4031;
+  --ok:#8FB088;
+  --who-1:#B79AD6; --who-2:#7FA8C6; --who-3:#93B58C; --who-4:#D69A5F; --who-5:#C98797;
+  --who-1-wash:#2C2436; --who-2-wash:#1F2B34; --who-3-wash:#232E22; --who-4-wash:#332619; --who-5-wash:#321F24;
+  --elev-card:none;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper-0); color:var(--ink-1);
+  font-family:var(--font-body); font-weight:400;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  transition:background var(--motion-slow) var(--ease-page), color var(--motion-slow) var(--ease-page);
+}
+time,.tnum{font-variant-numeric:tabular-nums}
+
+/* ---- page chrome (the explorer scaffold, not the product) ---- */
+.wrap{max-width:1180px;margin-inline:auto;padding:var(--space-6) var(--space-5) var(--space-8)}
+.topbar{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);
+  border-block-end:1px solid var(--rule-strong);padding-block-end:var(--space-4);margin-block-end:var(--space-6)}
+.topbar h1{font-family:var(--font-display);font-weight:700;font-size:clamp(1.4rem,1.1rem+1.4vw,2rem);margin:0;letter-spacing:-.01em}
+.topbar .sub{color:var(--ink-3);font-size:.85rem}
+.toggle{font-family:var(--font-body);font-weight:600;font-size:.8rem;letter-spacing:.02em;
+  color:var(--ink-2);background:var(--paper-1);border:1px solid var(--rule-strong);
+  border-radius:var(--radius-2);padding:var(--space-2) var(--space-4);cursor:pointer;
+  box-shadow:var(--elev-card);transition:background var(--motion-quick) var(--ease-settle)}
+.toggle:hover{background:var(--paper-2)}
+.toggle:focus-visible{outline:2px solid var(--accent-strong);outline-offset:2px}
+
+.eyebrow{font-family:var(--font-body);font-weight:600;font-size:.72rem;letter-spacing:.12em;
+  color:var(--ink-3);text-transform:none;margin-block:var(--space-7) var(--space-3)}
+.eyebrow:first-of-type{margin-block-start:0}
+.caption{color:var(--ink-3);font-size:.8rem;margin-block-start:var(--space-2);max-width:60ch;line-height:1.5}
+
+.stage{display:flex;flex-wrap:wrap;gap:var(--space-6);align-items:flex-start}
+
+/* ============================================================
+   DEVICE FRAMES (context only — thin, not skeuomorphic)
+   ============================================================ */
+.device{background:var(--paper-0);border:1px solid var(--rule-strong);border-radius:14px;
+  box-shadow:var(--elev-float);overflow:hidden}
+.device .bezel{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);
+  border-block-end:1px solid var(--rule);color:var(--ink-3);font-size:.7rem;letter-spacing:.08em}
+.device .bezel .dot{inline-size:7px;block-size:7px;border-radius:var(--radius-full);background:var(--rule-strong)}
+.tablet{inline-size:680px;max-inline-size:100%}
+.phone{inline-size:330px}
+
+/* ============================================================
+   BOARD primitives shared across views
+   ============================================================ */
+.board{padding:var(--space-5) var(--space-5) var(--space-6)}
+.masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--space-4);
+  margin-block-end:var(--space-4)}
+.masthead .brand{font-family:var(--font-display);font-weight:700;font-size:1.05rem;color:var(--ink-2);letter-spacing:-.01em}
+.masthead .date{font-family:var(--font-display);font-weight:700;line-height:1.05;letter-spacing:-.01em}
+.masthead .date .big{display:block;font-size:clamp(1.6rem,1.2rem+1.8vw,2.4rem);color:var(--ink-1)}
+.masthead .date .small{font-size:.8rem;font-family:var(--font-body);font-weight:600;color:var(--accent-strong);letter-spacing:.06em}
+.rule{block-size:1px;background:var(--rule-strong);border:0;margin:0}
+
+/* time-spine (tablet TODAY) */
+.spine{display:grid;grid-template-columns:auto 1fr;gap:0 var(--space-4)}
+.slot{display:contents}
+.slot .t{font-family:var(--font-body);font-weight:600;font-size:1.05rem;color:var(--ink-2);
+  padding-block:var(--space-4);text-align:start;white-space:nowrap}
+.slot .line{border-block-start:1px solid var(--rule)}
+.slot:first-child .line,.slot:first-child .t{border-block-start:0}
+
+/* EVENT CARD */
+.card{padding:var(--space-4) 0;position:relative}
+.card .title{font-family:var(--font-display);font-weight:500;line-height:1.25;color:var(--ink-1);
+  font-size:clamp(1.1rem,1rem+.5vw,1.4rem)}
+.card .meta{display:flex;align-items:center;gap:var(--space-3);margin-block-start:var(--space-2);
+  color:var(--ink-2);font-size:.9rem;flex-wrap:wrap}
+.card .meta .loc::before{content:"·";margin-inline-end:var(--space-3);color:var(--ink-3)}
+.footer{display:flex;align-items:center;gap:var(--space-3);margin-block-start:var(--space-3);flex-wrap:wrap}
+
+/* kind = FORM, not color */
+.card.task .title{display:flex;align-items:baseline;gap:var(--space-2)}
+.checkbox{inline-size:1.05em;block-size:1.05em;border:1.5px solid var(--rule-strong);border-radius:var(--radius-2);
+  flex:0 0 auto;display:inline-block;transform:translateY(.12em)}
+.card.done .title{color:var(--ink-3)}
+.card.done .title .label{text-decoration:line-through}
+.card.done .checkbox{background:var(--ok);border-color:var(--ok);position:relative}
+.card.done .checkbox::after{content:"";position:absolute;inset-block-start:1px;inset-inline-start:3px;
+  inline-size:4px;block-size:8px;border:2px solid var(--ink-inverse);border-block-start:0;border-inline-start:0;transform:rotate(45deg)}
+.card.reminder{padding-inline-start:var(--space-4);border-inline-start:2px solid var(--accent)}
+.card.reminder .title{color:var(--accent-strong)}
+
+/* assignee chip */
+.chip{display:inline-flex;align-items:center;gap:var(--space-1);padding:var(--space-1) var(--space-2);
+  border-radius:var(--radius-2);font-weight:600;font-size:.8rem;letter-spacing:.01em}
+.chip .pip{inline-size:8px;block-size:8px;border-radius:var(--radius-full);flex:0 0 auto}
+.who1{color:var(--who-1);background:var(--who-1-wash)} .who1 .pip{background:var(--who-1)}
+.who2{color:var(--who-2);background:var(--who-2-wash)} .who2 .pip{background:var(--who-2)}
+.who3{color:var(--who-3);background:var(--who-3-wash)} .who3 .pip{background:var(--who-3)}
+.who5{color:var(--who-5);background:var(--who-5-wash)} .who5 .pip{background:var(--who-5)}
+.whoall{color:var(--ink-2);background:var(--paper-2)} .whoall .pip{background:var(--ink-3)}
+
+/* recurrence marker */
+.recur{color:var(--ink-3);font-size:.82rem;display:inline-flex;align-items:center;gap:4px}
+.recur .g{font-size:.95em}
+
+/* "anytime today" band + tomorrow peek (tablet side rail) */
+.rail{border-inline-start:1px solid var(--rule);padding-inline-start:var(--space-5)}
+.band-label{font-family:var(--font-body);font-weight:600;font-size:.72rem;letter-spacing:.1em;color:var(--ink-3);margin-block-end:var(--space-3)}
+.anytime .card{padding-block:var(--space-3)}
+.peek{margin-block-start:var(--space-6)}
+.peek .pi{display:flex;gap:var(--space-2);align-items:baseline;color:var(--ink-2);font-size:.92rem;padding-block:var(--space-2);border-block-start:1px solid var(--rule)}
+.peek .pi time{color:var(--ink-3);font-size:.82rem}
+
+/* now-line (tablet ambient) */
+.nowline{position:relative;block-size:0;border-block-start:1.5px solid var(--accent)}
+.nowline::before{content:"עכשיו · 15:48";position:absolute;inset-block-start:-9px;inset-inline-start:0;
+  background:var(--paper-0);padding-inline-end:var(--space-2);color:var(--accent-strong);
+  font-size:.7rem;font-weight:700;letter-spacing:.04em}
+
+/* phone WEEK list */
+.week .day{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-3);align-items:center;
+  padding-block:var(--space-3);border-block-start:1px solid var(--rule);cursor:pointer}
+.week .day:first-child{border-block-start:0}
+.week .day .dnum{font-family:var(--font-display);font-weight:500;font-size:1.15rem;color:var(--ink-2);inline-size:1.5em;text-align:center}
+.week .day .dname{color:var(--ink-2);font-size:.95rem}
+.week .day .dname small{display:block;color:var(--ink-3);font-size:.8rem;font-weight:400;margin-block-start:1px}
+.week .day .pips{display:flex;gap:4px}
+.week .day .pips i{inline-size:7px;block-size:7px;border-radius:var(--radius-full);display:inline-block}
+.week .day.today{background:var(--paper-2);margin-inline:calc(var(--space-4) * -1);padding-inline:var(--space-4);border-radius:var(--radius-1)}
+.week .day.today .dnum{color:var(--accent-strong)}
+.week .day.today .dname{color:var(--ink-1);font-weight:600}
+.week .qty{color:var(--ink-3);font-size:.8rem;font-weight:600}
+
+/* phone DAY agenda card surfaces */
+.agenda .card{background:var(--paper-1);box-shadow:var(--elev-card);border-radius:var(--radius-1);
+  padding:var(--space-4);margin-block-end:var(--space-1)}
+.agenda .card.reminder{padding-inline-start:var(--space-4)}
+.agenda .timerow{font-weight:600;color:var(--ink-2);font-size:.95rem;margin-block-end:var(--space-1)}
+
+/* empty state */
+.empty{text-align:center;padding-block:var(--space-7)}
+.empty .g{color:var(--rule-strong);font-size:1.6rem}
+.empty h4{font-family:var(--font-display);font-weight:500;color:var(--ink-2);font-size:1.25rem;margin:var(--space-3) 0 var(--space-1)}
+.empty p{color:var(--ink-3);font-size:.85rem;margin:0}
+
+/* "just added" trust cue: hairline draws in (RTL right→left) + card settles */
+@keyframes drawRule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes settleIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.just-added{animation:settleIn var(--motion-base) var(--ease-settle)}
+.just-added .draw{display:block;block-size:2px;background:var(--accent);transform-origin:right center;
+  animation:drawRule var(--motion-slow) var(--ease-draw);margin-block-end:var(--space-3)}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-5);margin-block-start:var(--space-4)}
+.legend .grp{font-size:.85rem;color:var(--ink-2)}
+.legend .grp b{font-family:var(--font-body);font-weight:600;color:var(--ink-1);display:block;margin-block-end:var(--space-2);font-size:.78rem;letter-spacing:.06em;color:var(--ink-3)}
+.legend .row{display:flex;align-items:center;gap:var(--space-2);padding-block:3px}
+
+@media (prefers-reduced-motion:reduce){
+  .just-added,.just-added .draw{animation:none}
+  *{transition-duration:.01ms !important}
+}
+@media (max-width:720px){ .tablet{inline-size:100%} .stage{gap:var(--space-7)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>HomeOS · לוח המשפחה</h1>
+      <div class="sub">Editorial Paper — design-system v0 · iteration mockup (לא הגרסה הסופית)</div>
+    </div>
+    <button class="toggle" id="themeBtn" aria-label="toggle theme">🌙 מצב לילה</button>
+  </div>
+
+  <!-- ===================== TABLET: TODAY AMBIENT ===================== -->
+  <div class="eyebrow">טאבלט · מבט "היום" — תצוגה אמביינטית, נקראת ממרחק 2 מ׳, ללא מגע</div>
+  <div class="device tablet">
+    <div class="bezel"><span class="dot"></span> KITCHEN TABLET · ALWAYS-ON</div>
+    <div class="board">
+      <div class="masthead">
+        <span class="brand">HomeOS</span>
+        <span class="date">
+          <span class="small">היום</span>
+          <span class="big">ראשון · 18 ביוני</span>
+        </span>
+      </div>
+      <hr class="rule">
+
+      <div class="stage" style="gap:var(--space-6);flex-wrap:nowrap">
+        <!-- time spine (main) -->
+        <div style="flex:1 1 auto;min-inline-size:0">
+          <div class="spine">
+            <div class="slot"><div class="t"><time dir="ltr">08:00</time></div>
+              <div class="line"><div class="card reminder">
+                <div class="title">חולצה לבנה לגן</div>
+                <div class="footer"><span class="chip whoall"><span class="pip"></span>כל המשפחה</span></div>
+              </div></div></div>
+
+            <div class="slot"><div class="t"><time dir="ltr">14:30</time></div>
+              <div class="line"><div class="card">
+                <div class="title">איסוף מהגן</div>
+                <div class="footer"><span class="chip who2"><span class="pip"></span>אבא</span></div>
+              </div></div></div>
+
+            <div class="slot"><div class="t"><time dir="ltr">16:30</time></div>
+              <div class="line"><div class="card">
+                <div class="title">חוג כדורגל</div>
+                <div class="meta"><span class="loc">מגרש קהילתי</span></div>
+                <div class="footer">
+                  <span class="chip who3"><span class="pip"></span>יואב</span>
+                  <span class="recur"><span class="g">↻</span> כל יום א׳</span>
+                </div>
+              </div></div></div>
+
+            <!-- now-line: between 15:48 visually after 14:30, before 16:30 would be more correct;
+                 placed here to demo the ambient now indicator -->
+            <div class="slot"><div class="t"></div><div class="line" style="border:0"><div class="nowline"></div></div></div>
+
+            <div class="slot"><div class="t"><time dir="ltr">19:00</time></div>
+              <div class="line"><div class="card">
+                <div class="title">אסיפת הורים</div>
+                <div class="meta"><span class="loc">גן רימון</span></div>
+                <div class="footer"><span class="chip who5"><span class="pip"></span>הודיה</span></div>
+              </div></div></div>
+          </div>
+        </div>
+
+        <!-- side rail: anytime + tomorrow peek -->
+        <div class="rail" style="flex:0 0 220px">
+          <div class="anytime">
+            <div class="band-label">מתישהו היום</div>
+            <div class="card task">
+              <div class="title"><span class="checkbox"></span><span class="label">לשלם חשבון חשמל</span></div>
+              <div class="footer"><span class="chip who2"><span class="pip"></span>אבא</span></div>
+            </div>
+            <div class="card task" style="border-block-start:1px solid var(--rule)">
+              <div class="title"><span class="checkbox"></span><span class="label">להחזיר ספרים לספרייה</span></div>
+              <div class="footer"><span class="chip who1"><span class="pip"></span>נועה</span></div>
+            </div>
+          </div>
+
+          <div class="peek">
+            <div class="band-label">מחר · יום שני</div>
+            <div class="pi"><time dir="ltr">17:00</time> יום הולדת לסבתא</div>
+            <div class="pi"><time dir="ltr">16:00</time> חוג ציור · נועה</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PHONE: WEEK + DAY ===================== -->
+  <div class="eyebrow">טלפון · "השבוע" (ברירת מחדל) ומסך יום אחרי הקשה</div>
+  <div class="stage">
+
+    <!-- phone WEEK -->
+    <div class="device phone">
+      <div class="bezel"><span class="dot"></span> PHONE · THIS WEEK</div>
+      <div class="board">
+        <div class="masthead">
+          <span class="date"><span class="small" style="color:var(--ink-3)">השבוע</span>
+            <span class="big" style="font-size:1.5rem">16–22 ביוני</span></span>
+        </div>
+        <hr class="rule" style="margin-block:var(--space-3) var(--space-2)">
+        <div class="week">
+          <div class="day today"><span class="dnum">18</span>
+            <span class="dname">ראשון <small>היום</small></span>
+            <span style="display:flex;gap:var(--space-2);align-items:center">
+              <span class="pips"><i style="background:var(--who-2)"></i><i style="background:var(--who-3)"></i><i style="background:var(--who-5)"></i></span>
+              <span class="qty">4</span></span></div>
+          <div class="day"><span class="dnum">19</span><span class="dname">שני</span>
+            <span style="display:flex;gap:var(--space-2);align-items:center"><span class="pips"><i style="background:var(--who-1)"></i></span><span class="qty">2</span></span></div>
+          <div class="day"><span class="dnum">20</span><span class="dname">שלישי</span>
+            <span style="display:flex;gap:var(--space-2);align-items:center"><span class="pips"><i style="background:var(--who-3)"></i></span><span class="qty">1</span></span></div>
+          <div class="day"><span class="dnum">21</span><span class="dname">רביעי <small>חג · חולצה לבנה</small></span>
+            <span style="display:flex;gap:var(--space-2);align-items:center"><span class="pips"><i style="background:var(--ink-3)"></i></span><span class="qty">2</span></span></div>
+          <div class="day"><span class="dnum">22</span><span class="dname">חמישי</span>
+            <span style="display:flex;gap:var(--space-2);align-items:center"><span class="pips"><i style="background:var(--who-5)"></i></span><span class="qty">1</span></span></div>
+          <div class="day"><span class="dnum">23</span><span class="dname">שישי</span><span class="qty">—</span></div>
+          <div class="day"><span class="dnum">24</span><span class="dname">שבת</span><span class="qty">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- phone DAY agenda (drill-down) — includes the "just added" trust cue -->
+    <div class="device phone">
+      <div class="bezel"><span class="dot"></span> PHONE · DAY (ראשון 18)</div>
+      <div class="board agenda">
+        <div class="masthead">
+          <span class="date"><span class="small">היום</span><span class="big" style="font-size:1.5rem">ראשון 18</span></span>
+        </div>
+        <hr class="rule" style="margin-block:var(--space-3) var(--space-4)">
+
+        <div class="card just-added" id="freshCard">
+          <span class="draw"></span>
+          <div class="timerow"><time dir="ltr">19:00</time> · נוסף הרגע</div>
+          <div class="title">אסיפת הורים</div>
+          <div class="meta"><span class="loc">גן רימון</span></div>
+          <div class="footer"><span class="chip who5"><span class="pip"></span>הודיה</span></div>
+        </div>
+
+        <div class="card">
+          <div class="timerow"><time dir="ltr">16:30</time></div>
+          <div class="title">חוג כדורגל</div>
+          <div class="footer"><span class="chip who3"><span class="pip"></span>יואב</span>
+            <span class="recur"><span class="g">↻</span> כל יום א׳</span></div>
+        </div>
+
+        <div class="card task">
+          <div class="title"><span class="checkbox"></span><span class="label">לשלם חשבון חשמל</span></div>
+          <div class="footer"><span class="chip who2"><span class="pip"></span>אבא</span></div>
+        </div>
+
+        <div class="card reminder">
+          <div class="timerow"><time dir="ltr">08:00</time></div>
+          <div class="title">חולצה לבנה לגן</div>
+          <div class="footer"><span class="chip whoall"><span class="pip"></span>כל המשפחה</span></div>
+        </div>
+
+        <div style="text-align:center;margin-block-start:var(--space-4)">
+          <button class="toggle" id="replayBtn">↻ הדגמת "נוסף הרגע"</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- phone EMPTY day -->
+    <div class="device phone">
+      <div class="bezel"><span class="dot"></span> PHONE · EMPTY DAY</div>
+      <div class="board">
+        <div class="masthead"><span class="date"><span class="small" style="color:var(--ink-3)">שבת</span><span class="big" style="font-size:1.5rem">שבת 24</span></span></div>
+        <hr class="rule" style="margin-block:var(--space-3) var(--space-4)">
+        <div class="empty">
+          <div class="g">—</div>
+          <h4>היום פנוי</h4>
+          <p>הודעות שתעבירו לבוט יופיעו כאן.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== LEGEND ===================== -->
+  <div class="eyebrow">מקרא · קידוד הצורה והצבע</div>
+  <div class="legend">
+    <div class="grp"><b>KIND (form, not color)</b>
+      <div class="row"><span class="title" style="font-family:var(--font-display)">אירוע</span> — שורה נקייה, ללא סימן</div>
+      <div class="row"><span class="checkbox"></span> משימה — תיבת סימון</div>
+      <div class="row"><span style="border-inline-start:2px solid var(--accent);padding-inline-start:8px;color:var(--accent-strong)">תזכורת</span> — קו טרקוטה בצד</div>
+    </div>
+    <div class="grp"><b>ASSIGNEE</b>
+      <div class="row"><span class="chip who2"><span class="pip"></span>אבא</span></div>
+      <div class="row"><span class="chip who5"><span class="pip"></span>הודיה</span></div>
+      <div class="row"><span class="chip who3"><span class="pip"></span>יואב</span> <span class="chip who1"><span class="pip"></span>נועה</span></div>
+      <div class="row"><span class="chip whoall"><span class="pip"></span>כל המשפחה</span></div>
+    </div>
+    <div class="grp"><b>TYPE</b>
+      <div class="row" style="font-family:var(--font-display);font-size:1.2rem">Frank Ruhl Libre · כותרות</div>
+      <div class="row">Assistant · גוף, שעות, תוויות</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const root=document.documentElement, btn=document.getElementById('themeBtn');
+  btn.addEventListener('click',()=>{
+    const night=root.getAttribute('data-theme')==='night';
+    root.setAttribute('data-theme',night?'day':'night');
+    btn.textContent=night?'🌙 מצב לילה':'☀️ מצב יום';
+  });
+  // replay the "just added" trust cue
+  const replay=document.getElementById('replayBtn'), fresh=document.getElementById('freshCard');
+  replay.addEventListener('click',()=>{
+    fresh.classList.remove('just-added'); void fresh.offsetWidth; fresh.classList.add('just-added');
+  });
+</script>
+</body>
+</html>
