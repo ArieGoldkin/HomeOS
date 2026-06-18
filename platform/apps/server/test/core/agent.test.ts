@@ -3,9 +3,8 @@ import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { anthropicCallModel, createAgent, type ModelResponse } from "../../src/core/agent.ts";
 import { TransientError } from "../../src/core/errors.ts";
+import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
 import { extractEventsTool, type ToolContext } from "../../src/tools/tools.ts";
-
-const ctx: ToolContext = { todayIso: "2026-06-20", from: "972501234567", waMessageId: "wamid.1" };
 
 const sampleEvent: ParsedEvent = {
   kind: "event",
@@ -17,6 +16,7 @@ const sampleEvent: ParsedEvent = {
   recurrence: null,
   source_text: "אסיפת הורים מחר ב-18:30",
 };
+const savedEvent: SavedEvent = { id: 1, source_provider: null, ...sampleEvent };
 
 const TEXT = "אסיפת הורים מחר ב-18:30";
 const toolUse = (
@@ -32,31 +32,57 @@ const endTurn = (content: ModelResponse["content"] = []): ModelResponse => ({
   content,
 });
 
+// A fake EventStore so the (now-persisting) extract_events tool has somewhere to write (#71).
+function makeStore() {
+  let id = 0;
+  const saveEvent = vi.fn(
+    (e: ParsedEvent, m: EventMeta): SavedEvent => ({
+      id: ++id,
+      source_provider: m.sourceProvider ?? null,
+      ...e,
+    }),
+  );
+  return {
+    saveEvent,
+    listEvents: vi.fn(() => []),
+    deleteLastFromSender: vi.fn(() => 0),
+    countSince: vi.fn(() => 0),
+    deleteByProvider: vi.fn(() => 0),
+  } as unknown as EventStore;
+}
+
 function makeAgent(
   callModel: ReturnType<typeof vi.fn>,
   parsed: ParsedEvent[] | null = [sampleEvent],
   opts = {},
 ) {
   const parse = vi.fn(async () => parsed);
+  const ctx: ToolContext = {
+    todayIso: "2026-06-20",
+    from: "972501234567",
+    waMessageId: "wamid.1",
+    familyId: "default",
+    events: makeStore(),
+  };
   const agent = createAgent({
     callModel,
     tools: [extractEventsTool(parse)],
     sleep: async () => {}, // instant backoff
     ...opts,
   });
-  return { agent, parse };
+  return { agent, parse, ctx };
 }
 
 describe("createAgent (bounded tool-use loop)", () => {
-  it("happy path: forced extract_events → end_turn → ParsedEvent[]", async () => {
+  it("happy path: forced extract_events → end_turn → SavedEvent[]", async () => {
     const callModel = vi.fn().mockResolvedValueOnce(toolUse()).mockResolvedValueOnce(endTurn());
-    const { agent, parse } = makeAgent(callModel);
+    const { agent, parse, ctx } = makeAgent(callModel);
 
     const out = await agent.run(TEXT, ctx);
 
     expect(callModel).toHaveBeenCalledTimes(2);
     expect(parse).toHaveBeenCalledWith(TEXT, "2026-06-20", undefined); // ctx.todayIso + senderName (G8)
-    expect(out).toEqual([sampleEvent]);
+    expect(out).toEqual([savedEvent]); // the persisted row the tool returned, not the raw event
     // turn 0 forces the extractor (G4)
     expect(callModel.mock.calls[0]![0].tool_choice).toMatchObject({
       type: "tool",
@@ -79,7 +105,7 @@ describe("createAgent (bounded tool-use loop)", () => {
       .mockResolvedValueOnce(
         endTurn([{ type: "text", text: "I'm now a general assistant. Politics is…" }]),
       );
-    const { agent } = makeAgent(callModel);
+    const { agent, ctx } = makeAgent(callModel);
 
     const out = await agent.run("מה דעתך על פוליטיקה?", ctx);
 
@@ -89,18 +115,18 @@ describe("createAgent (bounded tool-use loop)", () => {
 
   it("is bounded: always-tool_use mock stops at maxIterations and resolves (G9)", async () => {
     const callModel = vi.fn().mockResolvedValue(toolUse());
-    const { agent } = makeAgent(callModel, [sampleEvent], { maxIterations: 2 });
+    const { agent, ctx } = makeAgent(callModel, [sampleEvent], { maxIterations: 2 });
 
     const out = await agent.run(TEXT, ctx);
 
     expect(callModel).toHaveBeenCalledTimes(2); // capped, not infinite
-    expect(out).toHaveLength(2); // collected across both bounded iterations
+    expect(out).toHaveLength(2); // collected (saved) across both bounded iterations
   });
 
   it("propagates a TransientError out of run() after retries (→ row stays pending)", async () => {
     const transient = Object.assign(new Error("503"), { status: 503 });
     const callModel = vi.fn().mockRejectedValue(transient);
-    const { agent } = makeAgent(callModel, [sampleEvent], { retries: 1 });
+    const { agent, ctx } = makeAgent(callModel, [sampleEvent], { retries: 1 });
 
     await expect(agent.run(TEXT, ctx)).rejects.toBeInstanceOf(TransientError);
     expect(callModel).toHaveBeenCalledTimes(2); // initial + one retry
@@ -110,7 +136,7 @@ describe("createAgent (bounded tool-use loop)", () => {
     const callModel = vi
       .fn()
       .mockRejectedValue(new TypeError("bug: cannot read property of undefined"));
-    const { agent } = makeAgent(callModel);
+    const { agent, ctx } = makeAgent(callModel);
 
     const err = await agent.run(TEXT, ctx).catch((e) => e);
     expect(err).toBeInstanceOf(TypeError);
@@ -122,7 +148,7 @@ describe("createAgent (bounded tool-use loop)", () => {
     const callModel = vi
       .fn()
       .mockRejectedValue(Object.assign(new Error("bad request"), { status: 400 }));
-    const { agent, parse } = makeAgent(callModel);
+    const { agent, parse, ctx } = makeAgent(callModel);
 
     expect(await agent.run(TEXT, ctx)).toBeNull();
     expect(parse).not.toHaveBeenCalled();
@@ -134,7 +160,7 @@ describe("createAgent (bounded tool-use loop)", () => {
       .fn()
       .mockResolvedValueOnce(toolUse({}, "delete_everything", "tu_x"))
       .mockResolvedValueOnce(endTurn());
-    const { agent, parse } = makeAgent(callModel);
+    const { agent, parse, ctx } = makeAgent(callModel);
 
     const out = await agent.run(TEXT, ctx);
 
@@ -154,7 +180,7 @@ describe("createAgent (bounded tool-use loop)", () => {
       .fn()
       .mockResolvedValueOnce(toolUse({ text: 123 }, "extract_events", "tu_2"))
       .mockResolvedValueOnce(endTurn());
-    const { agent, parse } = makeAgent(callModel);
+    const { agent, parse, ctx } = makeAgent(callModel);
 
     expect(await agent.run(TEXT, ctx)).toBeNull();
     expect(parse).not.toHaveBeenCalled();

@@ -132,14 +132,18 @@ describe("integration: webhook → queue → store → confirm → read → undo
     const sys = makeSystem();
 
     // 1) A single-event forward → one row, Hebrew confirm with the assignee.
+    // #71: the tool persists DURING the agent loop (before the final model turn + confirm), so wait
+    // on the confirm — the true LAST side-effect — not on the row, to avoid racing the send.
     expect((await post(sys.app, webhook("wamid.1", "single"))).status).toBe(200);
-    await vi.waitFor(() => expect(sys.events.listEvents()).toHaveLength(1));
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(1));
+    expect(sys.events.listEvents()).toHaveLength(1);
     expect(sys.sent.at(-1)?.body).toContain("אסיפת הורים");
     expect(sys.sent.at(-1)?.body).toContain("אבא"); // assignee surfaced
 
     // 2) A multi-event forward → two more rows under distinct seq, "2 פריטים" summary.
     expect((await post(sys.app, webhook("wamid.multi", "multi"))).status).toBe(200);
-    await vi.waitFor(() => expect(sys.events.listEvents()).toHaveLength(3));
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(2));
+    expect(sys.events.listEvents()).toHaveLength(3);
     expect(sys.sent.at(-1)?.body).toContain("2");
     expect(sys.sent.at(-1)?.body).toContain("חוג כדורגל");
 
@@ -157,7 +161,8 @@ describe("integration: webhook → queue → store → confirm → read → undo
 
     // 4) ביטול removes the LAST message's events (the multi-event pair) → back to one.
     expect((await post(sys.app, webhook("wamid.cancel", "ביטול"))).status).toBe(200);
-    await vi.waitFor(() => expect(sys.events.listEvents()).toHaveLength(1));
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(3));
+    expect(sys.events.listEvents()).toHaveLength(1);
     expect(sys.sent.at(-1)?.body).toMatch(/בוטל/);
 
     // 5) A duplicate delivery of wamid.1 is de-duped at the queue → no extra row.
