@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { type ParsedEvent, parsedMessageSchema } from "@homeos/shared";
-import { isTransient, TransientError } from "../core/errors.ts";
+import { isProgrammingError, isTransient, TransientError } from "../core/errors.ts";
 
 /** Raw extraction call: (system, userText) → the model's structured object (or null). */
 export type RawParse = (system: string, userText: string) => Promise<unknown>;
@@ -77,6 +77,7 @@ export function createParser(rawParse: RawParse, opts: ParserOptions = {}): Pars
         const result = parsedMessageSchema.safeParse(raw);
         return result.success ? result.data.events : null; // valid call, bad shape → rephrase
       } catch (err) {
+        if (isProgrammingError(err)) throw err; // programming bug → permanent + visible → markFailed (OG10/#57)
         if (!isTransient(err)) return null; // permanent (e.g. 4xx) → rephrase fallback
         lastErr = err;
         if (attempt < retries) await sleep(200 * (attempt + 1)); // backoff, then retry

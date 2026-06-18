@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { ParsedEvent } from "@homeos/shared";
 import { z } from "zod/v4";
 import type { Tool, ToolContext } from "../tools/tools.ts";
-import { isTransient, TransientError } from "./errors.ts";
+import { isProgrammingError, isTransient, TransientError } from "./errors.ts";
 
 /**
  * Agent core (#13): a bounded, single-purpose tool-use loop that replaces the direct `parse` call.
@@ -74,18 +74,6 @@ interface ToolResultBlock {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
-}
-
-/** Programming bugs (not provider blips) must settle as PERMANENT, never be retried or wrapped as
- *  TransientError — otherwise `isTransient` (true for any no-status error) would replay them forever
- *  on every boot (G10). Checked BEFORE isTransient, which is the bug's blast radius. */
-function isProgrammingError(err: unknown): boolean {
-  return (
-    err instanceof TypeError ||
-    err instanceof RangeError ||
-    err instanceof ReferenceError ||
-    err instanceof SyntaxError
-  );
 }
 
 export function createAgent(cfg: AgentConfig): Agent {

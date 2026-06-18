@@ -107,6 +107,18 @@ describe("createParser", () => {
     expect(await parse("...", "2026-06-20")).toHaveLength(1);
     expect(rawParse).toHaveBeenCalledTimes(2);
   });
+
+  it("rethrows a programming error RAW (not TransientError) and does not retry — OG10/#57", async () => {
+    // A TypeError from rawParse is statusless, so isTransient would call it transient and the
+    // parser would wrap it as TransientError → the inbound row stays `pending` → boot-replays
+    // forever. The isProgrammingError guard rethrows it raw so processInbound markFailed-settles it.
+    const rawParse = vi.fn(async () => {
+      throw new TypeError("cannot read properties of undefined (reading 'parse')");
+    });
+    const parse = createParser(rawParse, { retries: 1, sleep: () => Promise.resolve() });
+    await expect(parse("???", "2026-06-20")).rejects.toBeInstanceOf(TypeError);
+    expect(rawParse).toHaveBeenCalledTimes(1); // programming bug → permanent → NOT retried
+  });
 });
 
 describe("anthropicRawParse", () => {
