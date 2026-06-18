@@ -185,6 +185,22 @@ describe("createAgent (bounded tool-use loop)", () => {
     expect(await agent.run(TEXT, ctx)).toBeNull();
     expect(parse).not.toHaveBeenCalled();
   });
+
+  it("forces opts.forceTool on turn 0 and passes the intent as plain text (sync path, no <forwarded> wrap)", async () => {
+    const callModel = vi.fn().mockResolvedValueOnce(endTurn());
+    const { agent, ctx } = makeAgent(callModel);
+
+    await agent.run("Sync the family's recent matching emails.", ctx, { forceTool: "read_gmail" });
+
+    expect(callModel.mock.calls[0]![0].tool_choice).toMatchObject({
+      type: "tool",
+      name: "read_gmail",
+    });
+    // sync intent is trusted internal text → NOT wrapped in <forwarded>
+    expect(callModel.mock.calls[0]![0].messages[0].content).toBe(
+      "Sync the family's recent matching emails.",
+    );
+  });
 });
 
 describe("anthropicCallModel (the one SDK adapter)", () => {

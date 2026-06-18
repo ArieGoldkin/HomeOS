@@ -80,6 +80,22 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, MAX_PER_SENDER_PER_DAY: "100" }).maxPerSenderPerDay).toBe(100);
   });
 
+  it("defaults the GMAIL_* settings (#72) and respects overrides", () => {
+    const d = loadConfig(base);
+    expect(d.gmailMaxMessages).toBe(10);
+    expect(d.gmailQueryWindow).toBe("newer_than:7d");
+    expect(d.gmailAllowedLabels).toEqual([]);
+    const cfg = loadConfig({
+      ...base,
+      GMAIL_MAX_MESSAGES: "25",
+      GMAIL_QUERY_WINDOW: "newer_than:14d",
+      GMAIL_ALLOWED_LABELS: " gan , school ",
+    });
+    expect(cfg.gmailMaxMessages).toBe(25);
+    expect(cfg.gmailQueryWindow).toBe("newer_than:14d");
+    expect(cfg.gmailAllowedLabels).toEqual(["gan", "school"]);
+  });
+
   it("throws naming the missing variable", () => {
     const incomplete = {
       VERIFY_TOKEN: "v",

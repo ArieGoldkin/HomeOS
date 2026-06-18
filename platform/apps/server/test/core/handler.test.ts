@@ -6,7 +6,7 @@ import { handleInbound, processInbound } from "../../src/core/handler.ts";
 import type { SavedEvent } from "../../src/db/event-store.ts";
 import type { InboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
-import type { ToolContext } from "../../src/tools/tools.ts";
+import type { GmailToolDeps, ToolContext } from "../../src/tools/tools.ts";
 
 const allowlist = ["972501234567"];
 
@@ -32,6 +32,10 @@ function makeDeps(
     /** G16: when set, wires the ceiling + an inbound counter stub returning `senderCount`. */
     maxPerSenderPerDay?: number;
     senderCount?: number;
+    /** #72: when defined, wires deps.google with a credential present (true) or absent (false). */
+    google?: boolean;
+    /** #72: what the agent's read_gmail run returns on the sync path (default [sampleSaved]). */
+    syncSaved?: SavedEvent[] | null;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -52,12 +56,42 @@ function makeDeps(
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
   };
-  // The handler depends on the agent; run() now returns the persisted SavedEvent[] (or null).
-  const run = vi.fn(async (_text: string, _ctx: ToolContext): Promise<SavedEvent[] | null> => {
-    if (opts.agentThrows) throw opts.agentThrows;
-    return opts.saved === undefined ? [sampleSaved] : opts.saved;
-  });
+  // The handler depends on the agent; run() now returns the persisted SavedEvent[] (or null). The
+  // sync path is distinguished by opts.forceTool === "read_gmail" (3rd arg), so the mock can branch.
+  const run = vi.fn(
+    async (
+      _text: string,
+      _ctx: ToolContext,
+      runOpts?: { forceTool?: string },
+    ): Promise<SavedEvent[] | null> => {
+      if (opts.agentThrows) throw opts.agentThrows;
+      if (runOpts?.forceTool === "read_gmail") {
+        return opts.syncSaved === undefined ? [sampleSaved] : opts.syncSaved;
+      }
+      return opts.saved === undefined ? [sampleSaved] : opts.saved;
+    },
+  );
   const agent = { run };
+  // #72: a fake Gmail seam. `google: true` → a stored credential; `google: false` → none (not connected).
+  const google: GmailToolDeps | undefined =
+    opts.google === undefined
+      ? undefined
+      : ({
+          client: { list: vi.fn(), get: vi.fn() },
+          oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
+          credentials: {
+            get: vi.fn(() =>
+              opts.google
+                ? { accessToken: "a", refreshToken: "r", expiry: "2099-01-01 00:00:00", scopes: [] }
+                : null,
+            ),
+            updateTokens: vi.fn(),
+            delete: vi.fn(),
+          },
+          maxMessages: 10,
+          queryWindow: "newer_than:7d",
+          allowedLabels: [],
+        } as unknown as GmailToolDeps);
   // G16 counter stub — only attached when the ceiling is configured, so the rate gate stays off
   // for every other test (the production path always wires both via index.ts).
   const countFromSenderSince = vi.fn((_from: string, _since: string) => opts.senderCount ?? 0);
@@ -67,6 +101,7 @@ function makeDeps(
     agent,
     sendText,
     members: opts.members,
+    google,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
     ...(opts.maxPerSenderPerDay !== undefined
       ? {
@@ -199,6 +234,56 @@ describe("handleInbound (M2)", () => {
     expect(agent.run).not.toHaveBeenCalled();
     const [, body] = sendText.mock.calls[0]!;
     expect(body).toMatch(/טקסט/);
+  });
+
+  describe("Gmail sync — 'סנכרן מייל' (#72)", () => {
+    const syncMsg: InboundMessage = { ...textMsg, text: "סנכרן מייל" };
+
+    it("when connected: runs the agent forcing read_gmail with ctx.google, then confirms", async () => {
+      const { sendText, agent, deps } = makeDeps({ google: true });
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).toHaveBeenCalledTimes(1);
+      const call = agent.run.mock.calls[0]!;
+      expect(call[2]).toEqual({ forceTool: "read_gmail" }); // turn-0 forced tool (G4 preserved)
+      expect(call[1]).toMatchObject({ familyId: "default", google: deps.google }); // the G8 gate is set
+      expect(sendText.mock.calls[0]![1]).toContain("הוספתי"); // confirm
+    });
+
+    it("replies 'connect first' when Google isn't configured — ZERO agent calls", async () => {
+      const { sendText, agent, deps } = makeDeps(); // no google
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).not.toHaveBeenCalled();
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא מחובר|לחבר/);
+    });
+
+    it("replies 'connect first' when configured but no credential is stored — ZERO agent calls", async () => {
+      const { sendText, agent, deps } = makeDeps({ google: false });
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).not.toHaveBeenCalled();
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא מחובר|לחבר/);
+    });
+
+    it("replies 'no new items' when the sync finds nothing", async () => {
+      const { sendText, deps } = makeDeps({ google: true, syncSaved: [] });
+      await handleInbound(syncMsg, deps);
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא נמצאו|📭/);
+    });
+
+    it("on a transient Gmail error, says 'try again' and rethrows (row stays pending)", async () => {
+      const { sendText, deps } = makeDeps({
+        google: true,
+        agentThrows: new TransientError("blip"),
+      });
+      await expect(handleInbound(syncMsg, deps)).rejects.toBeInstanceOf(TransientError);
+      expect(sendText.mock.calls[0]![1]).toMatch(/תקלה זמנית|נסו שוב/);
+    });
+
+    it("on a PERMANENT Gmail error (4xx), replies a failure (not silence) and rethrows (row markFails)", async () => {
+      const { sendText, deps } = makeDeps({ google: true, agentThrows: new Error("gmail 403") });
+      await expect(handleInbound(syncMsg, deps)).rejects.toThrow("gmail 403");
+      expect(sendText).toHaveBeenCalledTimes(1);
+      expect(sendText.mock.calls[0]![1]).toMatch(/נכשל|מאוחר/); // acknowledged, not silent
+    });
   });
 
   describe("per-sender daily ceiling (G16)", () => {
