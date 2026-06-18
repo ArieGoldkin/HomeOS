@@ -36,12 +36,14 @@ function makeDeps(
     saveEvent: vi.fn(
       (e: ParsedEvent, m: { fromPhone: string; waMessageId: string; seq?: number }) => ({
         id: 7 + (m.seq ?? 0),
+        source_provider: null,
         ...e,
       }),
     ),
     listEvents: vi.fn(() => []),
     deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
     countSince: vi.fn(() => 0),
+    deleteByProvider: vi.fn(() => 0),
   };
   // The handler now depends on the agent, not the bare parser; run() keeps the same contract.
   const run = vi.fn(async (_text: string, _ctx: ToolContext): Promise<ParsedEvent[] | null> => {

@@ -37,9 +37,11 @@ const tokens = (over: Record<string, unknown> = {}) => ({
 function harness(over: Partial<GoogleOAuthDeps> = {}) {
   const credentials = createCredentialStore(":memory:", key, fixedNow);
   const client = over.client ?? fakeClient();
+  const events = over.events ?? { deleteByProvider: vi.fn(() => 0) };
   const deps: GoogleOAuthDeps = {
     client,
     credentials,
+    events,
     config: cfg,
     adminToken: ADMIN,
     now: fixedNow,
@@ -47,7 +49,7 @@ function harness(over: Partial<GoogleOAuthDeps> = {}) {
   };
   const app = new Hono();
   registerOAuthRoutes(app, deps);
-  return { app, client, credentials };
+  return { app, client, credentials, events };
 }
 
 const auth = { authorization: `Bearer ${ADMIN}` };
@@ -163,6 +165,16 @@ describe("POST /disconnect/google", () => {
     expect(res.status).toBe(200);
     expect(revoke).toHaveBeenCalledWith(REFRESH);
     expect(credentials.get(FAMILY_ID)).toBeNull();
+  });
+
+  it("purges provider-derived rows on disconnect (#61/MF5)", async () => {
+    const deleteByProvider = vi.fn(() => 0);
+    const { app } = harness({
+      client: fakeClient({ revoke: vi.fn(async () => {}) }),
+      events: { deleteByProvider },
+    });
+    await app.request("/disconnect/google", { method: "POST", headers: auth });
+    expect(deleteByProvider).toHaveBeenCalledWith("google");
   });
 
   it("401s without the admin bearer", async () => {

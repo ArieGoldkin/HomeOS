@@ -4,7 +4,12 @@ import { join } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventStore } from "../../src/db/event-store.ts";
-import { backupDatabase, type Uploader } from "../../src/infra/backup.ts";
+import {
+  backupDatabase,
+  DEFAULT_RETENTION_DAYS,
+  runBackupOnce,
+  type Uploader,
+} from "../../src/infra/backup.ts";
 
 const event: ParsedEvent = {
   kind: "event",
@@ -47,5 +52,40 @@ describe("backupDatabase (WAL-safe snapshot)", () => {
     const snapshot = createEventStore(dest);
     expect(snapshot.listEvents()).toHaveLength(1);
     expect(snapshot.listEvents()[0]!.title_he).toBe("אסיפת הורים");
+  });
+});
+
+describe("runBackupOnce — offsite retention (#61/MF4)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "homeos-backup-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("prunes old snapshots after upload, using the configured retention window", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const now = () => new Date("2026-06-18T03:00:00Z");
+    const prune = vi.fn(async () => {});
+    const uploader: Uploader = { upload: vi.fn(async () => {}), prune };
+    await runBackupOnce({ dbPath, uploader, hour: 3, tmpDir: dir, retentionDays: 30, now });
+    expect(prune).toHaveBeenCalledWith(30, new Date("2026-06-18T03:00:00Z"));
+  });
+
+  it("defaults the retention window when unset", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const prune = vi.fn(async () => {});
+    const uploader: Uploader = { upload: vi.fn(async () => {}), prune };
+    await runBackupOnce({
+      dbPath,
+      uploader,
+      hour: 3,
+      tmpDir: dir,
+      now: () => new Date("2026-06-18T03:00:00Z"),
+    });
+    expect(prune).toHaveBeenCalledWith(DEFAULT_RETENTION_DAYS, expect.any(Date));
   });
 });
