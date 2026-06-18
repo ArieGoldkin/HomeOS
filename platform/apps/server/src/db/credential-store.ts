@@ -1,8 +1,15 @@
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { sqliteUtc } from "../core/time.ts";
 import { decrypt, encrypt } from "../google/crypto.ts";
-import { CREATE_CREDENTIALS_TABLE, CREATE_KEY_CANARY_TABLE, type CredentialRow } from "./schema.ts";
+import {
+  CREATE_CREDENTIALS_TABLE,
+  CREATE_KEY_CANARY_TABLE,
+  CREATE_OAUTH_STATE_TABLE,
+  type CredentialRow,
+} from "./schema.ts";
 
 // node:sqlite is a newer builtin bundlers don't externalize cleanly — load via createRequire (as
 // event-store.ts does) so Node resolves it directly at runtime.
@@ -16,6 +23,8 @@ const PROVIDER = "google";
 const ENC_KEY_ENV = "GOOGLE_TOKEN_ENC_KEY";
 /** Fixed plaintext marker the boot canary encrypts/verifies (MF4). Not a secret. */
 const CANARY_MARKER = "homeos.google.oauth.canary.v1";
+/** OAuth `state` TTL — ~10 min, plenty for a consent round-trip (OG7). */
+const STATE_TTL_MS = 10 * 60 * 1000;
 
 export interface StoredCredential {
   refreshToken: string;
@@ -38,14 +47,24 @@ export interface CredentialStore {
   updateTokens(familyId: string, accessToken: string, expiry: string): void;
   /** Disconnect / revoke / degrade. Returns the number of rows removed. */
   delete(familyId: string): number;
+  // --- OAuth state / CSRF (OG7), folded in over the same DB handle ---
+  /** Mint a single-use, family-bound, ~10-min `state` for the consent redirect. */
+  issueState(familyId: string): string;
+  /** Atomically consume a `state` — true iff it was valid, unexpired, and bound to `familyId`. */
+  consumeState(state: string, familyId: string): boolean;
 }
 
-export function createCredentialStore(dbPath: string, key: Buffer): CredentialStore {
+export function createCredentialStore(
+  dbPath: string,
+  key: Buffer,
+  now: () => Date = () => new Date(),
+): CredentialStore {
   if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(CREATE_CREDENTIALS_TABLE);
   db.exec(CREATE_KEY_CANARY_TABLE);
+  db.exec(CREATE_OAUTH_STATE_TABLE);
 
   // Boot key-canary (MF4): written once on first init, verified on every later boot. A changed key
   // fails LOUD here instead of letting every credential silently degrade-to-app-only (which would
@@ -93,6 +112,15 @@ export function createCredentialStore(dbPath: string, key: Buffer): CredentialSt
   );
   const deleteStmt = db.prepare("DELETE FROM credentials WHERE family_id = ? AND provider = ?;");
 
+  const insertStateStmt = db.prepare(
+    "INSERT INTO oauth_state (state, family_id, expires_at) VALUES (?, ?, ?);",
+  );
+  // Atomic single-use: delete-and-return in one step (no read-then-delete race), bound to the family
+  // and unexpired. A returned row ⇒ the state was valid and is now gone (OG7).
+  const consumeStateStmt = db.prepare(
+    "DELETE FROM oauth_state WHERE state = ? AND family_id = ? AND expires_at > ? RETURNING state;",
+  );
+
   return {
     get(familyId) {
       const row = selectStmt.get(familyId, PROVIDER) as unknown as CredentialRow | undefined;
@@ -126,5 +154,27 @@ export function createCredentialStore(dbPath: string, key: Buffer): CredentialSt
     delete(familyId) {
       return Number(deleteStmt.run(familyId, PROVIDER).changes);
     },
+    issueState(familyId) {
+      const state = randomBytes(32).toString("base64url"); // unguessable
+      const expiresAt = sqliteUtc(new Date(now().getTime() + STATE_TTL_MS));
+      insertStateStmt.run(state, familyId, expiresAt);
+      return state;
+    },
+    consumeState(state, familyId) {
+      return consumeStateStmt.get(state, familyId, sqliteUtc(now())) !== undefined;
+    },
   };
+}
+
+/**
+ * Is a stored access token expired (or within `skewSeconds` of it)? Pure + injectable-clock so the
+ * refresh decision is fake-clock testable. `expiry` is a SQLite-UTC string (fixed-width), so the
+ * comparison is a plain lexicographic `>=`.
+ */
+export function isAccessTokenExpired(
+  expiry: string,
+  now: () => Date = () => new Date(),
+  skewSeconds = 60,
+): boolean {
+  return sqliteUtc(new Date(now().getTime() + skewSeconds * 1000)) >= expiry;
 }

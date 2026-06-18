@@ -4,7 +4,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createCredentialStore, type StoredCredential } from "../../src/db/credential-store.ts";
+import {
+  createCredentialStore,
+  isAccessTokenExpired,
+  type StoredCredential,
+} from "../../src/db/credential-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 
 const { DatabaseSync } = createRequire(import.meta.url)(
@@ -89,5 +93,47 @@ describe("CredentialStore", () => {
     createCredentialStore(path, key); // writes the canary
     expect(() => createCredentialStore(path, key)).not.toThrow();
     expect(() => createCredentialStore(path, randomBytes(32))).toThrow(/GOOGLE_TOKEN_ENC_KEY/);
+  });
+});
+
+describe("oauth_state — CSRF store (OG7, single-use, family-bound)", () => {
+  it("issues a state that consumes exactly once (single-use)", () => {
+    const store = createCredentialStore(":memory:", key);
+    const state = store.issueState(FAMILY_ID);
+    expect(store.consumeState(state, FAMILY_ID)).toBe(true);
+    expect(store.consumeState(state, FAMILY_ID)).toBe(false); // reused → already deleted
+  });
+
+  it("rejects a forged / never-issued state", () => {
+    const store = createCredentialStore(":memory:", key);
+    expect(store.consumeState("not-a-real-state", FAMILY_ID)).toBe(false);
+  });
+
+  it("is family-bound — a valid state won't consume for a different family", () => {
+    const store = createCredentialStore(":memory:", key);
+    const state = store.issueState(FAMILY_ID);
+    expect(store.consumeState(state, "other-family")).toBe(false);
+    expect(store.consumeState(state, FAMILY_ID)).toBe(true); // the failed attempt didn't delete it
+  });
+
+  it("expires after its TTL (fake clock)", () => {
+    let nowMs = Date.parse("2026-06-18T12:00:00Z");
+    const store = createCredentialStore(":memory:", key, () => new Date(nowMs));
+    const state = store.issueState(FAMILY_ID);
+    nowMs += 11 * 60 * 1000; // 11 min later — past the ~10 min TTL
+    expect(store.consumeState(state, FAMILY_ID)).toBe(false);
+  });
+});
+
+describe("isAccessTokenExpired (pure, 60s skew)", () => {
+  const now = () => new Date(Date.parse("2026-06-18T12:00:00Z"));
+  it("false when the expiry is comfortably in the future", () => {
+    expect(isAccessTokenExpired("2026-06-18 12:30:00", now)).toBe(false);
+  });
+  it("true once past the expiry", () => {
+    expect(isAccessTokenExpired("2026-06-18 11:00:00", now)).toBe(true);
+  });
+  it("true within the 60s skew window (near-expiry counts as expired → refresh early)", () => {
+    expect(isAccessTokenExpired("2026-06-18 12:00:30", now)).toBe(true); // 30s ahead < 60s skew
   });
 });
