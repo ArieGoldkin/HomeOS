@@ -124,3 +124,25 @@ export interface CredentialRow {
  * the `(family_id, provider)` PK and `WHERE family_id = ?` queries are already isolation-ready.
  */
 export const FAMILY_ID = "default";
+
+/**
+ * Short-lived OAuth `state` rows (#59) — the CSRF control (OG7). Issued at /connect, consumed once at
+ * the callback via an atomic `DELETE … RETURNING` (no read-then-delete race), family-bound and
+ * expiry-checked. `expires_at` is a SQLite-UTC string from the injected clock (MF2), so single-use
+ * survives a Railway redeploy mid-grant (an in-memory Map would be lost).
+ */
+export const CREATE_OAUTH_STATE_TABLE = `
+  CREATE TABLE IF NOT EXISTS oauth_state (
+    state      TEXT PRIMARY KEY,
+    family_id  TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+export interface OAuthStateRow {
+  state: string;
+  family_id: string;
+  expires_at: string;
+  created_at: string;
+}
