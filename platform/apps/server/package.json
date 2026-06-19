@@ -13,7 +13,8 @@
     "test:cov": "vitest run --coverage",
     "eval": "tsx eval/run.ts",
     "digest:preview": "tsx eval/digest-preview.ts",
-    "gmail:e2e": "tsx scripts/gmail-e2e.ts"
+    "gmail:e2e": "tsx scripts/gmail-e2e.ts",
+    "calendar:e2e": "tsx scripts/calendar-e2e.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

@@ -3,7 +3,7 @@ import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
-import type { GmailToolDeps } from "../tools/tools.ts";
+import type { CalendarToolDeps, GmailToolDeps, ToolContext } from "../tools/tools.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
@@ -26,6 +26,8 @@ export interface HandlerDeps {
   inbound?: InboundStore;
   /** Gmail tool deps (#72) — present only when the GOOGLE_* bundle is configured. Drives the `סנכרן מייל` sync. */
   google?: GmailToolDeps;
+  /** Calendar tool deps (#18) — present only when the GOOGLE_* bundle is configured. Drives the `סנכרן יומן` sync. */
+  calendar?: CalendarToolDeps;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -50,6 +52,12 @@ const SYNC_MAIL_TRIGGER = "סנכרן מייל";
 const SYNC_INTENT = "Sync the family's recent matching emails into the board.";
 const NOT_CONNECTED_HE = "חשבון Google לא מחובר 🔌 כדי לסנכרן מייל צריך קודם לחבר את החשבון.";
 const SYNC_NONE_HE = "לא נמצאו אירועים חדשים במייל 📭";
+/** Deterministic Calendar-sync command (#18) — sibling to סנכרן מייל; forces `read_calendar` on turn 0 (keeps G4). */
+const SYNC_CAL_TRIGGER = "סנכרן יומן";
+/** The trusted internal intent handed to the agent for the calendar sync (NOT untrusted forwarded text). */
+const SYNC_CAL_INTENT = "Sync the family's upcoming Google Calendar events into the board.";
+const CAL_NOT_CONNECTED_HE = "חשבון Google לא מחובר 🔌 כדי לסנכרן יומן צריך קודם לחבר את החשבון.";
+const SYNC_CAL_NONE_HE = "לא נמצאו אירועים חדשים ביומן 📭";
 /** A permanent Gmail failure (e.g. a 4xx on a revoked/scope-changed token) — the explicit סנכרן מייל command deserves a reply, not silence. */
 const SYNC_FAILED_HE = "הסנכרון נכשל 🙁 נסו שוב מאוחר יותר.";
 /**
@@ -98,6 +106,45 @@ function formatConfirm(events: SavedEvent[]): string {
   }
   const lines = events.map((e) => `• ${e.title_he} · ${formatWhen(e)}`).join("\n");
   return `הוספתי ${events.length} פריטים ליומן ✓\n${lines}`;
+}
+
+/**
+ * Shared provider-sync run (Gmail #72 / Calendar #18): force the given tool on an agent run (turn 0,
+ * G4), then confirm the saved rows, reply "nothing new", or — on error — tell the user (transient →
+ * "try again", permanent → "failed") and rethrow so the inbound row settles correctly (pending vs
+ * failed). The provider seam (`google`/`calendar`) is already wired into `ctx` — the G8 capability gate.
+ */
+async function runSyncIntent(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  intent: string,
+  forceTool: string,
+  noneReply: string,
+  ctx: ToolContext,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  let synced: SavedEvent[] | null;
+  try {
+    synced = await deps.agent.run(intent, ctx, { forceTool });
+  } catch (err) {
+    if (err instanceof TransientError) {
+      // A provider blip (429/5xx/network) → "try again" and rethrow so the row stays pending for replay.
+      log("transient provider sync", { id: msg.id, tool: forceTool });
+      await deps.sendText(msg.from, TRANSIENT_HE);
+    } else {
+      // A permanent failure (e.g. a 4xx on a token rejected mid-run) — acknowledge the user's explicit
+      // command instead of leaving them in silence, then rethrow so the row settles as failed (G10).
+      log("provider sync failed (permanent)", { id: msg.id, tool: forceTool, error: String(err) });
+      await deps.sendText(msg.from, SYNC_FAILED_HE);
+    }
+    throw err;
+  }
+  if (!synced || synced.length === 0) {
+    await deps.sendText(msg.from, noneReply);
+    return;
+  }
+  log("synced provider events", { from: msg.from, tool: forceTool, count: synced.length });
+  await deps.sendText(msg.from, formatConfirm(synced));
 }
 
 /**
@@ -160,41 +207,36 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
       await deps.sendText(msg.from, NOT_CONNECTED_HE);
       return;
     }
-    let synced: SavedEvent[] | null;
-    try {
-      synced = await deps.agent.run(
-        SYNC_INTENT,
-        {
-          todayIso: today,
-          from: msg.from,
-          waMessageId: msg.id,
-          senderName: deps.members?.[msg.from],
-          familyId: FAMILY_ID,
-          events: deps.events,
-          google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
-        },
-        { forceTool: "read_gmail" },
-      );
-    } catch (err) {
-      if (err instanceof TransientError) {
-        // A Gmail blip (429/5xx/network) → "try again" and rethrow so the row stays pending for replay.
-        log("transient gmail sync", { id: msg.id });
-        await deps.sendText(msg.from, TRANSIENT_HE);
-      } else {
-        // A permanent Gmail failure (e.g. a 4xx on a token Google rejected mid-run) — acknowledge the
-        // user's explicit command instead of leaving them in silence, then rethrow so the row settles
-        // as failed (G10: permanent, not replayed).
-        log("gmail sync failed (permanent)", { id: msg.id, error: String(err) });
-        await deps.sendText(msg.from, SYNC_FAILED_HE);
-      }
-      throw err;
-    }
-    if (!synced || synced.length === 0) {
-      await deps.sendText(msg.from, SYNC_NONE_HE);
+    await runSyncIntent(deps, msg, SYNC_INTENT, "read_gmail", SYNC_NONE_HE, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+      google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
+    });
+    return;
+  }
+
+  // Calendar sync (#18): a bare "סנכרן יומן" pulls the family's upcoming Google Calendar events onto the
+  // board. Same shape as the mail sync — deterministic route (sibling to ביטול), forces `read_calendar`
+  // on turn 0 (keeps G4), opt-in: no Google bundle / no stored credential ⇒ "connect first", ZERO calls.
+  if (text === SYNC_CAL_TRIGGER) {
+    if (!deps.calendar?.credentials.get(FAMILY_ID)) {
+      log("sync calendar — not connected", { from: msg.from });
+      await deps.sendText(msg.from, CAL_NOT_CONNECTED_HE);
       return;
     }
-    log("synced gmail events", { from: msg.from, count: synced.length });
-    await deps.sendText(msg.from, formatConfirm(synced));
+    await runSyncIntent(deps, msg, SYNC_CAL_INTENT, "read_calendar", SYNC_CAL_NONE_HE, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+      calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
+    });
     return;
   }
 

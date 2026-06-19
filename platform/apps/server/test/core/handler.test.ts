@@ -6,7 +6,7 @@ import { handleInbound, processInbound } from "../../src/core/handler.ts";
 import type { SavedEvent } from "../../src/db/event-store.ts";
 import type { InboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
-import type { GmailToolDeps, ToolContext } from "../../src/tools/tools.ts";
+import type { CalendarToolDeps, GmailToolDeps, ToolContext } from "../../src/tools/tools.ts";
 
 const allowlist = ["972501234567"];
 
@@ -36,6 +36,10 @@ function makeDeps(
     google?: boolean;
     /** #72: what the agent's read_gmail run returns on the sync path (default [sampleSaved]). */
     syncSaved?: SavedEvent[] | null;
+    /** #18: when defined, wires deps.calendar with a credential present (true) or absent (false). */
+    calendar?: boolean;
+    /** #18: what the agent's read_calendar run returns on the sync path (default [sampleSaved]). */
+    calSyncSaved?: SavedEvent[] | null;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -68,6 +72,9 @@ function makeDeps(
       if (runOpts?.forceTool === "read_gmail") {
         return opts.syncSaved === undefined ? [sampleSaved] : opts.syncSaved;
       }
+      if (runOpts?.forceTool === "read_calendar") {
+        return opts.calSyncSaved === undefined ? [sampleSaved] : opts.calSyncSaved;
+      }
       return opts.saved === undefined ? [sampleSaved] : opts.saved;
     },
   );
@@ -92,6 +99,26 @@ function makeDeps(
           queryWindow: "newer_than:7d",
           allowedLabels: [],
         } as unknown as GmailToolDeps);
+  // #18: a fake Calendar seam. `calendar: true` → a stored credential; `false` → none (not connected).
+  const calendar: CalendarToolDeps | undefined =
+    opts.calendar === undefined
+      ? undefined
+      : ({
+          client: { list: vi.fn() },
+          oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
+          credentials: {
+            get: vi.fn(() =>
+              opts.calendar
+                ? { accessToken: "a", refreshToken: "r", expiry: "2099-01-01 00:00:00", scopes: [] }
+                : null,
+            ),
+            updateTokens: vi.fn(),
+            delete: vi.fn(),
+          },
+          calendarId: "primary",
+          windowDays: 30,
+          maxEvents: 20,
+        } as unknown as CalendarToolDeps);
   // G16 counter stub — only attached when the ceiling is configured, so the rate gate stays off
   // for every other test (the production path always wires both via index.ts).
   const countFromSenderSince = vi.fn((_from: string, _since: string) => opts.senderCount ?? 0);
@@ -102,6 +129,7 @@ function makeDeps(
     sendText,
     members: opts.members,
     google,
+    calendar,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
     ...(opts.maxPerSenderPerDay !== undefined
       ? {
@@ -283,6 +311,55 @@ describe("handleInbound (M2)", () => {
       await expect(handleInbound(syncMsg, deps)).rejects.toThrow("gmail 403");
       expect(sendText).toHaveBeenCalledTimes(1);
       expect(sendText.mock.calls[0]![1]).toMatch(/נכשל|מאוחר/); // acknowledged, not silent
+    });
+  });
+
+  describe("Calendar sync — 'סנכרן יומן' (#18)", () => {
+    const syncMsg: InboundMessage = { ...textMsg, text: "סנכרן יומן" };
+
+    it("when connected: runs the agent forcing read_calendar with ctx.calendar, then confirms", async () => {
+      const { sendText, agent, deps } = makeDeps({ calendar: true });
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).toHaveBeenCalledTimes(1);
+      const call = agent.run.mock.calls[0]!;
+      expect(call[2]).toEqual({ forceTool: "read_calendar" }); // turn-0 forced tool (G4 preserved)
+      expect(call[1]).toMatchObject({ familyId: "default", calendar: deps.calendar }); // the G8 gate
+      expect(sendText.mock.calls[0]![1]).toContain("הוספתי"); // confirm
+    });
+
+    it("replies 'connect first' when Calendar isn't configured — ZERO agent calls", async () => {
+      const { sendText, agent, deps } = makeDeps(); // no calendar
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).not.toHaveBeenCalled();
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא מחובר|לחבר/);
+    });
+
+    it("replies 'connect first' when configured but no credential is stored — ZERO agent calls", async () => {
+      const { sendText, agent, deps } = makeDeps({ calendar: false });
+      await handleInbound(syncMsg, deps);
+      expect(agent.run).not.toHaveBeenCalled();
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא מחובר|לחבר/);
+    });
+
+    it("replies 'no new items' when the sync finds nothing", async () => {
+      const { sendText, deps } = makeDeps({ calendar: true, calSyncSaved: [] });
+      await handleInbound(syncMsg, deps);
+      expect(sendText.mock.calls[0]![1]).toMatch(/לא נמצאו|📭/);
+    });
+
+    it("on a transient Calendar error, says 'try again' and rethrows (row stays pending)", async () => {
+      const { sendText, deps } = makeDeps({
+        calendar: true,
+        agentThrows: new TransientError("blip"),
+      });
+      await expect(handleInbound(syncMsg, deps)).rejects.toBeInstanceOf(TransientError);
+      expect(sendText.mock.calls[0]![1]).toMatch(/תקלה זמנית|נסו שוב/);
+    });
+
+    it("a forward still routes to extract_events, not the calendar sync", async () => {
+      const { agent, deps } = makeDeps({ calendar: true });
+      await handleInbound(textMsg, deps);
+      expect(agent.run.mock.calls[0]![2]).toBeUndefined(); // default tool, not forced read_calendar
     });
   });
 

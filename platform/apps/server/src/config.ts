@@ -78,6 +78,12 @@ const schema = z.object({
         .map((p) => p.trim())
         .filter((p) => p.length > 0),
     ),
+  // Calendar sync (#18) — only consulted when the GOOGLE_* bundle is configured. `MAX_EVENTS` caps
+  // events fetched per `סנכרן יומן` run (cost ceiling), `WINDOW_DAYS` is how far ahead we read
+  // (timeMax = now + N), `ID` selects the calendar (server-owned, never model-chosen — G8).
+  CALENDAR_MAX_EVENTS: z.coerce.number().int().positive().default(20),
+  CALENDAR_WINDOW_DAYS: z.coerce.number().int().positive().default(30),
+  CALENDAR_ID: z.string().min(1).default("primary"),
 });
 
 /** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
@@ -108,6 +114,9 @@ export interface Config {
   gmailMaxMessages: number;
   gmailQueryWindow: string;
   gmailAllowedLabels: string[];
+  calendarMaxEvents: number;
+  calendarWindowDays: number;
+  calendarId: string;
   google?: GoogleOAuthSettings;
 }
 
@@ -176,6 +185,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     gmailMaxMessages: e.GMAIL_MAX_MESSAGES,
     gmailQueryWindow: e.GMAIL_QUERY_WINDOW,
     gmailAllowedLabels: e.GMAIL_ALLOWED_LABELS,
+    calendarMaxEvents: e.CALENDAR_MAX_EVENTS,
+    calendarWindowDays: e.CALENDAR_WINDOW_DAYS,
+    calendarId: e.CALENDAR_ID,
     google: readGoogleBundle(env),
   };
 }

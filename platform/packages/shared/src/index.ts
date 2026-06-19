@@ -20,15 +20,31 @@ const timeHm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "time must be HH:MM
  * overrides/embeddings (U+202A–202E) and isolates (U+2066–2069). In a Hebrew (RTL) product these
  * let forwarded text spoof or garble the confirm. Code-based (no literal control bytes in source).
  */
-function hasUnsafeChars(s: string): boolean {
-  for (const ch of s) {
-    const c = ch.codePointAt(0) ?? 0;
-    if (c <= 0x1f || (c >= 0x7f && c <= 0x9f)) return true; // C0 / DEL / C1 controls
-    if (c >= 0x200b && c <= 0x200f) return true; // zero-width + LRM/RLM
-    if (c >= 0x202a && c <= 0x202e) return true; // bidi embeddings/overrides
-    if (c >= 0x2066 && c <= 0x2069) return true; // bidi isolates
-  }
+/** The single G15 codepoint predicate — both the validation refine and the sanitizer below derive from it. */
+function isUnsafeCodePoint(c: number): boolean {
+  if (c <= 0x1f || (c >= 0x7f && c <= 0x9f)) return true; // C0 / DEL / C1 controls
+  if (c >= 0x200b && c <= 0x200f) return true; // zero-width + LRM/RLM
+  if (c >= 0x202a && c <= 0x202e) return true; // bidi embeddings/overrides
+  if (c >= 0x2066 && c <= 0x2069) return true; // bidi isolates
   return false;
+}
+
+function hasUnsafeChars(s: string): boolean {
+  for (const ch of s) if (isUnsafeCodePoint(ch.codePointAt(0) ?? 0)) return true;
+  return false;
+}
+
+/**
+ * Strip the G15-forbidden control/bidi codepoints from text that did NOT pass through the model — e.g.
+ * a Google Calendar summary the user typed (#18). The parser's output is *validated* (rejected) by the
+ * schema refine; provider text mapped straight to a `ParsedEvent` is *sanitized* here instead, so a
+ * legitimate Hebrew title carrying a stray directional mark is cleaned rather than silently dropped.
+ * Same codepoint set as `hasUnsafeChars` — one source of truth. Length/trim/whitespace are the caller's job.
+ */
+export function sanitizeUserText(s: string): string {
+  let out = "";
+  for (const ch of s) if (!isUnsafeCodePoint(ch.codePointAt(0) ?? 0)) out += ch;
+  return out;
 }
 
 /**
