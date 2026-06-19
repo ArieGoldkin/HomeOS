@@ -65,26 +65,37 @@ export function DayView({
   const hasTimed = timed.length > 0;
   const hasAside = untimed.length > 0 || tomorrow.length > 0;
 
+  // Container-query layout: stack the timed column above the anytime rail on a narrow surface (the
+  // phone "today" lives inside max-w-md), switch to side-by-side once the board is wide enough (the
+  // tablet). Keyed off the DayView container's own width (@2xl/day ≈ 672px), not the viewport — so it
+  // adapts even when a narrow phone column sits inside a wide window.
   return (
-    <div className={cn("flex gap-8", className)}>
-      {hasTimed && (
-        <div className="min-w-0 flex-1">
-          <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
-          <TimeSpine events={timed} nowTime={nowTime} night={night} />
-          {moreCount > 0 && (
-            <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
-          )}
-        </div>
-      )}
-      {hasAside && (
-        <AnytimeSidebar
-          // the divider only makes sense when there's a timed column beside it
-          className={cn("w-56 shrink-0", hasTimed && "border-border border-s ps-6")}
-          tasks={untimed}
-          tomorrow={tomorrow}
-          night={night}
-        />
-      )}
+    <div className={cn("@container/day", className)}>
+      <div className="flex flex-col gap-6 @2xl/day:flex-row @2xl/day:gap-8">
+        {hasTimed && (
+          <div className="min-w-0 @2xl/day:flex-1">
+            <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
+            <TimeSpine events={timed} nowTime={nowTime} night={night} />
+            {moreCount > 0 && (
+              <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
+            )}
+          </div>
+        )}
+        {hasAside && (
+          <AnytimeSidebar
+            // The divider only makes sense beside/under a timed column. Stacked: a top rule; side-by-
+            // side (@2xl/day): a start rule + fixed rail width.
+            className={cn(
+              "w-full @2xl/day:w-56 @2xl/day:shrink-0",
+              hasTimed &&
+                "border-border border-t pt-6 @2xl/day:border-t-0 @2xl/day:border-s @2xl/day:pt-0 @2xl/day:ps-6",
+            )}
+            tasks={untimed}
+            tomorrow={tomorrow}
+            night={night}
+          />
+        )}
+      </div>
     </div>
   );
 }
