@@ -20,9 +20,9 @@ shared per-group barrels. Supersedes the retired "Editorial Paper" palette/fonts
 | CSS approach | **Tailwind v4 + shadcn/ui** (readability-weighted) | Prototype already uses the shadcn semantic-token dialect; `globals.css` is already a v4+shadcn file; Radix stays headless (a11y is a tie); CSS Modules would mean hand-building Dialog/Sheet/Popover. |
 | App shape | **One responsive app**, not three; **no `packages/ui` yet** | One developer, one runtime target. Promote to a package only when a second runtime (RN/Electron) appears. |
 | Folder model | **feature-based** + **shared cross-surface building blocks**, **per-group barrels** | Explicit user ask. `app/ → features/ → shared/ → @homeos/shared`, one-directional. |
-| State | URL param (`selectedDate`) + `data-attribute` on `<html>` (theme/dir); **no Zustand** | Thin by default; add a store only if an unsaved-add buffer emerges. |
+| State | TanStack Router **typed search param** (`?date=`) + `data-attribute` on `<html>` (theme/dir); **no Zustand / no global store** | Server state → TanStack Query; nav state → the router; add a store only if an unsaved-add buffer emerges. |
 | Data | TanStack Query over **`GET /events`** | `{ events: SavedEvent[] }`, Bearer-gated; parsed by a new `savedEventSchema` in `@homeos/shared`. |
-| Routing | **React Router v7** (data router, SPA) | Lower ceremony than TanStack Router for a 3-shell MVP; the tablet first slice needs **no router at all**. |
+| Routing | **TanStack Router** (type-safe, SPA) | Chosen with TanStack Query as ONE unified stack (user opt-in); typed search params back the `?date=` selected-day state. Tablet first slice still needs **no router** — it lands at the phone shell. |
 | First slice | Scaffold + tokens + `EventCard` + **TabletBoard** rendering REAL `/events` data | Tablet is the primary ambient use case, has the most distinctive layout, and zero interaction. |
 
 **Corrections folded in from critique (these change the contract — do not skip):**
@@ -255,8 +255,9 @@ note; keep §RTL, §anti-slop, §a11y.
   browser globals error.
 - **CSS:** Tailwind v4 (`@tailwindcss/vite`) + shadcn/ui (Radix headless) + the OKLCH `@theme inline`
   `globals.css`.
-- **Routing:** **React Router v7** (data router, SPA). The tablet first slice needs **no router** — do
-  not install/wire it until the phone shell introduces multiple routes.
+- **Routing:** **TanStack Router** (type-safe routes + typed search params, SPA) — paired with TanStack
+  Query as one unified stack; `selectedDate` becomes a validated `?date=` search param. The tablet first
+  slice needs **no router** — do not install/wire it until the phone shell introduces multiple routes.
 - **Data:** TanStack Query v5. `useEvents` = `useQuery(GET /events)`, `staleTime 10s`, **30s background
   refetch** for the always-on tablet. `api/events.ts` reads **`.events`** off the response
   (`z.object({ events: z.array(savedEventSchema) })`) and sends `Authorization: Bearer
@@ -333,7 +334,7 @@ note; keep §RTL, §anti-slop, §a11y.
 7. **TabletShell + TabletBoard (FIRST COMPLETE SURFACE)** — ambient kiosk rendering live `/events`;
    NowLine; curate ~5 + "+N more"; no scroll; no AddSheet; View Transitions as progressive enhancement
    over CSS-opacity fallback. **Enables `/design-sync`.**
-8. **PhoneShell + phone screens** (week/today/family/settings) + AddEvent Sheet — introduces the router;
+8. **PhoneShell + phone screens** (week/today/family/settings) + AddEvent Sheet — introduces **TanStack Router** (typed `?date=` search param);
    builds the remaining atoms (Pip, SegmentedControl, Field, DayRow, MemberListItem) where they first
    appear; shared AddItemForm (RHF + zod).
 9. **WebShell + web screens** (today/week/family/connections/settings) + AddEvent Modal — same feature
@@ -349,7 +350,7 @@ note; keep §RTL, §anti-slop, §a11y.
 | **Stale-token framing over-weighted** | Concern (resolved) | Issue #2 rescoped to a polish + strip pass (globals.css already ocean/Rubik/12px); fix only the 4 terracotta word-leftovers. |
 | **22 components specified before first pixel** | Concern | Inventory is a **reference map, not a build checklist**. Issue #5 builds only what the tablet slice consumes; the rest are deferred into the phone/web issues where they first appear, letting the shared/feature split emerge from second usage. |
 | **atom/molecule/organism + 4-granularity barrels = heavy vocabulary** | Concern | Folder has **two buckets** (`shared/`, `features/`); labels are prose only; per-leaf `index.ts` optional. |
-| **Router chosen too early; TanStack overkill** | Concern | React Router v7 confirmed; **TanStack dropped**; router not installed until the phone shell (step 8). Tablet slice has zero routing. |
+| **Router installed too early** | Resolved | **TanStack Router** chosen with Query as ONE unified stack (user opt-in 2026-06-19); not installed until the phone shell (step 8), so the tablet slice has zero routing and no premature ceremony. |
 | **Three font families pre-installed** | Concern | Ship **Rubik only**; Frank Ruhl per-component later; Assistant dropped until needed. |
 | **Tailwind class-string density vs readability priority** | Risk (weighted) | Decomposition + CVA; `@layer components` for the 3–4 signature pieces; **pivot gate** after EventCard + 2 screens (tokens survive a pivot, so it's bounded). shadcn's own primitive internals stay dense — honestly noted. |
 | **Biome has no mature class-sorter** | Risk | Decide accept-unsorted vs `prettier-plugin-tailwindcss` scoped to `.tsx` at scaffold time. |
