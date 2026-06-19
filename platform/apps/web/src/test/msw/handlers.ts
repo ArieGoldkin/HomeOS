@@ -37,4 +37,18 @@ export const handlers = [
     }
     return HttpResponse.json({ events: sampleEvents });
   }),
+
+  /**
+   * Bearer-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
+   * (id: 999, source_provider: null). Mirrors what the real server will return once
+   * POST /events is built (issue #96 client-seam only).
+   */
+  http.post("*/events", async ({ request }) => {
+    const auth = request.headers.get("authorization");
+    if (!auth?.startsWith("Bearer")) {
+      return new HttpResponse("Unauthorized", { status: 401 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({ ...body, id: 999, source_provider: null }, { status: 201 });
+  }),
 ];

@@ -1,4 +1,13 @@
 const TZ = "Asia/Jerusalem";
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Coerce an untrusted date (e.g. a `?date=` URL param) to a valid `YYYY-MM-DD`, falling back to today
+ * when it's missing or malformed. The screens call this so a bad URL never reaches the date math.
+ */
+export function coerceDateIso(raw: string | null | undefined, now: Date = new Date()): string {
+  return typeof raw === "string" && ISO_DATE.test(raw) ? raw : jerusalemTodayIso(now);
+}
 
 /** Today's date in Asia/Jerusalem as `YYYY-MM-DD` (the board's anchor; the bot parses to this TZ). */
 export function jerusalemTodayIso(now: Date = new Date()): string {

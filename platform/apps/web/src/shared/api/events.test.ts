@@ -1,7 +1,20 @@
+import type { ParsedEvent } from "@homeos/shared";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
 import { server } from "../../test/msw/server";
-import { fetchEvents } from "./events";
+import { createEvent, fetchEvents } from "./events";
+
+/** A valid ParsedEvent fixture — source_text is required by parsedEventSchema. */
+const parsedFixture: ParsedEvent = {
+  kind: "event",
+  title_he: "בדיקה",
+  date_iso: "2026-06-21",
+  time: "10:00",
+  location: null,
+  assignee: null,
+  recurrence: null,
+  source_text: "נוסף ידנית",
+};
 
 describe("fetchEvents", () => {
   it("reads .events from the wrapped payload and validates the rows", async () => {
@@ -20,5 +33,48 @@ describe("fetchEvents", () => {
   it("rejects a bare array (payload must be wrapped)", async () => {
     server.use(http.get("*/events", () => HttpResponse.json([])));
     await expect(fetchEvents()).rejects.toThrow();
+  });
+});
+
+describe("createEvent", () => {
+  it("POSTs with a Bearer header and returns a parsed SavedEvent (id 999)", async () => {
+    const saved = await createEvent(parsedFixture);
+    expect(saved.id).toBe(999);
+    expect(saved.source_provider).toBeNull();
+    expect(saved.title_he).toBe("בדיקה");
+    expect(saved.source_text).toBe("נוסף ידנית");
+  });
+
+  it("sends the full ParsedEvent body in the request", async () => {
+    let captured: unknown;
+    server.use(
+      http.post("*/events", async ({ request }) => {
+        captured = await request.json();
+        return HttpResponse.json(
+          { ...(captured as Record<string, unknown>), id: 999, source_provider: null },
+          { status: 201 },
+        );
+      }),
+    );
+    await createEvent(parsedFixture);
+    expect(captured).toMatchObject({
+      kind: "event",
+      title_he: "בדיקה",
+      date_iso: "2026-06-21",
+      time: "10:00",
+      source_text: "נוסף ידנית",
+    });
+  });
+
+  it("throws when the Bearer token is missing (401)", async () => {
+    server.use(http.post("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
+    await expect(createEvent(parsedFixture)).rejects.toThrow(/POST \/events failed \(401\)/);
+  });
+
+  it("rejects a malformed server response (missing id)", async () => {
+    server.use(
+      http.post("*/events", () => HttpResponse.json({ title_he: "broken" }, { status: 201 })),
+    );
+    await expect(createEvent(parsedFixture)).rejects.toThrow();
   });
 });

@@ -13,8 +13,8 @@ export interface DayViewProps {
   untimed: SavedEvent[];
   /** Tomorrow's peek rows. */
   tomorrow: PeekItem[];
-  /** Current time `HH:MM` — positions the NowLine. */
-  nowTime: string;
+  /** Current time `HH:MM` — positions the NowLine. `null` on a non-today day (no NowLine). */
+  nowTime: string | null;
   /** How many timed events were curated away (drives the "+N more" cue). */
   moreCount?: number;
   night?: boolean;

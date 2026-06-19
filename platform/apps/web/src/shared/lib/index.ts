@@ -3,6 +3,7 @@ export { type AssigneeColor, assigneeColor } from "./assignee-color";
 export { cn } from "./cn";
 export {
   addDaysIso,
+  coerceDateIso,
   jerusalemHhmm,
   jerusalemHour,
   jerusalemTodayIso,

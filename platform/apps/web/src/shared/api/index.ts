@@ -1,1 +1,1 @@
-export { fetchEvents } from "./events";
+export { createEvent, fetchEvents } from "./events";
