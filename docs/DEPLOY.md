@@ -89,6 +89,38 @@ In the HomeOsBot chat, send: `אסיפת הורים מחר ב-18:30 בגן רי�
 
 ---
 
+## Part E — Releasing to production (deploy-on-trigger)
+
+By default Railway auto-deploys **every** push to its source branch, so merging to `main`
+would ship straight to prod. To make deploys **intentional** (separate from merging), HomeOS
+deploys from a dedicated **`production`** branch — `main` stays the integration branch.
+
+**One-time Railway setting:**
+- Service → **Settings → Source → Branch:** change `main` → **`production`**.
+- *(Optional)* enable **"Wait for CI" / check suites** so a deploy only proceeds once the CI
+  workflow is green. CI runs on `production` too (see `.github/workflows/ci.yml`).
+
+**Day-to-day:**
+1. Merge work to `main` as usual (PRs). CI runs — **merging to `main` no longer deploys.**
+2. When ready to ship, **promote** `main` → `production`:
+   ```bash
+   git push origin main:production
+   ```
+   Railway sees the push to `production`, builds, and deploys. *(Or open a PR
+   `main` → `production` as a reviewable "release PR".)*
+3. `production` is always a fast-forward of `main`, so the deployed commit is exactly what was
+   on `main` at promote time.
+
+**Rollback** — promote an older known-good commit (force, since it's not a fast-forward):
+```bash
+git push -f origin <good-sha>:production
+```
+
+> The `/data` volume is independent of deploys, so the SQLite DB + OAuth credential persist
+> across releases — a deploy (or rollback) never wipes the connected Google account.
+
+---
+
 ## Local testing without Meta (no tunnel needed)
 
 To prove the bot works without touching Meta, inject a webhook straight at a locally-running
