@@ -80,4 +80,22 @@ describe("EventCard (canonical anti-slop spec)", () => {
     expect(screen.getByText("תל אביב")).toBeInTheDocument();
     expect(screen.getByText(/↻/)).toBeInTheDocument();
   });
+
+  // DESIGN.md §13: kind must be conveyed by shape + TEXT, not the visual marker alone — the pip/
+  // checkbox are aria-hidden, so a screen-reader-only label carries the kind for assistive tech.
+  it("conveys reminder/task kind to assistive tech as text", () => {
+    const { rerender } = render(
+      <EventCard event={make({ kind: "reminder", title_he: "תשלום" })} />,
+    );
+    expect(screen.getByText(/תזכורת/)).toBeInTheDocument();
+
+    rerender(<EventCard event={make({ kind: "task", title_he: "חלב" })} />);
+    expect(screen.getByText(/משימה/)).toBeInTheDocument();
+  });
+
+  it("adds no kind label for a plain event", () => {
+    render(<EventCard event={make({ kind: "event", title_he: "ישיבה" })} />);
+    expect(screen.queryByText(/תזכורת/)).toBeNull();
+    expect(screen.queryByText(/משימה/)).toBeNull();
+  });
 });

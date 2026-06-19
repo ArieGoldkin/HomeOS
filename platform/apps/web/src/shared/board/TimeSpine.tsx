@@ -25,6 +25,8 @@ export function TimeSpine({
   night = false,
   className,
 }: TimeSpineProps) {
+  // localeCompare is a correct chronological sort here because the shared `timeHm` schema guarantees
+  // zero-padded 24h `HH:MM`, so lexical order == time order.
   const timed = events
     .filter((e) => e.time != null)
     .sort((a, b) => (a.time as string).localeCompare(b.time as string));

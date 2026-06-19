@@ -1,10 +1,18 @@
-import type { SavedEvent } from "@homeos/shared";
+import type { EventKind, SavedEvent } from "@homeos/shared";
 import { assigneeColor, cn } from "@shared/lib";
 import { cva } from "class-variance-authority";
 import type { HTMLAttributes } from "react";
 import { PersonAvatar } from "./PersonAvatar";
 
 const HE_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
+
+// The visual pip/checkbox are aria-hidden, so kind is also carried as screen-reader-only TEXT
+// (DESIGN.md §13: convey kind by shape + text, never the marker alone). A plain event needs none.
+const KIND_LABEL: Record<EventKind, string | null> = {
+  event: null,
+  task: "משימה",
+  reminder: "תזכורת",
+};
 
 // Title text: display face (Rubik 500); reminder is primary-colored. Size adapts to the CARD's own
 // width via the @container/card query (no media-breakpoint duplication); density is the explicit override.
@@ -71,6 +79,7 @@ export function EventCard({
             className="mt-0.5 size-[15px] shrink-0 rounded-md border-[1.5px] border-input"
           />
         )}
+        {KIND_LABEL[variant] && <span className="sr-only">{KIND_LABEL[variant]}: </span>}
         <span className={title({ variant, density: spacing })}>{event.title_he}</span>
       </div>
 
