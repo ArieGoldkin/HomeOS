@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@500;700&family=Assistant:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  @keyframes drawRule{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes settleIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes pop{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(120,110,95,.3);border-radius:9px}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:oklch(0.93 0.012 225);font-family:'Rubik',system-ui,sans-serif;display:flex;flex-direction:column;color:#243038">
+
+  <header style="display:flex;align-items:center;gap:16px;padding:11px 22px;background:oklch(0.975 0.01 225);border-bottom:1px solid oklch(0.87 0.016 225);position:sticky;top:0;z-index:40;flex-wrap:wrap">
+    <div style="display:flex;align-items:baseline;gap:8px;font-family:'Rubik',serif">
+      <span style="font-weight:700;font-size:18px;letter-spacing:-.01em;color:#16252e">HomeOS</span>
+      <span style="font-family:'Rubik';font-size:11px;font-weight:600;letter-spacing:.08em;color:#7d93a0">Family-board prototype</span>
+    </div>
+
+    <div style="display:flex;gap:3px;padding:3px;background:oklch(0.925 0.014 225);border-radius:9px;flex-wrap:wrap">
+      <button onClick="{{ h.surfWa }}" style="{{ surf.wa }}">WhatsApp</button>
+      <button onClick="{{ h.surfPhone }}" style="{{ surf.phone }}">Phone</button>
+      <button onClick="{{ h.surfTablet }}" style="{{ surf.tablet }}">Kitchen tablet</button>
+      <button onClick="{{ h.surfWeb }}" style="{{ surf.web }}">Web app</button>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <button onClick="{{ h.startOnboard }}" style="background:transparent;border:1px solid oklch(0.87 0.016 225);color:#5f7682;border-radius:8px;padding:7px 12px;font:600 12.5px 'Rubik';cursor:pointer">First-run ↗</button>
+
+    <div style="display:flex;gap:3px;padding:3px;background:oklch(0.925 0.014 225);border-radius:9px">
+      <button onClick="{{ h.setLight }}" style="{{ themeBtn.light }}">Paper</button>
+      <button onClick="{{ h.setNight }}" style="{{ themeBtn.night }}">Night</button>
+    </div>
+    <div style="display:flex;gap:3px;padding:3px;background:oklch(0.925 0.014 225);border-radius:9px">
+      <button onClick="{{ h.dirRtl }}" style="{{ dirBtn.rtl }}">עברית</button>
+      <button onClick="{{ h.dirLtr }}" style="{{ dirBtn.ltr }}">EN</button>
+    </div>
+  </header>
+
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:38px 24px;overflow:auto">
+    <div ref="{{ themeRoot }}" dir="{{ dirAttr }}" lang="{{ langAttr }}" style="font-family:var(--font-sans);display:flex;align-items:center;justify-content:center;width:100%">
+
+      <!-- ============ ONBOARDING ============ -->
+      <sc-if value="{{ onboard }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Onboarding" style="width:432px;max-width:100%;background:var(--background);border:1px solid var(--border);border-radius:16px;box-shadow:0 30px 70px -30px rgba(40,30,20,.45);overflow:hidden">
+          <div style="height:172px;background:var(--secondary);display:flex;align-items:center;justify-content:center;position:relative;border-bottom:1px solid var(--border)">
+            <div style="font-family:var(--font-display);font-weight:700;font-size:32px;color:var(--primary)">{{ ob.art }}</div>
+            <button onClick="{{ h.exitOnboard }}" style="position:absolute;top:14px;inset-inline-end:14px;background:var(--background);border:1px solid var(--border);color:var(--muted-foreground);width:30px;height:30px;border-radius:999px;cursor:pointer;font-size:15px">✕</button>
+          </div>
+          <div style="padding:26px 28px 28px">
+            <div style="display:flex;gap:6px;margin-bottom:18px">
+              <i style="{{ ob.dot0 }}"></i><i style="{{ ob.dot1 }}"></i><i style="{{ ob.dot2 }}"></i><i style="{{ ob.dot3 }}"></i>
+            </div>
+            <h2 style="font-family:var(--font-display);font-weight:700;font-size:25px;line-height:1.2;margin:0 0 9px;color:var(--foreground)">{{ ob.title }}</h2>
+            <p style="color:var(--muted-foreground);font-size:14.5px;line-height:1.65;margin:0 0 20px">{{ ob.body }}</p>
+
+            <sc-if value="{{ ob.isConnect }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:14px;align-items:center;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;box-shadow:var(--shadow-paper)">
+                <div style="width:72px;height:72px;border-radius:6px;background:var(--background);border:1px solid var(--input);display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);gap:2px;padding:7px;flex:0 0 auto">
+                  <i style="background:var(--foreground)"></i><i></i><i style="background:var(--foreground)"></i><i style="background:var(--foreground)"></i><i></i><i></i><i style="background:var(--foreground)"></i><i></i><i></i><i style="background:var(--foreground)"></i><i style="background:var(--foreground)"></i><i></i><i style="background:var(--foreground)"></i><i></i><i style="background:var(--foreground)"></i><i></i><i></i><i style="background:var(--foreground)"></i><i style="background:var(--foreground)"></i><i></i><i style="background:var(--foreground)"></i><i style="background:var(--foreground)"></i><i></i><i></i><i style="background:var(--foreground)"></i>
+                </div>
+                <div>
+                  <div style="font-weight:700;font-size:14px;color:var(--foreground);margin-bottom:3px">{{ ob.connectTitle }}</div>
+                  <div style="color:var(--muted-foreground);font-size:12.5px;line-height:1.5">{{ ob.connectSub }}</div>
+                  <div dir="ltr" style="font-variant-numeric:tabular-nums;font-weight:700;color:var(--primary);margin-top:6px;font-size:14px">+972 53-800-1200</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ ob.isInvite }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:2px">
+                <sc-for list="{{ family }}" as="m" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-top:1px solid var(--border)">
+                    <span style="width:30px;height:30px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;background:{{ m.color }}">{{ m.initial }}</span>
+                    <span style="flex:1;font-weight:600;color:var(--foreground);font-size:14px">{{ m.name }}</span>
+                    <span style="color:var(--muted-foreground);font-size:12px">{{ m.role }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <button onClick="{{ h.obNext }}" style="width:100%;background:var(--primary);color:var(--primary-foreground);border:0;border-radius:9px;padding:13px;font:700 15px 'Rubik';cursor:pointer">{{ ob.cta }}</button>
+            <sc-if value="{{ ob.canBack }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ h.obBack }}" style="width:100%;background:transparent;color:var(--muted-foreground);border:0;padding:11px;margin-top:4px;font:600 13px 'Rubik';cursor:pointer">{{ ob.backLabel }}</button>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ WHATSAPP INGESTION ============ -->
+      <sc-if value="{{ showWa }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="WhatsApp" style="display:flex;gap:40px;align-items:center;flex-wrap:wrap;justify-content:center">
+          <div style="width:340px;border-radius:42px;padding:11px;background:linear-gradient(160deg,#1c2530,#0b0f14);box-shadow:0 40px 90px -34px rgba(20,16,10,.6);flex:0 0 auto">
+            <div style="height:690px;border-radius:32px;overflow:hidden;display:flex;flex-direction:column;background:#0b141a">
+              <div style="background:#1f2c34;padding:14px 14px 11px;display:flex;align-items:center;gap:11px">
+                <span style="width:38px;height:38px;border-radius:999px;display:grid;place-items:center;background:var(--primary);font-family:'Rubik',serif;font-weight:700;color:var(--primary-foreground);font-size:17px;flex:0 0 auto">H</span>
+                <div style="flex:1"><div style="font-size:14.5px;font-weight:600;color:#e9eef1">HomeOS</div><div style="font-size:11px;color:#8aa0ad;margin-top:1px">{{ waStatus }}</div></div>
+                <span style="color:#8aa0ad;font-size:18px">⋮</span>
+              </div>
+              <div style="flex:1;overflow:auto;padding:16px 12px;display:flex;flex-direction:column;gap:9px;background:#0b141a">
+                <div style="align-self:center;font-size:10.5px;color:#c9d6dd;background:#1f2c34;padding:4px 12px;border-radius:8px;margin-bottom:4px">{{ waToday }}</div>
+                <div style="align-self:flex-end;max-width:82%;background:#056452;color:#eafff4;border-radius:11px;border-top-inline-end:3px;padding:8px 11px 6px;font-size:13.5px;line-height:1.5;animation:pop .35s both">
+                  <div style="font-size:10.5px;color:rgba(255,255,255,.6);font-style:italic;margin-bottom:3px">↪ {{ waFwd }}</div>
+                  {{ waMsg }}
+                  <div style="font-size:9.5px;color:rgba(255,255,255,.5);margin-top:3px;text-align:start">{{ waTime }} <span style="color:#5ad7ff">✓✓</span></div>
+                </div>
+                <div style="align-self:flex-start;max-width:84%;background:linear-gradient(180deg,#10231b,#0f1d18);border:1px solid color-mix(in oklab, var(--primary) 45%, transparent);color:#eafff4;border-radius:11px;border-top-inline-start:3px;padding:9px 12px 7px;font-size:13.5px;line-height:1.55;animation:pop .35s .15s both">
+                  <div style="font-size:9px;font-weight:700;letter-spacing:.04em;color:var(--primary);margin-bottom:4px;display:flex;gap:5px;align-items:center"><span style="width:13px;height:13px;border-radius:999px;background:var(--primary);display:inline-grid;place-items:center;color:var(--primary-foreground);font-family:'Rubik';font-size:9px">H</span>HomeOS</div>
+                  <div style="white-space:pre-line">{{ waBot }}</div>
+                  <div style="font-size:9.5px;color:rgba(255,255,255,.5);margin-top:4px;text-align:start">{{ waTime }} ✓✓</div>
+                </div>
+              </div>
+              <div style="background:#1f2c34;padding:9px 12px;display:flex;align-items:center;gap:10px">
+                <div style="flex:1;background:#2a3942;border-radius:999px;padding:9px 14px;font-size:12.5px;color:#6b7d88">{{ waInput }}</div>
+                <span style="width:36px;height:36px;border-radius:999px;background:var(--primary);display:grid;place-items:center;font-size:16px;color:var(--primary-foreground)">↩</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted-foreground)">
+            <span style="font-size:30px;color:var(--primary)">{{ waArrow }}</span>
+            <span style="font-size:11.5px;max-width:130px;text-align:center;line-height:1.5">{{ waLands }}</span>
+          </div>
+
+          <div style="width:300px;flex:0 0 auto">
+            <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:11px">{{ waCardLabel }}</div>
+            <div style="background:var(--card);box-shadow:var(--shadow-paper);border:1px solid var(--border);border-radius:var(--radius);padding:18px;animation:settleIn .5s cubic-bezier(.22,.61,.36,1) both">
+              <span style="display:block;height:2px;background:var(--primary);transform-origin:var(--draw-origin);margin-bottom:13px;animation:drawRule .5s cubic-bezier(.65,0,.35,1) both"></span>
+              <div style="font-family:var(--font-display);font-weight:500;font-size:21px;color:var(--foreground);line-height:1.22">{{ waCardTitle }}</div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">
+                <div style="display:flex;gap:10px;align-items:center;color:var(--muted-foreground);font-size:14px"><span dir="ltr" style="font-variant-numeric:tabular-nums;font-weight:600;color:var(--foreground)">{{ waCardTime }}</span> · {{ waCardDate }}</div>
+                <div style="color:var(--muted-foreground);font-size:14px">{{ waCardLoc }}</div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:13px;border-top:1px solid var(--border)">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:var(--radius);font-weight:600;font-size:12.5px;color:{{ waCardWhoColor }};background:{{ waCardChipBg }}"><span style="width:8px;height:8px;border-radius:999px;background:{{ waCardWhoColor }}"></span>{{ waCardWho }}</span>
+                <span style="color:var(--primary);font-size:12.5px;font-weight:600">{{ waAddedLabel }}</span>
+              </div>
+            </div>
+            <div style="color:var(--muted-foreground);font-size:12px;line-height:1.55;margin-top:14px">{{ waFootnote }}</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ TABLET ============ -->
+      <sc-if value="{{ showTablet }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Tablet" style="width:916px;max-width:100%;background:#15140f;border-radius:30px;padding:15px;box-shadow:0 40px 90px -34px rgba(30,22,14,.6)">
+          <div style="position:relative;border-radius:18px;overflow:hidden;background:var(--background);color:var(--foreground);height:628px">
+            <div style="position:absolute;inset:0;pointer-events:none;z-index:5;opacity:.045;mix-blend-mode:multiply;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E&quot;)"></div>
+            <div style="padding:24px 30px 26px">
+              <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px">
+                <span style="font-family:var(--font-display);font-weight:700;font-size:22px;color:var(--foreground)">{{ greeting }}<span style="display:block;font-family:var(--font-sans);font-weight:600;font-size:13px;color:var(--muted-foreground);margin-top:3px">{{ tabletSub }}</span></span>
+                <span style="text-align:end;line-height:1.04">
+                  <span style="display:block;font-family:var(--font-display);font-weight:700;font-size:40px;color:var(--foreground);font-variant-numeric:tabular-nums" dir="ltr">{{ clock }}</span>
+                  <span style="display:block;font-family:var(--font-sans);font-weight:600;font-size:12px;color:var(--muted-foreground);margin-top:3px">{{ hebDate }}</span>
+                </span>
+              </div>
+              <hr style="height:1px;background:var(--input);border:0;margin:0">
+              <div style="display:flex;gap:30px;margin-top:6px">
+                <div style="flex:1;min-width:0">
+                  <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin:14px 0 2px">{{ todayLabel }}</div>
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:0 18px">
+                    <sc-for list="{{ spineRows }}" as="r" hint-placeholder-count="5">
+                      <sc-if value="{{ r.isEvent }}" hint-placeholder-val="{{ true }}">
+                        <div style="font-family:var(--font-sans);font-weight:600;font-size:16px;color:var(--muted-foreground);padding:13px 0;white-space:nowrap;font-variant-numeric:tabular-nums;border-top:1px solid var(--border)"><span dir="ltr">{{ r.time }}</span></div>
+                        <div style="border-top:1px solid var(--border);padding:12px 0">
+                          <div style="font-family:var(--font-display);font-weight:500;line-height:1.24;color:{{ r.titleColor }};font-size:20px;display:flex;align-items:baseline;gap:8px"><sc-if value="{{ r.isReminder }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:999px;background:var(--primary);flex:0 0 auto;transform:translateY(-1px)"></span></sc-if><span>{{ r.title }}</span></div>
+                          <div style="display:flex;align-items:center;gap:11px;margin-top:8px;flex-wrap:wrap">
+                            <span style="display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px;color:{{ r.whoColor }}"><span style="width:20px;height:20px;border-radius:999px;background:{{ r.whoColor }};display:inline-grid;place-items:center;color:#fff;font-size:11px;font-weight:700">{{ r.whoInitial }}</span>{{ r.whoName }}</span>
+                            <sc-if value="{{ r.hasLoc }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted-foreground);font-size:13.5px">{{ r.loc }}</span></sc-if>
+                            <sc-if value="{{ r.hasRecur }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted-foreground);font-size:13px">↻ {{ r.recur }}</span></sc-if>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ r.isNow }}" hint-placeholder-val="{{ false }}">
+                        <div></div>
+                        <div style="position:relative;height:0;border-top:1.5px solid var(--primary);margin:5px 0"><span style="position:absolute;top:-9px;inset-inline-start:0;background:var(--background);padding-inline-end:8px;color:var(--primary);font:700 11px var(--font-sans)">{{ r.nowLabel }}</span></div>
+                      </sc-if>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="flex:0 0 224px;border-inline-start:1px solid var(--border);padding-inline-start:22px">
+                  <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:11px">{{ anytimeLabel }}</div>
+                  <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
+                    <div style="padding:10px 0;border-top:1px solid var(--border)">
+                      <div style="font-family:var(--font-display);font-weight:500;font-size:16px;color:var(--foreground);display:flex;align-items:baseline;gap:9px"><span style="width:15px;height:15px;border:1.5px solid var(--input);border-radius:var(--radius);flex:0 0 auto;transform:translateY(2px)"></span><span>{{ t.title }}</span></div>
+                      <div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;color:{{ t.whoColor }}"><span style="width:18px;height:18px;border-radius:999px;background:{{ t.whoColor }};display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700">{{ t.whoInitial }}</span>{{ t.whoName }}</div>
+                    </div>
+                  </sc-for>
+                  <div style="margin-top:24px">
+                    <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:9px">{{ tomorrowLabel }}</div>
+                    <sc-for list="{{ peek }}" as="p" hint-placeholder-count="2">
+                      <div style="display:flex;gap:9px;align-items:baseline;color:var(--muted-foreground);font-size:14px;padding:7px 0;border-top:1px solid var(--border)"><span dir="ltr" style="font-variant-numeric:tabular-nums">{{ p.time }}</span> {{ p.title }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="position:absolute;bottom:0;inset-inline:0;background:var(--secondary);border-top:1px solid var(--border);padding:11px 30px;display:flex;align-items:center;gap:14px;color:var(--muted-foreground);font-size:13px">
+              <span>{{ weather }}</span><span style="margin-inline-start:auto;color:var(--primary);font-weight:600">{{ shabbat }}</span>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ PHONE ============ -->
+      <sc-if value="{{ showPhone }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Phone" style="width:368px;background:#15140f;border-radius:46px;padding:11px;box-shadow:0 40px 90px -34px rgba(30,22,14,.6);position:relative">
+          <div style="position:relative;border-radius:36px;overflow:hidden;background:var(--background);color:var(--foreground);height:760px;display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 26px 4px;font-size:13px;font-weight:700;color:var(--foreground)"><span dir="ltr">{{ clock }}</span><span style="font-size:11px">●●● ▮</span></div>
+
+            <div style="flex:1;overflow:auto;padding:8px 22px 0">
+              <!-- PHONE WEEK -->
+              <sc-if value="{{ phoneWeek }}" hint-placeholder-val="{{ true }}">
+                <div style="margin:6px 0 4px;font-family:var(--font-display);font-weight:700;line-height:1.05"><span style="display:block;font-family:var(--font-sans);font-weight:600;font-size:12px;color:var(--muted-foreground)">{{ weekEy }}</span><span style="display:block;font-size:25px;color:var(--foreground)">{{ weekRange }}</span></div>
+                <hr style="height:1px;background:var(--input);border:0;margin:10px 0 4px">
+                <div style="padding-bottom:18px">
+                  <sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+                    <div onClick="{{ h.pToday }}" style="{{ d.rowStyle }}">
+                      <span style="font-family:var(--font-display);font-weight:500;font-size:18px;color:{{ d.numColor }};width:1.5em;text-align:center">{{ d.n }}</span>
+                      <span style="flex:1"><span style="color:{{ d.nameColor }};font-size:15px;font-weight:{{ d.nameWeight }}">{{ d.name }}</span><sc-if value="{{ d.hasNote }}" hint-placeholder-val="{{ false }}"><small style="display:block;color:var(--muted-foreground);font-size:12.5px;margin-top:1px">{{ d.note }}</small></sc-if></span>
+                      <span style="display:flex;gap:8px;align-items:center"><span style="display:flex;gap:4px"><sc-for list="{{ d.pipColors }}" as="pc" hint-placeholder-count="2"><i style="width:7px;height:7px;border-radius:999px;display:inline-block;background:{{ pc }}"></i></sc-for></span><span style="color:{{ d.numColor }};font-size:12.5px;font-weight:600">{{ d.qty }}</span></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <!-- PHONE TODAY/DAY -->
+              <sc-if value="{{ phoneToday }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px">
+                  <span style="font-family:var(--font-display);font-weight:700;line-height:1.05">
+                    <span style="display:block;font-family:var(--font-sans);font-weight:600;font-size:12px;color:var(--primary)">{{ todayEy }}</span>
+                    <span style="display:block;font-size:25px;color:var(--foreground)">{{ todayBig }}</span>
+                  </span>
+                  <button onClick="{{ h.openAdd }}" style="width:40px;height:40px;border-radius:999px;background:var(--primary);color:var(--primary-foreground);border:0;font-size:22px;cursor:pointer;line-height:1">+</button>
+                </div>
+                <hr style="height:1px;background:var(--input);border:0;margin:10px 0 14px">
+                <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:18px">
+                  <div style="animation:settleIn var(--dur) cubic-bezier(.22,.61,.36,1);background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:15px">
+                    <span style="display:block;height:2px;background:var(--primary);transform-origin:var(--draw-origin);margin-bottom:11px;animation:drawRule var(--dur) cubic-bezier(.65,0,.35,1)"></span>
+                    <div style="font-weight:600;color:var(--primary);font-size:13px;margin-bottom:4px">{{ justAdded }}</div>
+                    <div style="font-family:var(--font-display);font-weight:500;font-size:18px;color:var(--foreground);line-height:1.24">{{ freshTitle }}</div>
+                    <div style="color:var(--muted-foreground);font-size:13.5px;margin-top:4px">{{ freshLoc }}</div>
+                    <div style="margin-top:9px;display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:var(--radius);font-weight:600;font-size:12.5px;color:{{ freshWhoColor }};background:{{ freshChipBg }}"><span style="width:8px;height:8px;border-radius:999px;background:{{ freshWhoColor }}"></span>{{ freshWho }}</div>
+                  </div>
+                  <sc-for list="{{ phoneDay }}" as="e" hint-placeholder-count="3">
+                    <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:15px">
+                      <sc-if value="{{ e.hasTime }}" hint-placeholder-val="{{ false }}"><div style="font-weight:600;color:var(--muted-foreground);font-size:13px;margin-bottom:3px" dir="ltr">{{ e.time }}</div></sc-if>
+                      <div style="font-family:var(--font-display);font-weight:500;font-size:18px;color:{{ e.titleColor }};line-height:1.24;display:flex;align-items:baseline;gap:8px">
+                        <sc-if value="{{ e.isReminder }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:999px;background:var(--primary);flex:0 0 auto;transform:translateY(-1px)"></span></sc-if>
+                        <sc-if value="{{ e.isTask }}" hint-placeholder-val="{{ false }}"><span style="width:15px;height:15px;border:1.5px solid var(--input);border-radius:var(--radius);flex:0 0 auto;transform:translateY(2px)"></span></sc-if>
+                        <span>{{ e.title }}</span>
+                      </div>
+                      <sc-if value="{{ e.hasLoc }}" hint-placeholder-val="{{ false }}"><div style="color:var(--muted-foreground);font-size:13.5px;margin-top:4px">{{ e.loc }}</div></sc-if>
+                      <div style="display:flex;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;color:{{ e.whoColor }}"><span style="width:19px;height:19px;border-radius:999px;background:{{ e.whoColor }};display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700">{{ e.whoInitial }}</span>{{ e.whoName }}</span><sc-if value="{{ e.hasRecur }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted-foreground);font-size:13px">↻ {{ e.recur }}</span></sc-if></div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <!-- PHONE FAMILY -->
+              <sc-if value="{{ phoneFamily }}" hint-placeholder-val="{{ false }}">
+                <div style="margin:6px 0 4px;font-family:var(--font-display);font-weight:700;font-size:25px;color:var(--foreground)">{{ familyTitle }}</div>
+                <hr style="height:1px;background:var(--input);border:0;margin:10px 0 14px">
+                <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:18px">
+                  <sc-for list="{{ family }}" as="m" hint-placeholder-count="4">
+                    <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:13px 15px;display:flex;align-items:center;gap:13px">
+                      <span style="width:42px;height:42px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:17px;color:#fff;background:{{ m.color }};flex:0 0 auto">{{ m.initial }}</span>
+                      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:16px;color:var(--foreground)">{{ m.name }}</div><div style="color:var(--muted-foreground);font-size:12.5px;margin-top:1px">{{ m.role }} · {{ m.msgs }}</div></div>
+                      <span style="display:flex;align-items:center;gap:5px;color:var(--muted-foreground);font-size:12px"><span style="width:7px;height:7px;border-radius:999px;background:#5a8a64"></span>{{ m.status }}</span>
+                    </div>
+                  </sc-for>
+                  <button style="background:transparent;border:1.5px dashed var(--input);color:var(--muted-foreground);border-radius:var(--radius);padding:13px;font:600 14px 'Rubik';cursor:pointer">+ {{ addMember }}</button>
+                </div>
+              </sc-if>
+
+              <!-- PHONE SETTINGS -->
+              <sc-if value="{{ phoneSettings }}" hint-placeholder-val="{{ false }}">
+                <div style="margin:6px 0 4px;font-family:var(--font-display);font-weight:700;font-size:25px;color:var(--foreground)">{{ settingsTitle }}</div>
+                <hr style="height:1px;background:var(--input);border:0;margin:10px 0 14px">
+                <div style="padding-bottom:18px">
+                  <sc-for list="{{ settingsRows }}" as="s" hint-placeholder-count="6">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--border)"><span style="color:var(--foreground);font-size:14.5px;font-weight:600">{{ s.label }}</span><span style="color:var(--muted-foreground);font-size:13.5px">{{ s.value }}</span></div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="display:flex;border-top:1px solid var(--border);background:var(--background);padding:9px 8px 20px">
+              <button onClick="{{ h.pWeek }}" style="{{ pnav.week }}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16M4 12h16M4 19h16"/></svg><span style="font-size:10.5px;font-weight:600">{{ navWeekLbl }}</span></button>
+              <button onClick="{{ h.pToday }}" style="{{ pnav.today }}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span style="font-size:10.5px;font-weight:600">{{ navTodayLbl }}</span></button>
+              <button onClick="{{ h.pFamily }}" style="{{ pnav.family }}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M16 15c2.4.2 4.2 2 4.2 5"/></svg><span style="font-size:10.5px;font-weight:600">{{ navFamilyLbl }}</span></button>
+              <button onClick="{{ h.pSettings }}" style="{{ pnav.settings }}"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg><span style="font-size:10.5px;font-weight:600">{{ navSettingsLbl }}</span></button>
+            </div>
+          </div>
+
+          <!-- ADD SHEET -->
+          <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ h.closeAdd }}" style="position:absolute;inset:0;background:rgba(20,15,8,.4);border-radius:46px;z-index:30;animation:fadeIn .2s ease"></div>
+            <div style="position:absolute;inset-inline:11px;bottom:11px;z-index:31;background:var(--background);border-radius:32px 32px 36px 36px;padding:22px 22px 26px;box-shadow:0 -20px 50px -20px rgba(20,15,8,.5);animation:sheetUp var(--dur) cubic-bezier(.22,.61,.36,1);max-height:680px;overflow:auto" dir="{{ dirAttr }}">
+              <div style="width:38px;height:4px;border-radius:99px;background:var(--input);margin:0 auto 16px"></div>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:21px;color:var(--foreground);margin-bottom:16px">{{ addTitle }}</div>
+              <div style="display:flex;gap:6px;margin-bottom:16px">
+                <button onClick="{{ h.kindEvent }}" style="{{ kind.event }}">{{ kindEventLbl }}</button>
+                <button onClick="{{ h.kindReminder }}" style="{{ kind.reminder }}">{{ kindReminderLbl }}</button>
+                <button onClick="{{ h.kindTask }}" style="{{ kind.task }}">{{ kindTaskLbl }}</button>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldTitle }}</div>
+              <div style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px;margin-bottom:14px">{{ addPlaceholder }}</div>
+              <div style="display:flex;gap:12px;margin-bottom:14px">
+                <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldDate }}</div><div style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px">{{ addDateVal }}</div></div>
+                <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldTime }}</div><div dir="ltr" style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px;text-align:start">19:00</div></div>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:8px">{{ fieldWho }}</div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:22px">
+                <sc-for list="{{ whoChips }}" as="w" hint-placeholder-count="5"><button onClick="{{ w.onClick }}" style="{{ w.style }}"><span style="width:8px;height:8px;border-radius:999px;background:{{ w.color }}"></span>{{ w.name }}</button></sc-for>
+              </div>
+              <div style="display:flex;gap:10px">
+                <button onClick="{{ h.closeAdd }}" style="flex:0 0 auto;background:var(--secondary);color:var(--foreground);border:0;border-radius:9px;padding:13px 20px;font:600 15px 'Rubik';cursor:pointer">{{ cancelLbl }}</button>
+                <button onClick="{{ h.saveAdd }}" style="flex:1;background:var(--primary);color:var(--primary-foreground);border:0;border-radius:9px;padding:13px;font:700 15px 'Rubik';cursor:pointer">{{ saveLbl }}</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ============ WEB ============ -->
+      <sc-if value="{{ showWeb }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Web" style="width:1180px;max-width:100%;background:var(--card);border-radius:13px;box-shadow:0 40px 90px -34px rgba(30,22,14,.45);overflow:hidden;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:var(--secondary);border-bottom:1px solid var(--border)">
+            <span style="display:flex;gap:7px"><i style="width:11px;height:11px;border-radius:999px;background:#d08c6e;display:inline-block"></i><i style="width:11px;height:11px;border-radius:999px;background:#cdb079;display:inline-block"></i><i style="width:11px;height:11px;border-radius:999px;background:#8aa07e;display:inline-block"></i></span>
+            <div style="flex:1;display:flex;justify-content:center"><span dir="ltr" style="background:var(--background);border:1px solid var(--border);color:var(--muted-foreground);border-radius:7px;padding:5px 16px;font-size:12.5px">app.homeos.family</span></div>
+          </div>
+
+          <div style="display:flex;height:712px;background:var(--background);color:var(--foreground)">
+            <aside style="flex:0 0 244px;background:var(--card);border-inline-end:1px solid var(--border);display:flex;flex-direction:column;padding:20px 16px">
+              <div style="font-family:var(--font-display);font-weight:700;font-size:21px;color:var(--foreground);padding:4px 8px 18px">HomeOS</div>
+              <nav style="display:flex;flex-direction:column;gap:3px">
+                <button onClick="{{ h.wToday }}" style="{{ wnav.today }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>{{ navTodayLbl }}</button>
+                <button onClick="{{ h.wWeek }}" style="{{ wnav.week }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16M4 12h16M4 19h16"/></svg>{{ navWeekLbl }}</button>
+                <button onClick="{{ h.wFamily }}" style="{{ wnav.family }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M16 15c2.4.2 4.2 2 4.2 5"/></svg>{{ navFamilyLbl }}</button>
+                <button onClick="{{ h.wConn }}" style="{{ wnav.conn }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>{{ navConnLbl }}</button>
+                <button onClick="{{ h.wSettings }}" style="{{ wnav.settings }}"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>{{ navSettingsLbl }}</button>
+              </nav>
+              <div style="flex:1"></div>
+              <div style="border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;gap:10px">
+                <span style="display:flex">{{ sidebarAvatars }}</span>
+                <span style="color:var(--muted-foreground);font-size:12.5px">{{ householdName }}</span>
+              </div>
+            </aside>
+
+            <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+              <header style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 30px;border-bottom:1px solid var(--border)">
+                <div><div style="font-family:var(--font-sans);font-weight:600;font-size:12px;color:var(--primary)">{{ webEy }}</div><div style="font-family:var(--font-display);font-weight:700;font-size:24px;color:var(--foreground);line-height:1.1">{{ webHeading }}</div></div>
+                <button onClick="{{ h.openAdd }}" style="display:flex;align-items:center;gap:7px;background:var(--primary);color:var(--primary-foreground);border:0;border-radius:9px;padding:11px 18px;font:700 14px 'Rubik';cursor:pointer"><span style="font-size:17px">+</span> {{ addLbl }}</button>
+              </header>
+
+              <div style="flex:1;overflow:auto;padding:26px 30px">
+                <!-- WEB TODAY -->
+                <sc-if value="{{ webToday }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;gap:34px">
+                    <div style="flex:1;min-width:0">
+                      <div style="display:grid;grid-template-columns:auto 1fr;gap:0 20px">
+                        <sc-for list="{{ spineRows }}" as="r" hint-placeholder-count="5">
+                          <sc-if value="{{ r.isEvent }}" hint-placeholder-val="{{ true }}">
+                            <div style="font-family:var(--font-sans);font-weight:600;font-size:16px;color:var(--muted-foreground);padding:16px 0;white-space:nowrap;font-variant-numeric:tabular-nums;border-top:1px solid var(--border)"><span dir="ltr">{{ r.time }}</span></div>
+                            <div style="border-top:1px solid var(--border);padding:15px 0">
+                              <div style="font-family:var(--font-display);font-weight:500;line-height:1.24;color:{{ r.titleColor }};font-size:20px;display:flex;align-items:baseline;gap:8px"><sc-if value="{{ r.isReminder }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:999px;background:var(--primary);flex:0 0 auto;transform:translateY(-1px)"></span></sc-if><span>{{ r.title }}</span></div>
+                              <div style="display:flex;align-items:center;gap:11px;margin-top:9px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;color:{{ r.whoColor }}"><span style="width:20px;height:20px;border-radius:999px;background:{{ r.whoColor }};display:inline-grid;place-items:center;color:#fff;font-size:11px;font-weight:700">{{ r.whoInitial }}</span>{{ r.whoName }}</span><sc-if value="{{ r.hasLoc }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted-foreground);font-size:14px">{{ r.loc }}</span></sc-if><sc-if value="{{ r.hasRecur }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted-foreground);font-size:13px">↻ {{ r.recur }}</span></sc-if></div>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ r.isNow }}" hint-placeholder-val="{{ false }}">
+                            <div></div>
+                            <div style="position:relative;height:0;border-top:1.5px solid var(--primary);margin:6px 0"><span style="position:absolute;top:-9px;inset-inline-start:0;background:var(--background);padding-inline-end:8px;color:var(--primary);font:700 11px var(--font-sans)">{{ r.nowLabel }}</span></div>
+                          </sc-if>
+                        </sc-for>
+                      </div>
+                    </div>
+                    <div style="flex:0 0 270px">
+                      <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:11px">{{ anytimeLabel }}</div>
+                      <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
+                        <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:14px;margin-bottom:9px">
+                          <div style="font-family:var(--font-display);font-weight:500;font-size:17px;color:var(--foreground);display:flex;align-items:baseline;gap:9px"><span style="width:15px;height:15px;border:1.5px solid var(--input);border-radius:var(--radius);flex:0 0 auto;transform:translateY(2px)"></span><span>{{ t.title }}</span></div>
+                          <div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12px;color:{{ t.whoColor }}"><span style="width:18px;height:18px;border-radius:999px;background:{{ t.whoColor }};display:inline-grid;place-items:center;color:#fff;font-size:10px;font-weight:700">{{ t.whoInitial }}</span>{{ t.whoName }}</div>
+                        </div>
+                      </sc-for>
+                      <div style="margin-top:22px;font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:9px">{{ tomorrowLabel }}</div>
+                      <sc-for list="{{ peek }}" as="p" hint-placeholder-count="2"><div style="display:flex;gap:9px;align-items:baseline;color:var(--muted-foreground);font-size:14px;padding:8px 0;border-top:1px solid var(--border)"><span dir="ltr" style="font-variant-numeric:tabular-nums">{{ p.time }}</span> {{ p.title }}</div></sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- WEB WEEK -->
+                <sc-if value="{{ webWeek }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+                    <sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+                      <div style="{{ d.colStyle }}">
+                        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:10px"><span style="font-family:var(--font-display);font-weight:700;font-size:20px;color:{{ d.numColor }}">{{ d.n }}</span><span style="color:{{ d.nameColor }};font-size:12.5px;font-weight:{{ d.nameWeight }}">{{ d.name }}</span></div>
+                        <sc-if value="{{ d.hasNote }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--primary);font-weight:600;margin-bottom:8px">{{ d.note }}</div></sc-if>
+                        <div style="display:flex;flex-direction:column;gap:5px"><sc-for list="{{ d.pipColors }}" as="pc" hint-placeholder-count="2"><span style="height:6px;border-radius:99px;background:{{ pc }};opacity:.85"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <!-- WEB FAMILY -->
+                <sc-if value="{{ webFamily }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+                    <sc-for list="{{ family }}" as="m" hint-placeholder-count="4">
+                      <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:18px;display:flex;align-items:center;gap:15px">
+                        <span style="width:50px;height:50px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:20px;color:#fff;background:{{ m.color }};flex:0 0 auto">{{ m.initial }}</span>
+                        <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:17px;color:var(--foreground)">{{ m.name }}</div><div style="color:var(--muted-foreground);font-size:13px;margin-top:2px">{{ m.role }} · {{ m.msgs }}</div></div>
+                        <span style="display:flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:12.5px"><span style="width:8px;height:8px;border-radius:999px;background:#5a8a64"></span>{{ m.status }}</span>
+                      </div>
+                    </sc-for>
+                    <button style="background:transparent;border:1.5px dashed var(--input);color:var(--muted-foreground);border-radius:var(--radius);padding:18px;font:600 15px 'Rubik';cursor:pointer">+ {{ addMember }}</button>
+                  </div>
+                </sc-if>
+
+                <!-- WEB CONNECTIONS -->
+                <sc-if value="{{ webConn }}" hint-placeholder-val="{{ false }}">
+                  <div style="max-width:660px">
+                    <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:22px;display:flex;gap:18px;align-items:flex-start;margin-bottom:16px">
+                      <span style="width:46px;height:46px;border-radius:11px;background:color-mix(in oklab, #25a35a 16%, transparent);display:grid;place-items:center;flex:0 0 auto"><svg width="26" height="26" viewBox="0 0 24 24" fill="#3c8a52"><path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.1 14.9l-.4-.2-2.5.7.7-2.4-.2-.4A8 8 0 0 1 12 4z"/></svg></span>
+                      <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;margin-bottom:4px"><span style="font-weight:700;font-size:16px;color:var(--foreground)">{{ connChannel }}</span><span style="display:inline-flex;align-items:center;gap:5px;color:#3c8a52;font-size:12px;font-weight:600"><span style="width:7px;height:7px;border-radius:999px;background:#3c8a52"></span>{{ connStatus }}</span></div><div style="color:var(--muted-foreground);font-size:13.5px;line-height:1.6">{{ connDesc }}</div><div dir="ltr" style="margin-top:10px;font-variant-numeric:tabular-nums;font-weight:700;font-size:16px;color:var(--primary)">+972 53-800-1200</div></div>
+                    </div>
+                    <div style="background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:22px">
+                      <div style="font-weight:700;font-size:15px;color:var(--foreground);margin-bottom:4px">{{ connHowTitle }}</div>
+                      <div style="color:var(--muted-foreground);font-size:13.5px;line-height:1.65;margin-bottom:16px">{{ connHowDesc }}</div>
+                      <div style="font:600 11px var(--font-sans);letter-spacing:.04em;color:var(--muted-foreground);margin-bottom:10px">{{ connLinkedLbl }}</div>
+                      <div style="display:flex;flex-direction:column;gap:2px">
+                        <sc-for list="{{ family }}" as="m" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--border)"><span style="width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff;background:{{ m.color }}">{{ m.initial }}</span><span style="flex:1;font-weight:600;color:var(--foreground);font-size:14px">{{ m.name }}</span><span style="color:var(--muted-foreground);font-size:12.5px" dir="ltr">{{ m.phone }}</span></div></sc-for>
+                      </div>
+                      <button style="margin-top:16px;background:transparent;border:1px solid var(--input);color:var(--foreground);border-radius:9px;padding:10px 16px;font:600 13.5px 'Rubik';cursor:pointer">+ {{ connAddChannel }}</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- WEB SETTINGS -->
+                <sc-if value="{{ webSettings }}" hint-placeholder-val="{{ false }}">
+                  <div style="max-width:640px;background:var(--card);box-shadow:var(--shadow-paper);border-radius:var(--radius);padding:6px 22px">
+                    <sc-for list="{{ settingsRows }}" as="s" hint-placeholder-count="6"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0;border-top:1px solid var(--border)"><div><div style="color:var(--foreground);font-size:15px;font-weight:600">{{ s.label }}</div><sc-if value="{{ s.hasHint }}" hint-placeholder-val="{{ false }}"><div style="color:var(--muted-foreground);font-size:12.5px;margin-top:2px">{{ s.hint }}</div></sc-if></div><span style="color:var(--muted-foreground);font-size:14px">{{ s.value }}</span></div></sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </main>
+          </div>
+
+          <!-- WEB ADD MODAL -->
+          <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ h.closeAdd }}" style="position:absolute;inset:0;background:rgba(20,15,8,.42);z-index:30;animation:fadeIn .2s ease;border-radius:13px"></div>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:31;width:480px;max-width:92%;background:var(--background);border:1px solid var(--border);border-radius:14px;padding:26px;box-shadow:0 30px 70px -24px rgba(20,15,8,.5)" dir="{{ dirAttr }}">
+              <div style="font-family:var(--font-display);font-weight:700;font-size:22px;color:var(--foreground);margin-bottom:18px">{{ addTitle }}</div>
+              <div style="display:flex;gap:6px;margin-bottom:18px">
+                <button onClick="{{ h.kindEvent }}" style="{{ kind.event }}">{{ kindEventLbl }}</button>
+                <button onClick="{{ h.kindReminder }}" style="{{ kind.reminder }}">{{ kindReminderLbl }}</button>
+                <button onClick="{{ h.kindTask }}" style="{{ kind.task }}">{{ kindTaskLbl }}</button>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldTitle }}</div>
+              <div style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px;margin-bottom:14px">{{ addPlaceholder }}</div>
+              <div style="display:flex;gap:12px;margin-bottom:14px">
+                <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldDate }}</div><div style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px">{{ addDateVal }}</div></div>
+                <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldTime }}</div><div dir="ltr" style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--foreground);font-size:15px;text-align:start">19:00</div></div>
+                <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:6px">{{ fieldLoc }}</div><div style="background:var(--card);border:1px solid var(--input);border-radius:var(--radius);padding:12px 13px;color:var(--muted-foreground);font-size:15px">{{ locPlaceholder }}</div></div>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted-foreground);margin-bottom:8px">{{ fieldWho }}</div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:24px">
+                <sc-for list="{{ whoChips }}" as="w" hint-placeholder-count="5"><button onClick="{{ w.onClick }}" style="{{ w.style }}"><span style="width:8px;height:8px;border-radius:999px;background:{{ w.color }}"></span>{{ w.name }}</button></sc-for>
+              </div>
+              <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button onClick="{{ h.closeAdd }}" style="background:var(--secondary);color:var(--foreground);border:0;border-radius:9px;padding:12px 20px;font:600 14px 'Rubik';cursor:pointer">{{ cancelLbl }}</button>
+                <button onClick="{{ h.saveAdd }}" style="background:var(--primary);color:var(--primary-foreground);border:0;border-radius:9px;padding:12px 26px;font:700 14px 'Rubik';cursor:pointer">{{ saveLbl }}</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: &quot;100%&quot;, &quot;height&quot;: 880 },
+  &quot;palette&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;ocean&quot;, &quot;terracotta&quot;, &quot;sage&quot;, &quot;plum&quot;], &quot;default&quot;: &quot;ocean&quot;, &quot;tsType&quot;: &quot;string&quot; },
+  &quot;shape&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;editorial&quot;, &quot;calm&quot;, &quot;pillowy&quot;], &quot;default&quot;: &quot;calm&quot;, &quot;tsType&quot;: &quot;string&quot; },
+  &quot;typeface&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;friendly&quot;, &quot;editorial&quot;, &quot;classic&quot;], &quot;default&quot;: &quot;friendly&quot;, &quot;tsType&quot;: &quot;string&quot; }
+}">
+class Component extends DCLogic {
+  state = {
+    surface: 'tablet', theme: 'light', dir: 'rtl',
+    phoneScreen: 'week', webScreen: 'today',
+    addOpen: false, addKind: 'event', addWho: 'yoav',
+    onboard: false, obStep: 0,
+  };
+
+  themeRoot = React.createRef();
+
+  WHO = {
+    aba: { he:'אבא', en:'Dad', light:'#2F7DA6', night:'#7FB8D6', role_he:'הורה', role_en:'Parent', phone:'+972 52-111-2233' },
+    ima: { he:'אמא', en:'Mom', light:'#C26A72', night:'#E29AA0', role_he:'הורה', role_en:'Parent', phone:'+972 54-222-3344' },
+    yoav:{ he:'יואב', en:'Yoav', light:'#2E8C7A', night:'#6FC2B0', role_he:'ילד', role_en:'Child', phone:'+972 53-333-4455' },
+    noa: { he:'נועה', en:'Noa', light:'#6E78C4', night:'#A6AEE6', role_he:'ילדה', role_en:'Child', phone:'+972 53-444-5566' },
+    all: { he:'כל המשפחה', en:'Everyone', light:'#6b7d86', night:'#8fa3ad' },
+  };
+
+  EVENTS = [
+    { time:'08:00', kind:'reminder', he:'חולצה לבנה לגן', en:'White shirt for gan', who:'all' },
+    { time:'14:30', kind:'event', he:'איסוף מהצהרון', en:'After-school pickup', who:'ima' },
+    { time:'16:30', kind:'event', he:'חוג כדורגל', en:'Soccer practice', who:'yoav', loc_he:'מגרש קהילתי', loc_en:'Community field', recur_he:'כל יום א׳', recur_en:'every Sun' },
+    { time:'19:00', kind:'event', he:'אסיפת הורים', en:'Parents meeting', who:'ima', loc_he:'גן רימון', loc_en:'Gan Rimon' },
+  ];
+  TASKS = [
+    { kind:'task', he:'לשלם תשלום לבית הספר', en:'Pay the school fee', who:'aba' },
+    { kind:'task', he:'לחדש מרשם לרופא', en:'Renew the prescription', who:'ima' },
+  ];
+  WEEK = [
+    { n:18, he:'ראשון', en:'Sun', note_he:'היום', note_en:'Today', pips:['ima','yoav','aba'], q:4, today:true },
+    { n:19, he:'שני', en:'Mon', pips:['noa'], q:2 },
+    { n:20, he:'שלישי', en:'Tue', pips:['yoav'], q:1 },
+    { n:21, he:'רביעי', en:'Wed', note_he:'חג · חולצה לבנה', note_en:'Holiday · white shirt', pips:['all'], q:2 },
+    { n:22, he:'חמישי', en:'Thu', pips:['ima'], q:1 },
+    { n:23, he:'שישי', en:'Fri', q:0 },
+    { n:24, he:'שבת', en:'Sat', note_he:'שבת', note_en:'Shabbat', q:0 },
+  ];
+  PEEK = [
+    { time:'17:00', he:'יום הולדת לסבתא', en:'Grandma’s birthday' },
+    { time:'16:00', he:'חוג ציור · נועה', en:'Art class · Noa' },
+  ];
+
+  componentDidMount(){ this.applyTokens(); }
+  componentDidUpdate(){ this.applyTokens(); }
+
+  applyTokens(){
+    const el = this.themeRoot.current; if(!el) return;
+    const t = this.tokens(this.state.theme);
+    for(const k in t) el.style.setProperty(k, t[k]);
+    el.style.setProperty('--draw-origin', this.state.dir==='rtl' ? 'right center' : 'left center');
+  }
+
+  tokens(theme){
+    // ── expressive tweaks: each reshapes the whole system ──
+    const PAL = {
+      ocean:      { aL:0.55, aC:0.10,  aH:228, nH:225, nC:1,   naL:0.72, naC:0.11, naH:222 },
+      terracotta: { aL:0.52, aC:0.13,  aH:38,  nH:80,  nC:1,   naL:0.68, naC:0.12, naH:45  },
+      sage:       { aL:0.50, aC:0.085, aH:155, nH:128, nC:0.9, naL:0.70, naC:0.09, naH:155 },
+      plum:       { aL:0.52, aC:0.12,  aH:320, nH:312, nC:0.9, naL:0.70, naC:0.11, naH:320 },
+    };
+    const SHAPE = {
+      editorial: { r:'3px',  fL:'', fN:'' },
+      calm:      { r:'12px', fL:'', fN:'' },
+      pillowy:   { r:'20px', fL:', 0 10px 26px -16px rgba(15,40,60,.22)', fN:', 0 12px 30px -16px rgba(0,0,0,.55)' },
+    };
+    const TYPE = {
+      friendly:  { d:'"Rubik", system-ui, sans-serif',          s:'"Rubik", system-ui, sans-serif' },
+      editorial: { d:'"Frank Ruhl Libre", Georgia, serif',      s:'"Rubik", system-ui, sans-serif' },
+      classic:   { d:'"Frank Ruhl Libre", Georgia, serif',      s:'"Assistant", system-ui, sans-serif' },
+    };
+    const p = PAL[this.props.palette] || PAL.ocean;
+    const sh = SHAPE[this.props.shape] || SHAPE.calm;
+    const ty = TYPE[this.props.typeface] || TYPE.friendly;
+    const nH = p.nH, nC = p.nC, mH = nH + 13;
+    const o = (l,c,h)=>`oklch(${l} ${(+c).toFixed(3)} ${h})`;
+    const t = {};
+    if(theme !== 'night'){
+      t['--background']=o(0.97,0.012*nC,nH); t['--card']=o(0.95,0.014*nC,nH);
+      t['--secondary']=o(0.92,0.018*nC,nH); t['--muted-foreground']=o(0.55,0.024,nH+7);
+      t['--foreground']=o(0.27,0.032,nH+10); t['--border']=o(0.87,0.018*nC,nH);
+      t['--input']=o(0.82,0.022*nC,nH); t['--primary']=o(p.aL,p.aC,p.aH);
+      t['--primary-foreground']=o(0.98,0.01,nH);
+      t['--shadow-paper']=`inset 0 1px 0 ${o(0.995,0.01,nH)}${sh.fL}`;
+    } else {
+      t['--background']=o(0.21,0.022*nC,mH); t['--card']=o(0.245,0.024*nC,mH);
+      t['--secondary']=o(0.27,0.026*nC,mH); t['--muted-foreground']=o(0.68,0.028,mH);
+      t['--foreground']=o(0.94,0.02,mH); t['--border']=o(0.33,0.026*nC,mH);
+      t['--input']=o(0.37,0.028*nC,mH); t['--primary']=o(p.naL,p.naC,p.naH);
+      t['--primary-foreground']=o(0.20,0.022*nC,mH);
+      t['--shadow-paper']= sh.fN ? `0 1px 2px rgba(0,0,0,.4)${sh.fN}` : 'none';
+    }
+    t['--ring']='var(--primary)'; t['--radius']=sh.r; t['--dur']='440ms';
+    t['--font-display']=ty.d; t['--font-sans']=ty.s;
+    return t;
+  }
+
+  L(he,en){ return this.state.dir==='rtl' ? he : en; }
+  whoColor(key){ const w=this.WHO[key]; return this.state.theme==='night' ? w.night : w.light; }
+  whoInitial(key){ return this.L(this.WHO[key].he, this.WHO[key].en).slice(0,1); }
+  chipBg(c){ return `color-mix(in oklab, ${c} 16%, transparent)`; }
+
+  card(e, opt={}){
+    const c = this.whoColor(e.who);
+    const isReminder = e.kind==='reminder', isTask = e.kind==='task';
+    return {
+      time: e.time||'', hasTime: !!e.time && !!opt.withTime,
+      title: this.L(e.he,e.en), isReminder, isTask,
+      titleColor: isReminder ? 'var(--primary)' : 'var(--foreground)',
+      hasLoc: !!e.loc_he, loc: e.loc_he ? this.L(e.loc_he,e.loc_en) : '',
+      hasRecur: !!e.recur_he, recur: e.recur_he ? this.L(e.recur_he,e.recur_en) : '',
+      whoName: this.L(this.WHO[e.who].he, this.WHO[e.who].en), whoInitial:this.whoInitial(e.who),
+      whoColor: c, chipBg: this.chipBg(c),
+    };
+  }
+
+  segChrome(active){
+    const b='border:0;border-radius:7px;padding:7px 13px;font:600 12.5px Rubik;cursor:pointer;';
+    return b + (active ? 'background:#16252e;color:#fff' : 'background:transparent;color:#5f7682');
+  }
+  navStyle(active, web){
+    if(web){
+      return 'display:flex;align-items:center;gap:11px;border:0;border-radius:9px;padding:10px 12px;font:600 14px Rubik;cursor:pointer;text-align:start;width:100%;'
+        + (active ? 'background:var(--secondary);color:var(--foreground)' : 'background:transparent;color:var(--muted-foreground)');
+    }
+    return 'flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;border:0;background:transparent;padding:5px 0;cursor:pointer;'
+      + (active ? 'color:var(--primary)' : 'color:var(--muted-foreground)');
+  }
+  kindStyle(active){
+    return 'flex:1;border-radius:8px;padding:10px;font:600 13.5px Rubik;cursor:pointer;'
+      + (active ? 'background:var(--primary);color:var(--primary-foreground);border:1px solid var(--primary)'
+                : 'background:transparent;color:var(--muted-foreground);border:1px solid var(--input)');
+  }
+  whoStyleSel(active, c){
+    return 'display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 13px;font:600 13px Rubik;cursor:pointer;'
+      + (active ? `background:${this.chipBg(c)};color:var(--foreground);border:1.5px solid ${c}`
+                : 'background:transparent;color:var(--muted-foreground);border:1.5px solid var(--input)');
+  }
+
+  set(patch){ this.setState(patch); }
+  obNext(){ const s=this.state.obStep; if(s>=3) this.setState({onboard:false,obStep:0}); else this.setState({obStep:s+1}); }
+
+  renderVals(){
+    const s = this.state, rtl = s.dir==='rtl', night = s.theme==='night';
+    const L = (he,en)=>this.L(he,en);
+
+    const spineRows = [];
+    this.EVENTS.forEach((e,i)=>{
+      spineRows.push({ isEvent:true, isNow:false, ...this.card(e) });
+      if(i===2) spineRows.push({ isEvent:false, isNow:true, nowLabel: L('עכשיו · 17:48','now · 17:48') });
+    });
+
+    const tasks = this.TASKS.map(t=>this.card(t));
+    const peek = this.PEEK.map(p=>({ time:p.time, title:L(p.he,p.en) }));
+
+    const fresh = this.card(this.EVENTS[3], {withTime:true});
+    const phoneDay = [ this.card(this.EVENTS[2],{withTime:true}), this.card(this.TASKS[0]), this.card(this.EVENTS[0],{withTime:true}) ];
+
+    const week = this.WEEK.map(d=>({
+      n:d.n, name:L(d.he,d.en), hasNote:!!d.note_he, note:d.note_he?L(d.note_he,d.note_en):'',
+      qty: d.q||'—', pipColors:(d.pips||[]).map(p=>this.whoColor(p)),
+      numColor: d.today?'var(--primary)':'var(--muted-foreground)',
+      nameColor: d.today?'var(--foreground)':'var(--muted-foreground)',
+      nameWeight: d.today?'700':'400',
+      rowStyle: 'display:flex;align-items:center;gap:11px;cursor:pointer;padding:13px '+(d.today?'12px':'0')+';border-top:1px solid var(--border);'+(d.today?'background:var(--secondary);margin-inline:-12px;border-radius:var(--radius);border-top-color:transparent':''),
+      colStyle: 'background:var(--background);padding:14px 12px;min-height:130px;'+(d.today?'box-shadow:inset 0 0 0 2px var(--primary)':''),
+    }));
+
+    const order=['aba','ima','yoav','noa'];
+    const msgsN={aba:24,ima:31,yoav:5,noa:8};
+    const family = order.map(k=>{ const w=this.WHO[k]; return {
+      key:k, name:L(w.he,w.en), initial:this.whoInitial(k), color:this.whoColor(k),
+      role:L(w.role_he,w.role_en), msgs:L(msgsN[k]+' הודעות השבוע', msgsN[k]+' msgs this week'),
+      status:L('מחובר','Connected'), phone:w.phone,
+    };});
+
+    const settingsRows = [
+      { label:L('שם משק הבית','Household'), value:L('משפחת לוי','The Levi family'), hasHint:false },
+      { label:L('שפה','Language'), value:L('עברית','Hebrew'), hasHint:true, hint:L('משפיע על כיווניות הטקסט','Affects text direction') },
+      { label:L('השבוע מתחיל ביום','Week starts on'), value:L('ראשון','Sunday'), hasHint:false },
+      { label:L('ערכת נושא','Theme'), value: night?L('לילה חמים','Warm night'):L('נייר בהיר','Paper light'), hasHint:false },
+      { label:L('התראות','Notifications'), value:L('מופעלות','On'), hasHint:true, hint:L('שעות שקט 21:00–07:00','Quiet hours 21:00–07:00') },
+      { label:L('תצוגת הטאבלט','Tablet display'), value:L('תמיד דלוקה','Always-on'), hasHint:false },
+    ];
+
+    const whoOrder=['yoav','aba','ima','noa','all'];
+    const whoChips = whoOrder.map(k=>{ const c=this.whoColor(k); return {
+      name:L(this.WHO[k].he,this.WHO[k].en), color:c,
+      style:this.whoStyleSel(s.addWho===k,c), onClick:()=>this.set({addWho:k}),
+    };});
+
+    const av = order.map((k,i)=>React.createElement('span',{key:k,style:{width:22,height:22,borderRadius:999,display:'grid',placeItems:'center',fontWeight:700,fontSize:9,color:'#fff',background:this.whoColor(k),marginInlineStart:i?-6:0,border:'1.5px solid var(--card)'}}, this.whoInitial(k)));
+
+    const obSteps = [
+      { art:'HomeOS', title:L('בית רגוע לכל התכניות','A calm home for your plans'),
+        body:L('HomeOS הופך הודעות שאתם מעבירים לבוט ללוח משפחתי אחד — רגוע, משותף וברור.','HomeOS turns the messages your family forwards to a bot into one calm, shared board.'),
+        cta:L('בואו נתחיל','Get started'), isConnect:false, isInvite:false },
+      { art:'⌘', title:L('חברו את צ׳אט המשפחה','Connect your family chat'),
+        body:L('סרקו את הקוד או שמרו את המספר. כל הודעה שתעבירו תופיע על הלוח.','Scan the code or save the number. Anything you forward shows up on the board.'),
+        cta:L('המשך','Continue'), isConnect:true, isInvite:false,
+        connectTitle:L('סריקה ב־WhatsApp','Scan in WhatsApp'), connectSub:L('הגדרות ← מכשירים מקושרים','Settings → Linked devices') },
+      { art:'✦', title:L('הוסיפו את המשפחה','Add your family'),
+        body:L('כל אחד מקבל צבע משלו — כך תמיד ברור של מי כל דבר.','Everyone gets their own color, so it’s always clear whose plan is whose.'),
+        cta:L('המשך','Continue'), isConnect:false, isInvite:true },
+      { art:'✓', title:L('הכל מוכן','You’re all set'),
+        body:L('העבירו כל הודעה ל־HomeOS והיא תופיע על הלוח — בטלפון ובמטבח.','Forward any message to HomeOS and it lands on your board — on the phone and in the kitchen.'),
+        cta:L('פתחו את הלוח','Open the board'), isConnect:false, isInvite:false },
+    ];
+    const ob0=obSteps[s.obStep];
+    const dot=(i)=>'width:7px;height:7px;border-radius:999px;display:inline-block;background:'+(i===s.obStep?'var(--primary)':'var(--input)');
+
+    return {
+      themeRoot: this.themeRoot,
+      dirAttr: rtl?'rtl':'ltr', langAttr: rtl?'he':'en',
+      showWa: s.surface==='wa' && !s.onboard,
+      showTablet: s.surface==='tablet' && !s.onboard,
+      showPhone: s.surface==='phone' && !s.onboard,
+      showWeb: s.surface==='web' && !s.onboard,
+      onboard: s.onboard,
+      phoneWeek: s.phoneScreen==='week', phoneToday: s.phoneScreen==='today',
+      phoneFamily: s.phoneScreen==='family', phoneSettings: s.phoneScreen==='settings',
+      webToday: s.webScreen==='today', webWeek: s.webScreen==='week',
+      webFamily: s.webScreen==='family', webConn: s.webScreen==='conn', webSettings: s.webScreen==='settings',
+      addOpen: s.addOpen,
+
+      surf:{ wa:this.segChrome(s.surface==='wa'), phone:this.segChrome(s.surface==='phone'), tablet:this.segChrome(s.surface==='tablet'), web:this.segChrome(s.surface==='web') },
+      themeBtn:{ light:this.segChrome(!night), night:this.segChrome(night) },
+      dirBtn:{ rtl:this.segChrome(rtl), ltr:this.segChrome(!rtl) },
+      pnav:{ week:this.navStyle(s.phoneScreen==='week',false), today:this.navStyle(s.phoneScreen==='today',false), family:this.navStyle(s.phoneScreen==='family',false), settings:this.navStyle(s.phoneScreen==='settings',false) },
+      wnav:{ today:this.navStyle(s.webScreen==='today',true), week:this.navStyle(s.webScreen==='week',true), family:this.navStyle(s.webScreen==='family',true), conn:this.navStyle(s.webScreen==='conn',true), settings:this.navStyle(s.webScreen==='settings',true) },
+      kind:{ event:this.kindStyle(s.addKind==='event'), reminder:this.kindStyle(s.addKind==='reminder'), task:this.kindStyle(s.addKind==='task') },
+
+      spineRows, tasks, peek, phoneDay, week, family, settingsRows, whoChips,
+      sidebarAvatars: av,
+
+      // WhatsApp
+      waStatus:L('בוט משפחתי · מקוון','Family bot · online'), waToday:L('היום','Today'),
+      waFwd:L('הועבר','Forwarded'),
+      waMsg:L('הורים יקרים 🌿 אסיפת הורים תתקיים ביום ראשון 18/6 בשעה 19:00 בגן רימון. נא לאשר הגעה. תודה, צוות הגן','Dear parents 🌿 the parents meeting is on Sunday 18/6 at 19:00 at Gan Rimon. Please confirm. Thank you, the gan team'),
+      waBot:L('הוספתי ללוח ✓\nאסיפת הורים · ראשון, 18 ביוני · 19:00 — גן רימון','Added to the board ✓\nParents meeting · Sun 18 June · 19:00 — Gan Rimon'),
+      waTime:'21:34', waInput:L('הקלידו הודעה…','Type a message…'),
+      waArrow: rtl?'←':'→', waLands:L('ההודעה נוחתת על הלוח','the message lands on the board'),
+      waCardLabel:L('הכרטיס שנוצר על הלוח','The card created on the board'),
+      waCardTitle:L('אסיפת הורים','Parents meeting'), waCardTime:'19:00',
+      waCardDate:L('ראשון, 18 ביוני','Sun, 18 June'), waCardLoc:L('גן רימון','Gan Rimon'),
+      waCardWho:L('אמא','Mom'), waCardWhoColor:this.whoColor('ima'), waCardChipBg:this.chipBg(this.whoColor('ima')),
+      waAddedLabel:L('נוסף הרגע','just added'),
+      waFootnote:L('שום צ׳אט פתוח — רק הודעות שמעבירים לבוט הופכות לפריטים. פרטיות תחילה.','No open chat — only messages forwarded to the bot become items. Privacy-first.'),
+
+      // labels
+      clock:'17:48',
+      greeting:L('אחר הצהריים טובים, משפחת לוי','Good afternoon, the Levi family'),
+      tabletSub:L('ראשון · 18 ביוני 2026','Sunday · 18 June 2026'),
+      hebDate:L('כ״ב בְּסִיוָן תשפ״ו','22 Sivan 5786'),
+      todayLabel:L('היום','Today'),
+      todayEy:L('היום','Today'), todayBig:L('ראשון · 18 ביוני','Sunday · 18 June'),
+      weekEy:L('השבוע','This week'), weekRange:L('16–22 ביוני','16–22 June'),
+      anytimeLabel:L('מתישהו היום','Anytime today'), tomorrowLabel:L('מחר · יום שני','Tomorrow · Mon'),
+      weather:L('☀ 29° · תל אביב','☀ 29° · Tel Aviv'),
+      shabbat:L('כניסת שבת 19:34 · שבת שלום','Shabbat begins 19:34 · Shabbat shalom'),
+      justAdded:L('19:00 · נוסף הרגע','19:00 · just added'),
+      freshTitle:fresh.title, freshLoc:fresh.loc, freshWho:fresh.whoName, freshWhoColor:fresh.whoColor, freshChipBg:fresh.chipBg,
+      navWeekLbl:L('השבוע','Week'), navTodayLbl:L('היום','Today'), navFamilyLbl:L('משפחה','Family'),
+      navSettingsLbl:L('הגדרות','Settings'), navConnLbl:L('חיבורים','Connections'),
+      familyTitle:L('המשפחה','Family'), settingsTitle:L('הגדרות','Settings'), addMember:L('הוספת בן משפחה','Add member'),
+      householdName:L('משפחת לוי','The Levi family'),
+      webEy: s.webScreen==='today'?L('היום','Today'):s.webScreen==='week'?L('השבוע','This week'):s.webScreen==='family'?L('ניהול','Manage'):s.webScreen==='conn'?L('הגדרה','Setup'):L('הגדרות','Settings'),
+      webHeading: s.webScreen==='today'?L('ראשון · 18 ביוני','Sunday · 18 June'):s.webScreen==='week'?L('16–22 ביוני','16–22 June'):s.webScreen==='family'?L('המשפחה','Family'):s.webScreen==='conn'?L('חיבורים','Connections'):L('הגדרות','Settings'),
+      addLbl:L('הוספה','Add'),
+
+      connChannel:'WhatsApp', connStatus:L('מחובר','Connected'),
+      connDesc:L('הבוט של HomeOS מקושר לקבוצת המשפחה. הודעות שתעבירו אליו הופכות לאירועים ותזכורות.','The HomeOS bot is linked to your family group. Messages you forward become events and reminders.'),
+      connHowTitle:L('איך מוסיפים פריט','How to add an item'),
+      connHowDesc:L('העבירו כל הודעה — טקסט, תמונה של חוזר מהגן, או הודעה קולית — אל HomeOS, והיא תופיע אוטומטית על הלוח ביום הנכון.','Forward any message — text, a photo of a note from gan, or a voice memo — to HomeOS and it appears on the right day automatically.'),
+      connLinkedLbl:L('בני משפחה מקושרים','Linked members'), connAddChannel:L('הוספת ערוץ','Add a channel'),
+
+      addTitle:L('פריט חדש','New item'),
+      kindEventLbl:L('אירוע','Event'), kindReminderLbl:L('תזכורת','Reminder'), kindTaskLbl:L('משימה','Task'),
+      fieldTitle:L('כותרת','Title'), fieldDate:L('תאריך','Date'), fieldTime:L('שעה','Time'),
+      fieldWho:L('למי','For whom'), fieldLoc:L('מיקום','Location'),
+      addPlaceholder:L('אסיפת הורים','Parents meeting'), addDateVal:L('ראשון, 18 ביוני','Sun, 18 June'),
+      locPlaceholder:L('גן רימון','Gan Rimon'),
+      cancelLbl:L('ביטול','Cancel'), saveLbl:L('הוספה ללוח','Add to board'),
+
+      ob:{ art:ob0.art, title:ob0.title, body:ob0.body, cta:ob0.cta,
+        isConnect:!!ob0.isConnect, isInvite:!!ob0.isInvite,
+        connectTitle:ob0.connectTitle||'', connectSub:ob0.connectSub||'',
+        canBack:s.obStep>0, backLabel:L('חזרה','Back'),
+        dot0:dot(0), dot1:dot(1), dot2:dot(2), dot3:dot(3) },
+
+      h: {
+        surfWa:()=>this.set({surface:'wa'}), surfPhone:()=>this.set({surface:'phone'}),
+        surfTablet:()=>this.set({surface:'tablet'}), surfWeb:()=>this.set({surface:'web'}),
+        setLight:()=>this.set({theme:'light'}), setNight:()=>this.set({theme:'night'}),
+        dirRtl:()=>this.set({dir:'rtl'}), dirLtr:()=>this.set({dir:'ltr'}),
+        pWeek:()=>this.set({phoneScreen:'week'}), pToday:()=>this.set({phoneScreen:'today'}),
+        pFamily:()=>this.set({phoneScreen:'family'}), pSettings:()=>this.set({phoneScreen:'settings'}),
+        wToday:()=>this.set({webScreen:'today'}), wWeek:()=>this.set({webScreen:'week'}),
+        wFamily:()=>this.set({webScreen:'family'}), wConn:()=>this.set({webScreen:'conn'}), wSettings:()=>this.set({webScreen:'settings'}),
+        openAdd:()=>this.set({addOpen:true}), closeAdd:()=>this.set({addOpen:false}), saveAdd:()=>this.set({addOpen:false}),
+        kindEvent:()=>this.set({addKind:'event'}), kindReminder:()=>this.set({addKind:'reminder'}), kindTask:()=>this.set({addKind:'task'}),
+        startOnboard:()=>this.set({onboard:true,obStep:0}), exitOnboard:()=>this.set({onboard:false,obStep:0}),
+        obNext:()=>this.obNext(), obBack:()=>this.set({obStep:Math.max(0,this.state.obStep-1)}),
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>
