@@ -96,6 +96,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     maxPerSenderPerDay: config.maxPerSenderPerDay,
     google: gmailDeps,
     calendar: calendarDeps,
+    autoPushCalendar: config.calendarAutoPush,
     log,
   });
 

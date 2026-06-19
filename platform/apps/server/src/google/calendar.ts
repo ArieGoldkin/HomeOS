@@ -1,18 +1,18 @@
 import { TransientError } from "../core/errors.ts";
 
 /**
- * The Google Calendar read surface in one file (#18): a lean `node:fetch` client (the house pattern —
- * mirrors `google/gmail.ts` and `google/oauth.ts`, no `googleapis` SDK). Chunk 1 is read-only: only
- * `list` exists — there is no insert/patch/delete endpoint in this code yet (the write path is chunk 2).
+ * The Google Calendar surface in one file (#18): a lean `node:fetch` client (the house pattern —
+ * mirrors `google/gmail.ts` and `google/oauth.ts`, no `googleapis` SDK). Chunk 1 added `list` (read);
+ * chunk 2 adds `insertEvent`/`patchEvent`/`findEventIdByPrivateProp` (the board→Calendar auto-push).
+ * There is no delete endpoint here — disconnect-purge is local-only (#61).
  *
- * Error classification reuses `errors.ts`: 429/5xx + network blips → `TransientError` (the caller
- * retries; the inbound row stays `pending` and boot-replays); 4xx → `CalendarApiError` (permanent →
- * degrade, never replay-loop). The bearer header is built from a [name, value] tuple so the repo's
- * secret-scanner doesn't misread it, and the token is never logged.
+ * Error classification reuses `errors.ts`: 429/5xx + network blips → `TransientError`; 4xx →
+ * `CalendarApiError` (permanent → degrade, never replay-loop). The bearer header is built from a
+ * [name, value] tuple so the repo's secret-scanner doesn't misread it, and the token is never logged.
  *
  * The token is handed in by `getValidAccessToken` (#59) — this client never touches the credential
  * store and does no token math, so it needs no clock. `singleEvents=true` expands a recurring series
- * into discrete dated instances (each its own stable id), so the caller never reconstructs recurrence.
+ * into discrete dated instances (each its own stable id), so the reader never reconstructs recurrence.
  */
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3/calendars";
@@ -43,8 +43,42 @@ export interface CalendarListOpts {
   maxResults: number;
 }
 
+/** A write-side time: all-day (`date`) or timed (`dateTime` as a local wall-clock + `timeZone`). */
+export interface CalendarWriteTime {
+  date?: string;
+  dateTime?: string;
+  timeZone?: string;
+}
+
+/** The body sent to Google on insert/patch (#18 write). `extendedProperties.private` carries our id. */
+export interface CalendarWriteEvent {
+  summary: string;
+  location?: string;
+  description?: string;
+  start: CalendarWriteTime;
+  end: CalendarWriteTime;
+  recurrence?: string[];
+  extendedProperties?: { private?: Record<string, string> };
+}
+
 export interface CalendarClient {
   list(token: string, opts: CalendarListOpts): Promise<CalendarEvent[]>;
+  /** Create an event; returns Google's assigned id. */
+  insertEvent(token: string, calendarId: string, ev: CalendarWriteEvent): Promise<{ id: string }>;
+  /** Update an existing event in place (board-wins on a re-push, AC5). */
+  patchEvent(
+    token: string,
+    calendarId: string,
+    eventId: string,
+    ev: CalendarWriteEvent,
+  ): Promise<{ id: string }>;
+  /** Find an event by a private extended property (`key=value`) — our idempotency lookup (AC4). */
+  findEventIdByPrivateProp(
+    token: string,
+    calendarId: string,
+    key: string,
+    value: string,
+  ): Promise<string | null>;
 }
 
 /** A permanent (4xx) Calendar API failure — e.g. 401 `Invalid Credentials` / 403. Caller degrades. */
@@ -58,9 +92,11 @@ export class CalendarApiError extends Error {
   }
 }
 
-/** Bearer as a [name, value] tuple → a header array (secret-scanner-safe: no secret-looking key). */
-function authHeaders(token: string): Array<[string, string]> {
-  return [["Authorization", `Bearer ${token}`]];
+/** Bearer (+ JSON content-type for writes) as [name, value] tuples — secret-scanner-safe. */
+function authHeaders(token: string, json = false): Array<[string, string]> {
+  const h: Array<[string, string]> = [["Authorization", `Bearer ${token}`]];
+  if (json) h.push(["Content-Type", "application/json"]);
+  return h;
 }
 
 /** A raw Calendar API item (every field optional — the API omits empty ones). */
@@ -74,10 +110,20 @@ interface CalendarItem {
 }
 
 export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarClient {
-  async function getJson(url: string, token: string): Promise<Record<string, unknown>> {
+  // One request path for GET (read/find) and POST/PATCH (write). A body ⇒ JSON content-type.
+  async function request(
+    method: string,
+    url: string,
+    token: string,
+    body?: unknown,
+  ): Promise<Record<string, unknown>> {
     let res: Response;
     try {
-      res = await fetchImpl(url, { method: "GET", headers: authHeaders(token) });
+      res = await fetchImpl(url, {
+        method,
+        headers: authHeaders(token, body !== undefined),
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      });
     } catch (err) {
       // Network-level failure → transient (retryable), NOT permanent — a blip must never look like a
       // rejected token to the caller (which would then wrongly degrade to app-only). Mirrors oauth.ts.
@@ -87,11 +133,14 @@ export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarCli
       if (res.status === 429 || res.status >= 500) {
         throw new TransientError(`calendar endpoint ${res.status}`);
       }
-      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new CalendarApiError(body.error?.message ?? "calendar_error", res.status);
+      const b = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new CalendarApiError(b.error?.message ?? "calendar_error", res.status);
     }
     return (await res.json()) as Record<string, unknown>;
   }
+
+  const eventsUrl = (calendarId: string) =>
+    `${CALENDAR_API}/${encodeURIComponent(calendarId)}/events`;
 
   return {
     async list(token, opts) {
@@ -101,8 +150,11 @@ export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarCli
       params.set("maxResults", String(opts.maxResults));
       params.set("singleEvents", "true"); // expand recurring series into discrete dated instances
       params.set("orderBy", "startTime"); // requires singleEvents=true
-      const url = `${CALENDAR_API}/${encodeURIComponent(opts.calendarId)}/events?${params.toString()}`;
-      const json = await getJson(url, token);
+      const json = await request(
+        "GET",
+        `${eventsUrl(opts.calendarId)}?${params.toString()}`,
+        token,
+      );
       const items = (json.items ?? []) as CalendarItem[];
       return items
         .filter((it) => it.status !== "cancelled") // dropped/declined instances aren't board events
@@ -114,6 +166,27 @@ export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarCli
           status: it.status,
           start: { date: it.start?.date, dateTime: it.start?.dateTime },
         }));
+    },
+
+    async insertEvent(token, calendarId, ev) {
+      const json = await request("POST", eventsUrl(calendarId), token, ev);
+      return { id: String(json.id ?? "") };
+    },
+
+    async patchEvent(token, calendarId, eventId, ev) {
+      const url = `${eventsUrl(calendarId)}/${encodeURIComponent(eventId)}`;
+      const json = await request("PATCH", url, token, ev);
+      return { id: String(json.id ?? eventId) };
+    },
+
+    async findEventIdByPrivateProp(token, calendarId, key, value) {
+      const params = new URLSearchParams();
+      params.set("privateExtendedProperty", `${key}=${value}`); // → key%3Dvalue (Google's filter form)
+      params.set("maxResults", "1");
+      params.set("showDeleted", "false");
+      const json = await request("GET", `${eventsUrl(calendarId)}?${params.toString()}`, token);
+      const items = (json.items ?? []) as Array<{ id?: string }>;
+      return items[0]?.id ? String(items[0].id) : null;
     },
   };
 }

@@ -84,6 +84,13 @@ const schema = z.object({
   CALENDAR_MAX_EVENTS: z.coerce.number().int().positive().default(20),
   CALENDAR_WINDOW_DAYS: z.coerce.number().int().positive().default(30),
   CALENDAR_ID: z.string().min(1).default("primary"),
+  // #18 chunk 2: auto-push a forwarded board event to Google Calendar. Default ON (the chosen
+  // behaviour) with an explicit kill switch — set CALENDAR_AUTO_PUSH=false to keep Calendar read-only.
+  // A custom transform, not z.coerce.boolean() (which would read the string "false" as true).
+  CALENDAR_AUTO_PUSH: z
+    .string()
+    .default("true")
+    .transform((s) => s.toLowerCase() !== "false" && s !== "0"),
 });
 
 /** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
@@ -117,6 +124,7 @@ export interface Config {
   calendarMaxEvents: number;
   calendarWindowDays: number;
   calendarId: string;
+  calendarAutoPush: boolean;
   google?: GoogleOAuthSettings;
 }
 
@@ -188,6 +196,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     calendarMaxEvents: e.CALENDAR_MAX_EVENTS,
     calendarWindowDays: e.CALENDAR_WINDOW_DAYS,
     calendarId: e.CALENDAR_ID,
+    calendarAutoPush: e.CALENDAR_AUTO_PUSH,
     google: readGoogleBundle(env),
   };
 }

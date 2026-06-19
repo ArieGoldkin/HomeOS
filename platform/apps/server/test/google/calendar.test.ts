@@ -127,3 +127,90 @@ describe("httpCalendarClient.list", () => {
     ).rejects.toBeInstanceOf(CalendarApiError);
   });
 });
+
+const writeEvent = {
+  summary: "אסיפת הורים",
+  start: { dateTime: "2026-06-21T18:30:00", timeZone: "Asia/Jerusalem" },
+  end: { dateTime: "2026-06-21T19:30:00", timeZone: "Asia/Jerusalem" },
+  extendedProperties: { private: { homeosEventId: "7" } },
+};
+
+describe("httpCalendarClient write (insert/patch/find, #18 chunk 2)", () => {
+  it("POSTs a new event with a JSON body + bearer, returns the assigned id", async () => {
+    const fetchImpl = vi.fn(
+      (_url: string, _init: { method: string; headers: Array<[string, string]>; body?: string }) =>
+        Promise.resolve(okJson({ id: "gcal-new" })),
+    );
+    const out = await httpCalendarClient(fetchImpl as unknown as typeof fetch).insertEvent(
+      TOKEN,
+      "primary",
+      writeEvent,
+    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(init.method).toBe("POST");
+    expect(new URL(url).pathname).toBe("/calendar/v3/calendars/primary/events");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(authOf(init)).toBe("Bearer tok-123");
+    expect(JSON.parse(init.body as string)).toEqual(writeEvent);
+    expect(out).toEqual({ id: "gcal-new" });
+  });
+
+  it("PATCHes an existing event by id (board-wins on re-push)", async () => {
+    const fetchImpl = vi.fn(
+      (_url: string, _init: { method: string; headers: Array<[string, string]> }) =>
+        Promise.resolve(okJson({ id: "gcal-123" })),
+    );
+    const out = await httpCalendarClient(fetchImpl as unknown as typeof fetch).patchEvent(
+      TOKEN,
+      "primary",
+      "gcal-123",
+      writeEvent,
+    );
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(init.method).toBe("PATCH");
+    expect(new URL(url).pathname).toBe("/calendar/v3/calendars/primary/events/gcal-123");
+    expect(out).toEqual({ id: "gcal-123" });
+  });
+
+  it("finds an event id by private extended property (the idempotency lookup, AC4)", async () => {
+    const fetchImpl = vi.fn((_url: string, _init: { method: string }) =>
+      Promise.resolve(okJson({ items: [{ id: "gcal-existing" }] })),
+    );
+    const id = await httpCalendarClient(
+      fetchImpl as unknown as typeof fetch,
+    ).findEventIdByPrivateProp(TOKEN, "primary", "homeosEventId", "7");
+    const u = new URL(fetchImpl.mock.calls[0]![0]);
+    expect(u.searchParams.get("privateExtendedProperty")).toBe("homeosEventId=7");
+    expect(u.searchParams.get("maxResults")).toBe("1");
+    expect(id).toBe("gcal-existing");
+  });
+
+  it("returns null when no event carries the private property (→ caller inserts)", async () => {
+    const fetchImpl = vi.fn(() => Promise.resolve(okJson({ items: [] })));
+    const id = await httpCalendarClient(
+      fetchImpl as unknown as typeof fetch,
+    ).findEventIdByPrivateProp(TOKEN, "primary", "homeosEventId", "7");
+    expect(id).toBeNull();
+  });
+
+  it("classifies a write 5xx as transient and a 4xx as a permanent CalendarApiError", async () => {
+    const transient = vi.fn(() => Promise.resolve(errJson(503)));
+    await expect(
+      httpCalendarClient(transient as unknown as typeof fetch).insertEvent(
+        TOKEN,
+        "primary",
+        writeEvent,
+      ),
+    ).rejects.toBeInstanceOf(TransientError);
+    const permanent = vi.fn(() =>
+      Promise.resolve(errJson(403, { error: { message: "forbidden" } })),
+    );
+    await expect(
+      httpCalendarClient(permanent as unknown as typeof fetch).insertEvent(
+        TOKEN,
+        "primary",
+        writeEvent,
+      ),
+    ).rejects.toBeInstanceOf(CalendarApiError);
+  });
+});
