@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `production` is the deploy branch (Railway builds it). It's a fast-forward of
+    # already-CI'd `main`, but we re-run here so every deployed commit is self-verified
+    # and Railway can be set to "wait for CI" before deploying.
+    branches: [main, production]
   pull_request:
     branches: [main]
 
