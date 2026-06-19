@@ -1,6 +1,6 @@
 import { assigneeColor } from "@shared/lib";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { PersonChip } from "./PersonChip";
 
 const styleOf = (el: Element | null) => (el?.getAttribute("style") ?? "").toLowerCase();
@@ -53,5 +53,31 @@ describe("PersonChip", () => {
   it("merges a caller className", () => {
     const { container } = render(<PersonChip name="x" className="cursor-pointer" />);
     expect((container.firstChild as HTMLElement).className).toContain("cursor-pointer");
+  });
+
+  // a11y: a display chip is a non-interactive <span> (no role, not in the tab order).
+  it("renders a non-interactive span when there is no onClick", () => {
+    const { container } = render(<PersonChip name="אבא" selected />);
+    const el = container.firstChild as HTMLElement;
+    expect(el.tagName).toBe("SPAN");
+    expect(el).not.toHaveAttribute("aria-pressed");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  // a11y: wired as a selectable toggle (onClick) it becomes a real button that ANNOUNCES its
+  // pressed state — not just data-selected (review #115 finding 1).
+  it("becomes a button with aria-pressed when given an onClick", () => {
+    const onClick = vi.fn();
+    render(<PersonChip name="נועה" selected onClick={onClick} />);
+    const btn = screen.getByRole("button", { name: /נועה/ });
+    expect(btn).toHaveAttribute("type", "button");
+    expect(btn).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(btn);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces aria-pressed=false for an unselected interactive chip", () => {
+    render(<PersonChip name="יואב" onClick={() => {}} />);
+    expect(screen.getByRole("button", { name: /יואב/ })).toHaveAttribute("aria-pressed", "false");
   });
 });
