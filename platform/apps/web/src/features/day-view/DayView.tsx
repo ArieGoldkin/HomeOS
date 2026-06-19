@@ -62,21 +62,29 @@ export function DayView({
     return <p className={cn("text-muted-foreground", className)}>אין אירועים היום ✦</p>;
   }
 
+  const hasTimed = timed.length > 0;
+  const hasAside = untimed.length > 0 || tomorrow.length > 0;
+
   return (
     <div className={cn("flex gap-8", className)}>
-      <div className="min-w-0 flex-1">
-        <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
-        <TimeSpine events={timed} nowTime={nowTime} night={night} />
-        {moreCount > 0 && (
-          <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
-        )}
-      </div>
-      <AnytimeSidebar
-        className="w-56 shrink-0 border-border border-s ps-6"
-        tasks={untimed}
-        tomorrow={tomorrow}
-        night={night}
-      />
+      {hasTimed && (
+        <div className="min-w-0 flex-1">
+          <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
+          <TimeSpine events={timed} nowTime={nowTime} night={night} />
+          {moreCount > 0 && (
+            <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
+          )}
+        </div>
+      )}
+      {hasAside && (
+        <AnytimeSidebar
+          // the divider only makes sense when there's a timed column beside it
+          className={cn("w-56 shrink-0", hasTimed && "border-border border-s ps-6")}
+          tasks={untimed}
+          tomorrow={tomorrow}
+          night={night}
+        />
+      )}
     </div>
   );
 }

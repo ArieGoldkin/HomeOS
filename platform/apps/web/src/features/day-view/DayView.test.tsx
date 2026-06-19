@@ -61,4 +61,15 @@ describe("DayView", () => {
     render(<DayView {...base} status="ready" />);
     expect(screen.getByText(/אין אירועים/)).toBeInTheDocument();
   });
+
+  it("omits the today timed column when nothing is timed (but tomorrow still shows)", () => {
+    render(<DayView {...base} status="ready" tomorrow={[{ time: "08:00", title: "חוג מחר" }]} />);
+    expect(screen.queryByText("היום")).toBeNull();
+    expect(screen.getByText("חוג מחר")).toBeInTheDocument();
+  });
+
+  it("shows the today header when there are timed events", () => {
+    render(<DayView {...base} status="ready" timed={[ev({ id: 1, time: "09:00" })]} />);
+    expect(screen.getByText("היום")).toBeInTheDocument();
+  });
 });
