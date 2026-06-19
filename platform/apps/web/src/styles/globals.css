@@ -260,6 +260,20 @@
   .hairline {
     border-color: var(--hairline);
   }
+
+  /* signature: the hairline rule that DRAWS IN along --draw-origin (right→left under RTL) when a
+   * new event lands — the trust cue. RuleBar applies this; origin is set once on <html> in App.tsx. */
+  .draw-rule {
+    transform-origin: var(--draw-origin);
+    animation: drawRule var(--dur) cubic-bezier(0.65, 0, 0.35, 1) both;
+  }
+
+  /* signature: the ambient NOW marker on the tablet time-spine — a 1.5px ocean rule. The inline
+   * `now · HH:MM` label is wrapped dir=ltr + tabular-nums by the NowLine component. */
+  .now-line {
+    block-size: 1.5px;
+    background: var(--primary);
+  }
 }
 
 /* ----------------------------------------------------------------------------
