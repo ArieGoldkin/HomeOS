@@ -1,18 +1,20 @@
 /* ============================================================================
- * HomeOS — "Editorial Paper × shadcn" design tokens (globals.css)
+ * HomeOS — "Ocean × Rubik" design tokens (globals.css)  ·  v0.2 (2026-06-19)
  * ----------------------------------------------------------------------------
  * Tailwind v4 (CSS-first, no tailwind.config.js) + shadcn/ui (copy-in).
  * Single source of truth: every shadcn component inherits these variables, so
  * the skin is applied mechanically (the anti-slop defense) — never per-component.
  *
  * Source of truth for: docs/design/DESIGN.md.
- * Destination: copy to platform/apps/web/src/globals.css when the frontend is
- * scaffolded (React + Vite + TS + Tailwind v4 + shadcn, scaffolded `init --rtl`).
+ * Destination: copy to platform/apps/web/src/styles/globals.css when the
+ * frontend is scaffolded (React + Vite + TS + Tailwind v4 + shadcn `init --rtl`).
  *
- * Locked from: the v0 explorer + the design-research workflow (shadcn theming,
- * 21st.dev, 2026 trends, RTL/Hebrew, motion) + the design playground.
+ * v0.2 extracts the LOCKED prototype (docs/design/prototype/HomeOS-Prototype.dc.html,
+ * palette default "ocean") as the visual source of truth: a COOL blue-grey paper
+ * (oklch hue ~225 light / ~238 night) with a single OCEAN accent (--primary). This
+ * supersedes the retired v0.1 "Editorial Paper" terracotta/warm-brown/Frank-Ruhl.
  * Light is :root; the always-on tablet NIGHT variant is [data-theme="night"].
- * Colors are OKLCH and warm-tinted — never pure #000/#FFF, never zinc/slate.
+ * Colors are OKLCH and cool-tinted — never pure #000/#FFF, never zinc/slate.
  * ========================================================================== */
 
 @import "tailwindcss";
@@ -22,136 +24,129 @@
 @custom-variant dark (&:where([data-theme="night"], [data-theme="night"] *));
 
 /* ----------------------------------------------------------------------------
- * 1. SEMANTIC TOKENS — light (paper)
+ * 1. SEMANTIC TOKENS — light (cool paper)
  * -------------------------------------------------------------------------- */
 :root {
-  --background: oklch(0.965 0.012 80);          /* warm paper-0 (#FAF7F1) */
-  --foreground: oklch(0.22 0.02 60);            /* warm brown-ink (#1F1B16), not black */
+  --background: oklch(0.97 0.012 225);          /* cool paper-0 */
+  --foreground: oklch(0.27 0.032 235);          /* deep cool ink, not black */
 
-  --card: oklch(0.945 0.014 80);                /* raised paper-1 (#F4EFE6) */
+  --card: oklch(0.95 0.014 225);                /* raised paper-1 */
   --card-foreground: var(--foreground);
-  --popover: oklch(0.945 0.014 80);
+  --popover: oklch(0.95 0.014 225);
   --popover-foreground: var(--foreground);
 
-  --primary: oklch(0.52 0.13 38);               /* terracotta (#B5512E) — the ONE accent */
-  --primary-foreground: oklch(0.965 0.012 80);  /* paper on terracotta */
+  --primary: oklch(0.55 0.10 228);              /* OCEAN — the ONE accent (buttons, now-line, today, ring) */
+  --primary-foreground: oklch(0.98 0.01 225);   /* paper on ocean */
 
-  --secondary: oklch(0.915 0.016 78);           /* paper-2 (#ECE5D8) — absence of color, not a 2nd hue */
-  --secondary-foreground: oklch(0.34 0.02 60);  /* ink-2 (#4A443B) */
+  --secondary: oklch(0.92 0.018 225);           /* paper-2 — absence of color, not a 2nd hue */
+  --secondary-foreground: oklch(0.34 0.028 235);
 
-  --muted: oklch(0.915 0.016 78);
-  --muted-foreground: oklch(0.56 0.018 70);     /* ink-3 (#7C7567), meta only (>=14px) */
+  --muted: oklch(0.92 0.018 225);
+  --muted-foreground: oklch(0.55 0.024 232);    /* meta only (>=14px) */
 
-  --accent: oklch(0.915 0.016 78);              /* kept NEUTRAL on purpose (hover/selected = paper, not a hue) */
+  --accent: oklch(0.92 0.018 225);              /* kept NEUTRAL on purpose (hover/selected = paper, not a hue) */
   --accent-foreground: var(--secondary-foreground);
 
-  --destructive: oklch(0.51 0.15 28);           /* warm-red — distinct from primary, still in the warm world */
-  --destructive-foreground: oklch(0.965 0.012 80);
+  --destructive: oklch(0.55 0.16 25);           /* warm-red — distinct from the cool world */
+  --destructive-foreground: oklch(0.98 0.01 225);
 
-  --border: oklch(0.86 0.016 78);               /* warm low-chroma hairline (#DED6C7) */
-  --input: oklch(0.82 0.018 78);                /* slightly stronger (#C8BEAC) */
-  --ring: var(--primary);                        /* focus ring IS terracotta — single-accent in tokens */
+  --border: oklch(0.87 0.018 225);              /* cool low-chroma hairline */
+  --input: oklch(0.82 0.022 225);               /* slightly stronger */
+  --ring: var(--primary);                        /* focus ring IS ocean — single-accent in tokens */
 
-  --radius: 0.1875rem;                           /* 3px — deliberate small editorial radius (NOT the 10px tell) */
+  --radius: 0.75rem;                             /* 12px — prototype "calm" shape (pips/avatars stay 999px) */
 
-  /* charts: derive from the one accent + warm neutral steps (never a rainbow) */
+  /* charts: derive from the one accent + cool neutral steps (never a rainbow) */
   --chart-1: var(--primary);
-  --chart-2: oklch(0.62 0.045 58);
-  --chart-3: oklch(0.70 0.030 74);
-  --chart-4: oklch(0.78 0.022 82);
-  --chart-5: oklch(0.46 0.050 48);
+  --chart-2: oklch(0.62 0.05 210);
+  --chart-3: oklch(0.70 0.035 250);
+  --chart-4: oklch(0.78 0.022 225);
+  --chart-5: oklch(0.46 0.055 200);
 
   /* phone sidebar/nav (text labels, never emoji icons) */
-  --sidebar: oklch(0.945 0.014 80);
+  --sidebar: oklch(0.95 0.014 225);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.915 0.016 78);
+  --sidebar-accent: oklch(0.92 0.018 225);
   --sidebar-accent-foreground: var(--secondary-foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  /* fonts: Hebrew-first; serif display is the cultural signature */
-  --font-sans: "Assistant", system-ui, -apple-system, sans-serif;
-  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif;
-  --font-display: var(--font-serif);
+  /* fonts: Hebrew-first; Rubik is the friendly default everywhere (MVP ships Rubik only) */
+  --font-sans: "Rubik", system-ui, -apple-system, sans-serif;
+  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif; /* AVAILABLE — applied per-component only, never reassigned in :root */
+  --font-display: var(--font-sans);
 
   /* -- THREE SIGNATURE TOKENS shadcn never ships (the highest-leverage anti-slop move) -- */
   --hairline: var(--border);                     /* semantic divider color = the editorial structure */
-  --shadow-paper: inset 0 1px 0 oklch(0.995 0.012 80); /* the ONE bespoke shadow, used everywhere (no generic drop shadows) */
+  --shadow-paper: inset 0 1px 0 oklch(0.995 0.01 225); /* the ONE bespoke shadow, used everywhere (no generic drop shadows) */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  --grain-opacity: 0.05;                          /* near-zero by default — human-authorship signal, never noisy */
+  --grain-opacity: 0.045;                         /* near-zero by default — human-authorship signal, never noisy */
 
-  /* family-board kind language — signal via a PIP or serif title-color, NEVER a colored left-border */
+  /* family-board kind language — signal via a PIP or title-color, NEVER a colored left-border */
   --event: var(--muted-foreground);
   --task: var(--muted-foreground);
   --reminder: var(--primary);
 
-  /* assignee palette — 5 muted, harmonious "ink" hues (+ a washed background each) */
-  --who-1: #7A5C9E; --who-1-wash: #ECE5F2;       /* plum */
-  --who-2: #3E6B8A; --who-2-wash: #E1E9EF;       /* slate-blue */
-  --who-3: #4F6F52; --who-3-wash: #E4EAE2;       /* sage */
-  --who-4: #A8612C; --who-4-wash: #F1E6D9;       /* ochre */
-  --who-5: #9B4659; --who-5-wash: #F1E1E4;       /* rose-brown */
+  /* WhatsApp brand green — Connections SVG / "connected" status only, NEVER the --primary accent.
+   * (Assignee colors are a RUNTIME concern — see shared/lib/assignee-color.ts — not tokens.) */
+  --wa-green: #3c8a52;
+
+  /* motion duration knob (keyframes below) */
+  --dur: 440ms;
 }
 
 /* ----------------------------------------------------------------------------
- * 2. SEMANTIC TOKENS — NIGHT (always-on tablet; warm dark, never cold zinc)
+ * 2. SEMANTIC TOKENS — NIGHT (always-on tablet; cool dark, never warm brown)
  * -------------------------------------------------------------------------- */
 [data-theme="night"] {
-  --background: oklch(0.20 0.012 60);            /* warm near-black paper (#181410) */
-  --foreground: oklch(0.93 0.018 80);            /* warm light ink (#F2ECE0) */
+  --background: oklch(0.21 0.022 238);
+  --foreground: oklch(0.94 0.02 238);
 
-  --card: oklch(0.235 0.014 60);                 /* #211C16 */
+  --card: oklch(0.245 0.024 238);
   --card-foreground: var(--foreground);
-  --popover: oklch(0.255 0.016 60);              /* #2C261E */
+  --popover: oklch(0.27 0.026 238);
   --popover-foreground: var(--foreground);
 
-  --primary: oklch(0.68 0.12 45);                /* softened/lightened terracotta (#E08254) for warmth + contrast */
-  --primary-foreground: oklch(0.20 0.012 60);
+  --primary: oklch(0.72 0.11 222);              /* lightened ocean for contrast on dark */
+  --primary-foreground: oklch(0.20 0.022 238);
 
-  --secondary: oklch(0.255 0.016 60);
-  --secondary-foreground: oklch(0.81 0.016 78);
-  --muted: oklch(0.235 0.014 60);
-  --muted-foreground: oklch(0.66 0.02 75);       /* #9A8F7C */
+  --secondary: oklch(0.27 0.026 238);
+  --secondary-foreground: oklch(0.84 0.018 238);
+  --muted: oklch(0.245 0.024 238);
+  --muted-foreground: oklch(0.68 0.028 238);
 
-  --accent: oklch(0.255 0.016 60);
-  --accent-foreground: oklch(0.81 0.016 78);
+  --accent: oklch(0.27 0.026 238);
+  --accent-foreground: oklch(0.84 0.018 238);
 
-  --destructive: oklch(0.60 0.15 28);
-  --destructive-foreground: oklch(0.20 0.012 60);
+  --destructive: oklch(0.62 0.16 25);
+  --destructive-foreground: oklch(0.20 0.022 238);
 
-  --border: oklch(0.31 0.014 60);                /* #393026 */
-  --input: oklch(0.345 0.016 60);
+  --border: oklch(0.33 0.026 238);
+  --input: oklch(0.37 0.028 238);
   --ring: var(--primary);
 
   --chart-1: var(--primary);
-  --chart-2: oklch(0.66 0.05 58);
-  --chart-3: oklch(0.74 0.035 74);
-  --chart-4: oklch(0.80 0.025 82);
-  --chart-5: oklch(0.56 0.055 48);
+  --chart-2: oklch(0.66 0.05 210);
+  --chart-3: oklch(0.74 0.035 250);
+  --chart-4: oklch(0.80 0.025 225);
+  --chart-5: oklch(0.56 0.055 200);
 
-  --sidebar: oklch(0.235 0.014 60);
+  --sidebar: oklch(0.245 0.024 238);
   --sidebar-foreground: var(--foreground);
-  --sidebar-accent: oklch(0.255 0.016 60);
+  --sidebar-accent: oklch(0.27 0.026 238);
   --sidebar-accent-foreground: var(--secondary-foreground);
   --sidebar-border: var(--border);
 
-  --shadow-paper: none;                          /* dark mode lifts via tone steps, not a white edge */
+  --shadow-paper: none;                          /* dark mode lifts via tone steps, not a light edge */
   --grain-opacity: 0.03;
-
-  /* assignee hues lifted for dark paper; washes go deep, not pale */
-  --who-1: #B79AD6; --who-1-wash: #2C2436;
-  --who-2: #7FA8C6; --who-2-wash: #1F2B34;
-  --who-3: #93B58C; --who-3-wash: #232E22;
-  --who-4: #D69A5F; --who-4-wash: #332619;
-  --who-5: #C98797; --who-5-wash: #321F24;
 }
 
 /* ----------------------------------------------------------------------------
  * 3. @theme inline — surface the tokens as Tailwind v4 utilities
  *    (bg-background, text-foreground, border-border, rounded-md, font-display,
- *     shadow-paper, text-who-3, etc.). `inline` = utilities read the live vars,
+ *     shadow-paper, text-reminder, etc.). `inline` = utilities read the live vars,
  *     so theme swaps just work.
  * -------------------------------------------------------------------------- */
 @theme inline {
@@ -194,28 +189,24 @@
   --color-event: var(--event);
   --color-task: var(--task);
   --color-reminder: var(--reminder);
-  --color-who-1: var(--who-1);
-  --color-who-2: var(--who-2);
-  --color-who-3: var(--who-3);
-  --color-who-4: var(--who-4);
-  --color-who-5: var(--who-5);
+  --color-wa-green: var(--wa-green);
 
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-display: var(--font-display);
 
   /* radius scale derived from the one --radius (shadcn convention) */
-  --radius-sm: calc(var(--radius) - 1px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 5px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 
   /* the bespoke shadow as a utility: shadow-paper */
   --shadow-paper: var(--shadow-paper);
 }
 
 /* ----------------------------------------------------------------------------
- * 4. BASE — RTL-first, warm defaults, ledger-grade numerals
+ * 4. BASE — RTL-first, cool defaults, ledger-grade numerals
  * -------------------------------------------------------------------------- */
 @layer base {
   * {
@@ -235,7 +226,7 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
-  /* display face for headings/dates/event titles */
+  /* display face for headings/dates/event titles (Rubik by default) */
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
   }
@@ -272,8 +263,15 @@
 }
 
 /* ----------------------------------------------------------------------------
- * 6. MOTION — restrained, composite-only, reduced-motion as table stakes
+ * 6. MOTION — the prototype's 5 keyframes (kept here, NOT per-component: they
+ *    collide). Restrained, composite-only; reduced-motion is table stakes.
  * -------------------------------------------------------------------------- */
+@keyframes drawRule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes settleIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes sheetUp  { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop      { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+
 @layer base {
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
