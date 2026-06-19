@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { jerusalemTodayIso, startOfWeekSundayIso, weekdayIndex } from "./date";
+import {
+  addDaysIso,
+  jerusalemHhmm,
+  jerusalemHour,
+  jerusalemTodayIso,
+  startOfWeekSundayIso,
+  weekdayIndex,
+} from "./date";
 
 describe("date helpers (Asia/Jerusalem, week starts Sunday)", () => {
   it("formats Jerusalem 'today' as YYYY-MM-DD", () => {
@@ -19,5 +26,21 @@ describe("date helpers (Asia/Jerusalem, week starts Sunday)", () => {
   it("startOfWeekSundayIso snaps back to the Sunday", () => {
     expect(startOfWeekSundayIso("2026-06-24")).toBe("2026-06-21");
     expect(startOfWeekSundayIso("2026-06-21")).toBe("2026-06-21");
+  });
+
+  it("jerusalemHhmm formats HH:MM in Jerusalem (UTC+3 in June)", () => {
+    expect(jerusalemHhmm(new Date("2026-06-20T12:00:00Z"))).toBe("15:00");
+    expect(jerusalemHhmm(new Date("2026-06-20T21:05:00Z"))).toBe("00:05"); // rolls past midnight
+  });
+
+  it("jerusalemHour returns the 24h hour in Jerusalem", () => {
+    expect(jerusalemHour(new Date("2026-06-20T12:00:00Z"))).toBe(15);
+    expect(jerusalemHour(new Date("2026-06-20T21:05:00Z"))).toBe(0);
+  });
+
+  it("addDaysIso advances the calendar date, crossing month/year", () => {
+    expect(addDaysIso("2026-06-20", 1)).toBe("2026-06-21");
+    expect(addDaysIso("2026-06-30", 1)).toBe("2026-07-01");
+    expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
   });
 });
