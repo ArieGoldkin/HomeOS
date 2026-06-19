@@ -103,3 +103,17 @@ export const parsedMessageSchema = z.object({
   events: z.array(parsedEventSchema),
 });
 export type ParsedMessage = z.infer<typeof parsedMessageSchema>;
+
+/**
+ * The shape the server SERVES from `GET /events` (one row): a {@link ParsedEvent} plus the DB-assigned
+ * `id` and the `source_provider` that `event-store.ts`'s `rowToSaved` attaches (`source_provider` is
+ * null for forwarded WhatsApp events, a provider name like `"google"` for gcal/gmail-derived rows). This
+ * is the ONE row contract the server produces and the web app (`useEvents`) consumes — keeping a single
+ * definition so the two can't drift. NOTE: `created_at` is deliberately absent — `rowToSaved` drops it,
+ * so it is never in the payload. The endpoint wraps rows as `{ events: SavedEvent[] }`.
+ */
+export const savedEventSchema = parsedEventSchema.extend({
+  id: z.number().int(),
+  source_provider: z.string().nullable(),
+});
+export type SavedEvent = z.infer<typeof savedEventSchema>;
