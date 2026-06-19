@@ -117,3 +117,12 @@ export const savedEventSchema = parsedEventSchema.extend({
   source_provider: z.string().nullable(),
 });
 export type SavedEvent = z.infer<typeof savedEventSchema>;
+
+/**
+ * The `GET /events` response envelope: rows wrapped as `{ events: SavedEvent[] }` (NOT a bare array).
+ * The web data layer (`useEvents`) parses against this so any shape drift fails loudly at the boundary.
+ */
+export const savedEventsResponseSchema = z.object({
+  events: z.array(savedEventSchema),
+});
+export type SavedEventsResponse = z.infer<typeof savedEventsResponseSchema>;

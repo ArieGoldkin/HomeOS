@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type SavedEvent, savedEventSchema } from "../src/index.ts";
+import { type SavedEvent, savedEventSchema, savedEventsResponseSchema } from "../src/index.ts";
 
 // Fixtures mirror the server's rowToSaved() output (apps/server/src/db/event-store.ts:40):
 // a SavedEvent is a ParsedEvent + a numeric `id` + a nullable `source_provider`. `created_at`
@@ -51,5 +51,16 @@ describe("savedEventSchema (the served GET /events row)", () => {
   it("strips a created_at if present — it is NOT part of the served contract", () => {
     const parsed = savedEventSchema.parse({ ...forwardedRow, created_at: "2026-06-19T10:00:00Z" });
     expect(parsed).not.toHaveProperty("created_at");
+  });
+});
+
+describe("savedEventsResponseSchema (the GET /events envelope)", () => {
+  it("parses the wrapped { events: [...] } shape", () => {
+    const parsed = savedEventsResponseSchema.parse({ events: [forwardedRow, googleRow] });
+    expect(parsed.events).toHaveLength(2);
+  });
+
+  it("rejects a bare array — the payload must be wrapped", () => {
+    expect(() => savedEventsResponseSchema.parse([forwardedRow])).toThrow();
   });
 });
