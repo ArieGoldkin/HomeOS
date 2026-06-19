@@ -25,7 +25,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
 
   if (status === "pending") {
     return (
-      <div className={cn("flex flex-col gap-3 p-4", className)}>
+      <div className={cn("flex flex-col gap-3", className)}>
         <SectionHeader>המשפחה</SectionHeader>
         {SKELETON_ROWS.map((k) => (
           <Skeleton key={k} variant="line" className="w-full" />
@@ -36,7 +36,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
 
   if (status === "error") {
     return (
-      <div className={cn("p-4", className)}>
+      <div className={className}>
         <SectionHeader>המשפחה</SectionHeader>
         <p className="mt-3 text-sm text-muted-foreground">שגיאה בטעינת הרשימה — ננסה שוב בקרוב.</p>
       </div>
@@ -56,7 +56,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
   const members = [...KNOWN_ROSTER, ...extraNames].map((name) => ({ name }));
 
   return (
-    <div className={cn("p-4", className)}>
+    <div className={className}>
       <SectionHeader className="mb-3">המשפחה</SectionHeader>
       <FamilyGrid members={members} columns={1} onAddMember={onAddMember} />
     </div>

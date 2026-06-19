@@ -10,11 +10,9 @@ const APP_VERSION = "0.0.0";
  */
 export function SettingsView() {
   return (
-    <div
-      dir="rtl"
-      className="flex flex-col gap-6 min-h-screen bg-background px-4 py-6"
-      data-testid="settings-view"
-    >
+    // Padding/dir/background are owned by PhoneShell's <main> + the global dir="rtl" — the screen
+    // stays layout-free (a nested min-h-screen here created a double scroll region).
+    <div className="flex flex-col gap-6" data-testid="settings-view">
       {/* כללי — General */}
       <SettingsList title="כללי">
         <SettingsRow label="שפה" value="עברית" />

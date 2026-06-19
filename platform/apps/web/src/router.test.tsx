@@ -46,4 +46,12 @@ describe("router", () => {
     // validateSearch replaced the bad value with today → today's event still renders.
     await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
   });
+
+  it("honors a valid ?date= and shows that day, not today", async () => {
+    // Clock is 2026-06-21 (today). The sample reminder "תור לרופא" is on 2026-06-22; today's event
+    // "אסיפת הורים בגן" (the 21st) must NOT be the rendered day — proving the valid date is honored.
+    renderAt("/phone/today?date=2026-06-22");
+    await waitFor(() => expect(screen.getByText("תור לרופא")).toBeInTheDocument());
+    expect(screen.queryByText("אסיפת הורים בגן")).not.toBeInTheDocument();
+  });
 });

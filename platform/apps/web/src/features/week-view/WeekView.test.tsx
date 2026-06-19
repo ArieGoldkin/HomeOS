@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw/server";
@@ -63,5 +64,11 @@ describe("WeekView (data-connected, fixed clock)", () => {
     await userEvent.click(mondayButton);
     expect(onSelectDate).toHaveBeenCalledOnce();
     expect(onSelectDate).toHaveBeenCalledWith("2026-06-22");
+  });
+
+  it("shows the error message when the events request fails", async () => {
+    server.use(http.get("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
+    render(wrap(<WeekView dateIso="2026-06-21" onSelectDate={vi.fn()} />));
+    await waitFor(() => expect(screen.getByText(/שגיאה בטעינת השבוע/)).toBeInTheDocument());
   });
 });

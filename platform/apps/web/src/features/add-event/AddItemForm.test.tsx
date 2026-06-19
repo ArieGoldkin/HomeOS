@@ -17,6 +17,19 @@ describe("AddItemForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("rejects a blank/whitespace title, does not emit, and shows a title error", async () => {
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(<AddItemForm onSubmit={onSubmit} />);
+
+    // Leave the title empty (date defaults to today, which is valid) — the most likely real user error.
+    await user.click(screen.getByRole("button", { name: "הוספה" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("כותרת")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
   it("emits a schema-valid ParsedEvent with synthesized source_text on a valid submit", async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();

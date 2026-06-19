@@ -22,8 +22,8 @@ export function PhoneBottomNav() {
         <Link
           key={tab.to}
           to={tab.to}
-          className="flex flex-1 flex-col items-center gap-1 py-2.5 text-[12px]"
-          activeProps={{ className: "font-semibold text-primary" }}
+          className="flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[12px]"
+          activeProps={{ className: "font-semibold text-primary", "aria-current": "page" }}
           inactiveProps={{ className: "text-muted-foreground" }}
         >
           {tab.label}

@@ -1,7 +1,7 @@
 import { type EventKind, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { PersonChip } from "@shared/board";
 import { jerusalemTodayIso } from "@shared/lib";
-import { Button, Field, SegmentedControl } from "@shared/ui";
+import { Button, Field, SegmentedControl, type SegmentedOption } from "@shared/ui";
 import { useForm } from "react-hook-form";
 
 /** The user-editable fields — parsedEventSchema minus the (synthesized) source_text. */
@@ -10,7 +10,8 @@ const formSchema = parsedEventSchema.omit({ source_text: true });
 /** The known people offered as assignee chips (mirrors the family roster). */
 const PEOPLE = ["אבא", "אמא", "יואב", "נועה"] as const;
 
-const KIND_OPTIONS = [
+// Typed against EventKind so a typo'd value is a compile error and the SegmentedControl needs no cast.
+const KIND_OPTIONS: readonly SegmentedOption<EventKind>[] = [
   { value: "event", label: "אירוע" },
   { value: "reminder", label: "תזכורת" },
   { value: "task", label: "משימה" },
@@ -23,6 +24,12 @@ interface FormValues {
   time: string;
   location: string;
   assignee: string;
+}
+
+/** The form's own field keys — guards setError against schema issues whose path isn't a form field. */
+const FORM_KEYS = ["kind", "title_he", "date_iso", "time", "location", "assignee"] as const;
+function isFormKey(key: unknown): key is keyof FormValues {
+  return typeof key === "string" && (FORM_KEYS as readonly string[]).includes(key);
 }
 
 export interface AddItemFormProps {
@@ -76,8 +83,10 @@ export function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
     if (!result.success) {
       for (const issue of result.error.issues) {
         const field = issue.path[0];
-        if (typeof field === "string") {
-          setError(field as keyof FormValues, { message: issue.message });
+        // Only attach errors to real form fields — a schema/refinement issue with a non-field path
+        // would otherwise set an error RHF can't render (a silent validation gap).
+        if (isFormKey(field)) {
+          setError(field, { message: issue.message });
         }
       }
       return;
@@ -92,7 +101,7 @@ export function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
       <SegmentedControl
         aria-label="סוג"
         value={kind}
-        onValueChange={(v) => setValue("kind", v as EventKind)}
+        onValueChange={(v) => setValue("kind", v)}
         options={KIND_OPTIONS}
       />
 

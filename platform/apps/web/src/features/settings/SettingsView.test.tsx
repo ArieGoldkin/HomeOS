@@ -36,9 +36,9 @@ describe("SettingsView", () => {
     expect(screen.getByText("HomeOS")).toBeInTheDocument();
   });
 
-  it("has dir=rtl on the root element", () => {
+  it("leaves layout (dir/padding/background) to PhoneShell — no redundant dir on the root", () => {
     render(<SettingsView />);
     const root = screen.getByTestId("settings-view");
-    expect(root).toHaveAttribute("dir", "rtl");
+    expect(root).not.toHaveAttribute("dir");
   });
 });

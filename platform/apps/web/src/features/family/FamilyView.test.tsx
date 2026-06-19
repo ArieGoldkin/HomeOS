@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw/server";
 import { FamilyView } from "./FamilyView";
 
@@ -50,5 +51,19 @@ describe("FamilyView (data-connected)", () => {
   it("shows the add-member button", async () => {
     render(wrap(<FamilyView />));
     await waitFor(() => expect(screen.getByText("הוספת בן משפחה")).toBeInTheDocument());
+  });
+
+  it("shows the error message when the events request fails", async () => {
+    server.use(http.get("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
+    render(wrap(<FamilyView />));
+    await waitFor(() => expect(screen.getByText(/שגיאה בטעינת הרשימה/)).toBeInTheDocument());
+  });
+
+  it("fires onAddMember when the add-member button is clicked", async () => {
+    const onAddMember = vi.fn();
+    render(wrap(<FamilyView onAddMember={onAddMember} />));
+    const button = await screen.findByRole("button", { name: "הוספת בן משפחה" });
+    await userEvent.click(button);
+    expect(onAddMember).toHaveBeenCalledOnce();
   });
 });

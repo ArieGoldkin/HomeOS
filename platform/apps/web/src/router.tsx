@@ -3,7 +3,7 @@ import { TabletBoard } from "@app/tablet";
 import { FamilyView } from "@features/family";
 import { SettingsView } from "@features/settings";
 import { WeekView } from "@features/week-view";
-import { coerceDateIso } from "@shared/lib";
+import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -19,12 +19,12 @@ import { TokensView } from "./dev/TokensView";
 
 /**
  * `?date=YYYY-MM-DD` for the day/week screens. Optional in/out so navigation (Links/redirects) needn't
- * pass it; a malformed value is dropped. Screens default an absent date to today themselves.
+ * pass it; a malformed value is dropped. Screens default an absent date to today themselves. Shares the
+ * one ISO_DATE_RE shape guard with coerceDateIso (the screen-boundary coercion) — one source of truth.
  */
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validateDateSearch(search: { date?: string }): { date?: string } {
   const raw = search.date;
-  return typeof raw === "string" && ISO_DATE.test(raw) ? { date: raw } : {};
+  return typeof raw === "string" && ISO_DATE_RE.test(raw) ? { date: raw } : {};
 }
 
 function RootLayout() {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDaysIso,
+  coerceDateIso,
   jerusalemHhmm,
   jerusalemHour,
   jerusalemTodayIso,
@@ -42,5 +43,33 @@ describe("date helpers (Asia/Jerusalem, week starts Sunday)", () => {
     expect(addDaysIso("2026-06-20", 1)).toBe("2026-06-21");
     expect(addDaysIso("2026-06-30", 1)).toBe("2026-07-01");
     expect(addDaysIso("2026-12-31", 1)).toBe("2027-01-01");
+  });
+});
+
+describe("coerceDateIso (untrusted ?date= coercion → today fallback)", () => {
+  const now = new Date("2026-06-19T20:00:00Z"); // 2026-06-19 in Asia/Jerusalem
+
+  it("passes a well-formed date through unchanged", () => {
+    expect(coerceDateIso("2026-06-22", now)).toBe("2026-06-22");
+  });
+
+  it("falls back to today for undefined", () => {
+    expect(coerceDateIso(undefined, now)).toBe("2026-06-19");
+  });
+
+  it("falls back to today for null", () => {
+    expect(coerceDateIso(null, now)).toBe("2026-06-19");
+  });
+
+  it("falls back to today for an empty string", () => {
+    expect(coerceDateIso("", now)).toBe("2026-06-19");
+  });
+
+  it("falls back to today for a wrong-shape value", () => {
+    expect(coerceDateIso("not-a-date", now)).toBe("2026-06-19");
+  });
+
+  it("is shape-only — an impossible calendar day still passes through (documented limitation)", () => {
+    expect(coerceDateIso("2026-13-45", now)).toBe("2026-13-45");
   });
 });

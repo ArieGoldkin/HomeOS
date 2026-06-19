@@ -59,7 +59,7 @@ export function WeekView({ dateIso, onSelectDate }: WeekViewProps) {
 
   if (isLoading) {
     return (
-      <div dir="rtl" className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex flex-col gap-2">
         <div className="h-5 mb-2 w-32">
           <Skeleton variant="line" className="w-full" />
         </div>
@@ -76,11 +76,7 @@ export function WeekView({ dateIso, onSelectDate }: WeekViewProps) {
   }
 
   if (isError) {
-    return (
-      <p dir="rtl" className="text-muted-foreground text-sm px-4 py-3">
-        שגיאה בטעינת השבוע — ננסה שוב בקרוב.
-      </p>
-    );
+    return <p className="text-muted-foreground text-sm">שגיאה בטעינת השבוע — ננסה שוב בקרוב.</p>;
   }
 
   const days = weekDays.map((day, i) => ({
@@ -93,7 +89,7 @@ export function WeekView({ dateIso, onSelectDate }: WeekViewProps) {
   }));
 
   return (
-    <div dir="rtl" className="flex flex-col gap-3 px-4 py-3">
+    <div className="flex flex-col gap-3">
       <h2 className="text-[13px] font-medium text-muted-foreground px-1">{rangeLabel}</h2>
       <WeekList days={days} onSelectDate={onSelectDate} />
     </div>

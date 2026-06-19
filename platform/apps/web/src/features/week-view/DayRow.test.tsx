@@ -65,6 +65,22 @@ describe("DayRow", () => {
     expect(onSelect).toHaveBeenCalledWith("2026-06-21");
   });
 
+  it("caps visible pips at MAX_PIPS (5) and shows a +N overflow label", () => {
+    const events = Array.from({ length: 7 }, (_, i) => makeEvent(i + 1));
+    render(
+      <DayRow
+        dateIso="2026-06-21"
+        weekdayLabel="ראשון"
+        dayLabel="21"
+        events={events}
+        onSelect={vi.fn()}
+      />,
+    );
+    const pips = document.querySelectorAll("span[aria-hidden='true'][class*='rounded-full']");
+    expect(pips).toHaveLength(5);
+    expect(screen.getByText("+2")).toBeInTheDocument();
+  });
+
   it("shows an em-dash and no pips when there are no events", () => {
     render(
       <DayRow
