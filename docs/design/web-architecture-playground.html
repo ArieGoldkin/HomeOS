@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomeOS · Phase 6 Web App — Architecture Playground</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#151a21; --panel2:#1b212b; --line:#262e3a; --ink:#e6edf3; --ink2:#9aa7b4; --ink3:#6b7888;
+    --app:#818cf8; --feat:#34d399; --shared:#2dd4bf; --contract:#c084fc; --backend:#fbbf24; --data:#f472b6;
+    --dep:#94a3b8; --flow:#38bdf8; --render:#a78bfa;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;background:var(--panel)}
+  header h1{font-size:14px;margin:0;font-weight:700;letter-spacing:-.01em}
+  header .sub{color:var(--ink3);font-size:11px}
+  header .presets{margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:11.5px;cursor:pointer;font-family:var(--sans)}
+  .btn:hover{border-color:#3a475a}
+  .btn.active{background:#21304a;border-color:#3b6ea5;color:#cfe3ff}
+  main{flex:1;display:grid;grid-template-columns:208px 1fr 280px;min-height:0}
+  .col{overflow:auto;min-height:0}
+  .left{border-inline-end:1px solid var(--line);background:var(--panel);padding:12px}
+  .right{border-inline-start:1px solid var(--line);background:var(--panel);padding:12px}
+  .center{position:relative;display:flex;flex-direction:column;min-height:0}
+  h2{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink3);margin:16px 0 7px;font-weight:600}
+  h2:first-child{margin-top:0}
+  label.ck{display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px}
+  label.ck input{accent-color:#3b6ea5}
+  .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+  .lineswatch{width:18px;height:0;border-top-width:2px;border-top-style:solid;flex:none}
+  .canvasWrap{flex:1;overflow:hidden;position:relative;background:radial-gradient(circle at 30% 20%,#10151c,#0c0f14)}
+  svg{width:100%;height:100%;display:block}
+  .node rect{cursor:pointer;transition:filter .12s}
+  .node:hover rect{filter:brightness(1.35)}
+  .node .t{font-size:12px;font-weight:600;fill:var(--ink);pointer-events:none}
+  .node .s{font-size:9.5px;fill:var(--ink3);font-family:var(--mono);pointer-events:none}
+  .node.commented rect{stroke-width:2.5px!important;stroke-dasharray:none}
+  .zoom{position:absolute;bottom:12px;inset-inline-end:12px;display:flex;gap:5px}
+  .legend{position:absolute;bottom:12px;inset-inline-start:12px;background:rgba(16,20,27,.86);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:10.5px;display:flex;flex-direction:column;gap:4px}
+  .legend .row{display:flex;align-items:center;gap:7px}
+  .tree{font-family:var(--mono);font-size:11px;line-height:1.55;white-space:pre;color:var(--ink2)}
+  .tree .c{color:var(--ink3)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:4px 9px;font-size:11px}
+  .chip b{font-weight:600}
+  .chip span{color:var(--ink3);font-size:10px}
+  .cmtList{display:flex;flex-direction:column;gap:6px}
+  .cmt{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:11.5px}
+  .cmt .h{display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:3px}
+  .cmt .h b{font-size:11px}
+  .cmt .x{cursor:pointer;color:var(--ink3);border:none;background:none;font-size:13px}
+  .cmt .x:hover{color:#f87171}
+  .cmt .f{font-family:var(--mono);font-size:9.5px;color:var(--ink3)}
+  .empty{color:var(--ink3);font-size:11.5px;font-style:italic}
+  .promptBar{border-top:1px solid var(--line);background:var(--panel);padding:10px 14px;max-height:170px;overflow:auto}
+  .promptBar .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .promptBar pre{margin:0;font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:pre-wrap;line-height:1.5}
+  .copy{background:#21304a;border:1px solid #3b6ea5;color:#cfe3ff;border-radius:7px;padding:5px 12px;cursor:pointer;font-size:11.5px}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+  .modal.on{display:flex}
+  .modalCard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;width:380px;max-width:92vw}
+  .modalCard h3{margin:0 0 2px;font-size:14px}
+  .modalCard .f{font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-bottom:10px}
+  .modalCard textarea{width:100%;height:88px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font-family:var(--sans);font-size:12.5px;resize:vertical}
+  .modalCard .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+  .note{color:var(--ink3);font-size:10.5px;margin-top:6px;line-height:1.45}
+</style>
+</head>
+<body>
+<header>
+  <h1>HomeOS · Phase 6 — Web App Architecture</h1>
+  <span class="sub">one responsive <code>@homeos/web</code> → tablet · phone · web &nbsp;·&nbsp; source: docs/design/web-architecture-plan.md (#89–#98)</span>
+  <div class="presets" id="presets"></div>
+</header>
+
+<main>
+  <!-- LEFT: controls -->
+  <div class="col left">
+    <h2>Layers</h2>
+    <div id="layerToggles"></div>
+    <h2>Connections</h2>
+    <div id="connToggles"></div>
+    <h2>Comments (<span id="cmtCount">0</span>)</h2>
+    <div class="cmtList" id="cmtList"><div class="empty">Click any node to leave architecture feedback — it becomes part of the copyable prompt.</div></div>
+  </div>
+
+  <!-- CENTER: diagram -->
+  <div class="col center">
+    <div class="canvasWrap">
+      <svg id="svg" viewBox="0 0 1180 740" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="ar-dep" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0,8 3.5,0 7" fill="#94a3b8"/></marker>
+          <marker id="ar-flow" markerWidth="9" markerHeight="8" refX="8" refY="4" orient="auto"><polygon points="0 0,9 4,0 8" fill="#38bdf8"/></marker>
+          <marker id="ar-render" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto"><polygon points="0 0,8 3.5,0 7" fill="#a78bfa"/></marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+      <div class="legend">
+        <div class="row"><span class="lineswatch" style="border-color:var(--flow)"></span> data-flow (runtime)</div>
+        <div class="row"><span class="lineswatch" style="border-color:var(--dep);border-top-style:dotted"></span> dependency (import)</div>
+        <div class="row"><span class="lineswatch" style="border-color:var(--render);border-top-style:dashed"></span> renders (shell → view)</div>
+      </div>
+      <div class="zoom">
+        <button class="btn" onclick="zoom(-1)">−</button>
+        <button class="btn" onclick="zoom(0)">reset</button>
+        <button class="btn" onclick="zoom(1)">+</button>
+      </div>
+    </div>
+    <div class="promptBar">
+      <div class="top"><b style="font-size:11px;color:var(--ink2)">Prompt</b><button class="copy" id="copyBtn">Copy prompt</button></div>
+      <pre id="prompt"></pre>
+    </div>
+  </div>
+
+  <!-- RIGHT: folder tree + stack -->
+  <div class="col right">
+    <h2>Folder structure</h2>
+    <div class="tree" id="tree"></div>
+    <div class="note">Dependency rule: <b>app → features → shared → @homeos/shared</b> (one-directional). One barrel per group; no <code>src/</code> mega-barrel.</div>
+    <h2>Tech stack</h2>
+    <div class="chips" id="chips"></div>
+  </div>
+</main>
+
+<div class="modal" id="modal">
+  <div class="modalCard">
+    <h3 id="mTitle"></h3>
+    <div class="f" id="mFile"></div>
+    <textarea id="mText" placeholder="What would you change here? (e.g. 'move useEvents into a feature', 'EventCard should take SavedEvent directly')"></textarea>
+    <div class="actions">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="copy" onclick="saveComment()">Add feedback</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- layers ----
+const LAYERS = [
+  {id:'app',      label:'App shells',      color:'var(--app)',      hex:'#818cf8'},
+  {id:'features', label:'Features',        color:'var(--feat)',     hex:'#34d399'},
+  {id:'shared',   label:'Shared blocks',   color:'var(--shared)',   hex:'#2dd4bf'},
+  {id:'contract', label:'@homeos/shared',  color:'var(--contract)', hex:'#c084fc'},
+  {id:'backend',  label:'Backend / API',   color:'var(--backend)',  hex:'#fbbf24'},
+  {id:'data',     label:'Data',            color:'var(--data)',     hex:'#f472b6'},
+];
+const CONNS = [
+  {id:'flow',   label:'data-flow',  hex:'#38bdf8'},
+  {id:'dep',    label:'dependency', hex:'#94a3b8'},
+  {id:'render', label:'renders',    hex:'#a78bfa'},
+];
+
+// ---- nodes (x,y = top-left; w/h fixed) ----
+const W=158,H=44;
+const N = [
+  // app shells
+  {id:'tabletShell', t:'TabletShell', s:'app/tablet', x:70,  y:24,  layer:'app'},
+  {id:'phoneShell',  t:'PhoneShell',  s:'app/phone',  x:512, y:24,  layer:'app'},
+  {id:'webShell',    t:'WebShell',    s:'app/web',    x:952, y:24,  layer:'app'},
+  // features
+  {id:'dayView',     t:'DayView',     s:'features/day-view',  x:30,  y:128, layer:'features'},
+  {id:'weekView',    t:'WeekView',    s:'features/week-view', x:212, y:128, layer:'features'},
+  {id:'family',      t:'Family',      s:'features/family',    x:394, y:128, layer:'features'},
+  {id:'addEvent',    t:'AddEvent',    s:'features/add-event', x:576, y:128, layer:'features'},
+  {id:'connections', t:'Connections', s:'features/connections',x:758,y:128, layer:'features'},
+  {id:'settings',    t:'Settings',    s:'features/settings',  x:952, y:128, layer:'features'},
+  // shared/board
+  {id:'eventCard',   t:'EventCard',   s:'shared/board',  x:36,  y:236, layer:'shared'},
+  {id:'timeSpine',   t:'TimeSpine',   s:'shared/board',  x:212, y:236, layer:'shared'},
+  {id:'nowLine',     t:'NowLine',     s:'shared/board',  x:388, y:236, layer:'shared'},
+  {id:'personChip',  t:'PersonChip',  s:'shared/board',  x:560, y:236, layer:'shared'},
+  {id:'dayColumn',   t:'DayColumn',   s:'shared/board',  x:736, y:236, layer:'shared'},
+  // shared/ui
+  {id:'sheet',       t:'Sheet / Modal',s:'shared/ui (Radix)', x:560, y:312, layer:'shared'},
+  {id:'field',       t:'Field',       s:'shared/ui',     x:736, y:312, layer:'shared'},
+  {id:'segmented',   t:'SegmentedCtl',s:'shared/ui',     x:912, y:312, layer:'shared'},
+  {id:'button',      t:'Button',      s:'shared/ui',     x:36,  y:312, layer:'shared'},
+  // shared/lib hooks api
+  {id:'lib',         t:'lib',         s:'cn · assignee-color · date · rtl', x:36, y:404, layer:'shared'},
+  {id:'useEvents',   t:'useEvents',   s:'shared/hooks (TanStack Query)', x:430, y:404, layer:'shared'},
+  {id:'events',      t:'events.ts',   s:'shared/api (fetch + Bearer)',   x:736, y:404, layer:'shared'},
+  // contract
+  {id:'schema',      t:'savedEventSchema', s:'@homeos/shared', x:512, y:500, layer:'contract'},
+  // backend
+  {id:'getEvents',   t:'GET /events', s:'@homeos/server (Bearer-gated)', x:512, y:588, layer:'backend'},
+  // data
+  {id:'sqlite',      t:'SQLite · events', s:'node:sqlite (one file/family)', x:512, y:672, layer:'data'},
+];
+const NODE = Object.fromEntries(N.map(n=>[n.id,n]));
+
+// ---- edges ----
+const E = [
+  // renders (shell -> view)
+  ['tabletShell','dayView','render'],
+  ['phoneShell','weekView','render'], ['phoneShell','addEvent','render'], ['phoneShell','family','render'],
+  ['webShell','connections','render'], ['webShell','settings','render'], ['webShell','dayView','render'],
+  // dependency (feature -> shared)
+  ['dayView','eventCard','dep'], ['dayView','timeSpine','dep'],
+  ['weekView','dayColumn','dep'], ['weekView','personChip','dep'],
+  ['addEvent','sheet','dep'], ['addEvent','field','dep'], ['addEvent','segmented','dep'],
+  ['family','personChip','dep'], ['settings','button','dep'],
+  // shared internal
+  ['timeSpine','nowLine','dep'], ['eventCard','personChip','dep'], ['eventCard','lib','dep'],
+  ['dayColumn','eventCard','dep'],
+  // data-flow (runtime)
+  ['dayView','useEvents','flow'], ['weekView','useEvents','flow'],
+  ['useEvents','events','flow'],
+  ['events','schema','flow'],
+  ['events','getEvents','flow'],
+  ['getEvents','sqlite','flow'],
+  ['getEvents','schema','dep'],
+];
+
+// ---- tech stack ----
+const STACK = [
+  ['Vite','react-swc · dev/build'], ['React 19','UI'], ['TypeScript','strict'],
+  ['Tailwind v4','CSS-first @theme'], ['shadcn/ui','Radix copy-in · init --rtl'],
+  ['TanStack Router','typed routes + search params'], ['TanStack Query','server state · /events'],
+  ['Vitest + RTL','tests · msw'], ['@fontsource Rubik','self-hosted (MVP)'], ['Biome','lint/format'],
+];
+
+// ---- folder tree (color-coded) ----
+const TREE = [
+  ['platform/apps/web/','c','  @homeos/web · Vite + React 19 + TS'],
+  ['├─ index.html','c','  <html dir="rtl" lang="he">  (RTL added here)'],
+  ['├─ vite.config.ts','c','  react-swc + @tailwindcss/vite + aliases'],
+  ['└─ src/','c',''],
+  ['   ├─ main.tsx','c','  entry — the only globals.css import'],
+  ['   ├─ App.tsx','c','  QueryClient + theme/dir providers'],
+  ['   ├─ router.tsx','c','  TanStack Router (added w/ phone)'],
+  ['   ├─ styles/','c','  globals.css (OKLCH ocean) + fonts.css'],
+  ['   ├─ shared/','shared','  ← cross-surface building blocks'],
+  ['   │  ├─ ui/      index.ts','shared','  Button Sheet Modal Field …'],
+  ['   │  ├─ board/   index.ts','shared','  EventCard TimeSpine NowLine …'],
+  ['   │  ├─ lib/','shared','  cn · assignee-color · date · rtl'],
+  ['   │  ├─ hooks/','shared','  use-events · use-now'],
+  ['   │  └─ api/','shared','  events.ts (Bearer → GET /events)'],
+  ['   ├─ features/','features','  ← vertical slices (root index.ts)'],
+  ['   │  ├─ day-view/ week-view/','features',''],
+  ['   │  ├─ family/ add-event/','features',''],
+  ['   │  └─ connections/ settings/ …','features','  onboarding · whatsapp-ingestion'],
+  ['   └─ app/','app','  ← surface shells (chrome only)'],
+  ['      ├─ tablet/  index.ts','app','  TabletShell (ambient)'],
+  ['      ├─ phone/   index.ts','app','  PhoneShell + BottomNav'],
+  ['      └─ web/     index.ts','app','  WebShell + Sidebar'],
+  ['packages/shared/','contract','  @homeos/shared + savedEventSchema'],
+];
+
+// ---- presets ----
+const PRESETS = {
+  'Full system':   {layers:['app','features','shared','contract','backend','data'], conns:['flow','dep','render']},
+  'Data flow':     {layers:['features','shared','contract','backend','data'], conns:['flow']},
+  'Dependency layers':{layers:['app','features','shared','contract'], conns:['dep','render']},
+  'Tablet 1st slice (#93–95)':{layers:['app','features','shared','contract','backend','data'], conns:['flow','dep','render'], only:['tabletShell','dayView','eventCard','timeSpine','nowLine','personChip','lib','useEvents','events','schema','getEvents','sqlite']},
+};
+
+// ---- state ----
+const DEFAULT_PRESET='Full system';
+const state = {
+  layers:Object.fromEntries(LAYERS.map(l=>[l.id,true])),
+  conns:Object.fromEntries(CONNS.map(c=>[c.id,true])),
+  only:null, preset:DEFAULT_PRESET, scale:1, comments:[],
+};
+const LHEX=Object.fromEntries(LAYERS.map(l=>[l.id,l.hex]));
+const TREECOLOR={app:'#818cf8',features:'#34d399',shared:'#2dd4bf',contract:'#c084fc',c:'#6b7888'};
+
+function applyPreset(name){
+  const p=PRESETS[name]; if(!p) return;
+  state.preset=name;
+  LAYERS.forEach(l=>state.layers[l.id]=p.layers.includes(l.id));
+  CONNS.forEach(c=>state.conns[c.id]=p.conns.includes(c.id));
+  state.only=p.only||null;
+  syncControls(); renderAll();
+}
+function nodeVisible(n){ return state.layers[n.layer] && (!state.only || state.only.includes(n.id)); }
+
+// ---- render diagram ----
+function renderAll(){ renderEdges(); renderNodes(); updatePrompt(); }
+function renderNodes(){
+  const g=document.getElementById('nodes'); g.innerHTML='';
+  N.filter(nodeVisible).forEach(n=>{
+    const hex=LHEX[n.layer];
+    const el=document.createElementNS('http://www.w3.org/2000/svg','g');
+    el.setAttribute('class','node'+(state.comments.some(c=>c.target===n.id)?' commented':''));
+    el.innerHTML=`<rect x="${n.x}" y="${n.y}" width="${W}" height="${H}" rx="9"
+        fill="${hex}22" stroke="${hex}" stroke-width="1.4"></rect>
+      <text class="t" x="${n.x+11}" y="${n.y+19}">${n.t}</text>
+      <text class="s" x="${n.x+11}" y="${n.y+34}">${n.s}</text>`;
+    el.onclick=()=>openModal(n);
+    g.appendChild(el);
+  });
+}
+function edgePath(a,b){
+  const ax=a.x+W/2, ay=a.y+H, bx=b.x+W/2, by=b.y;
+  // if b is above a (back-edge), connect from tops/bottoms gracefully
+  if(by>=ay){ const my=(ay+by)/2; return `M${ax},${ay} C${ax},${my} ${bx},${my} ${bx},${by}`; }
+  const ay2=a.y, by2=b.y+H; const my=(ay2+by2)/2; return `M${ax},${ay2} C${ax},${my} ${bx},${my} ${bx},${by2}`;
+}
+function renderEdges(){
+  const g=document.getElementById('edges'); g.innerHTML='';
+  E.forEach(([f,t,type])=>{
+    if(!state.conns[type]) return;
+    const a=NODE[f],b=NODE[t]; if(!nodeVisible(a)||!nodeVisible(b)) return;
+    const hex=type==='flow'?'#38bdf8':type==='dep'?'#94a3b8':'#a78bfa';
+    const dash=type==='dep'?'2,4':type==='render'?'7,5':'0';
+    const mk=type==='flow'?'ar-flow':type==='dep'?'ar-dep':'ar-render';
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',edgePath(a,b)); p.setAttribute('fill','none');
+    p.setAttribute('stroke',hex); p.setAttribute('stroke-width',type==='flow'?'2':'1.4');
+    p.setAttribute('stroke-dasharray',dash); p.setAttribute('marker-end',`url(#${mk})`);
+    p.setAttribute('opacity','.85');
+    g.appendChild(p);
+  });
+}
+
+// ---- zoom ----
+function zoom(d){
+  if(d===0) state.scale=1; else state.scale=Math.min(2.2,Math.max(.6,state.scale+d*.15));
+  document.getElementById('nodes').setAttribute('transform',`scale(${state.scale})`);
+  document.getElementById('edges').setAttribute('transform',`scale(${state.scale})`);
+}
+
+// ---- comments / modal ----
+let current=null;
+function openModal(n){ current=n; document.getElementById('mTitle').textContent=n.t;
+  document.getElementById('mFile').textContent=n.s; document.getElementById('mText').value='';
+  document.getElementById('modal').classList.add('on'); document.getElementById('mText').focus(); }
+function closeModal(){ document.getElementById('modal').classList.remove('on'); current=null; }
+function saveComment(){
+  const t=document.getElementById('mText').value.trim(); if(!t||!current){closeModal();return;}
+  state.comments.push({id:Date.now(),target:current.id,label:current.t,file:current.s,text:t});
+  closeModal(); renderComments(); renderNodes(); updatePrompt();
+}
+function delComment(id){ state.comments=state.comments.filter(c=>c.id!==id); renderComments(); renderNodes(); updatePrompt(); }
+function renderComments(){
+  document.getElementById('cmtCount').textContent=state.comments.length;
+  const el=document.getElementById('cmtList');
+  if(!state.comments.length){el.innerHTML='<div class="empty">Click any node to leave architecture feedback — it becomes part of the copyable prompt.</div>';return;}
+  el.innerHTML=state.comments.map(c=>`<div class="cmt"><div class="h"><b>${c.label}</b><button class="x" onclick="delComment(${c.id})">×</button></div><div class="f">${c.file}</div><div>${esc(c.text)}</div></div>`).join('');
+}
+function esc(s){return s.replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+
+// ---- prompt ----
+function updatePrompt(){
+  const parts=[];
+  parts.push('This is the HomeOS Phase-6 web app architecture: ONE responsive `@homeos/web` (Vite + React 19 + TS) serving tablet/phone/web, built from the imported Claude-design prototype. Layering is one-directional: app (surface shells) → features (vertical slices) → shared (cross-surface building blocks: ui/board/lib/hooks/api) → @homeos/shared. CSS = Tailwind v4 + shadcn. Data: TanStack Query `useEvents` → `shared/api/events.ts` (Bearer) → `GET /events` (@homeos/server) → SQLite, validated by `savedEventSchema`.');
+  if(state.preset!==DEFAULT_PRESET) parts.push(`\nView: "${state.preset}".`);
+  const offL=LAYERS.filter(l=>!state.layers[l.id]).map(l=>l.label);
+  if(offL.length) parts.push(`(Hidden layers: ${offL.join(', ')}.)`);
+  if(state.comments.length){
+    parts.push('\nFeedback on specific parts:');
+    state.comments.forEach(c=>parts.push(`\n• ${c.label} (${c.file}):\n  ${c.text}`));
+  } else {
+    parts.push('\n(No feedback yet — click a node to comment, then copy this prompt back to Claude.)');
+  }
+  document.getElementById('prompt').textContent=parts.join('\n');
+}
+
+// ---- build controls / panels ----
+function syncControls(){
+  document.querySelectorAll('#presets .btn').forEach(b=>b.classList.toggle('active',b.dataset.p===state.preset));
+  LAYERS.forEach(l=>{const i=document.getElementById('L_'+l.id); if(i)i.checked=state.layers[l.id];});
+  CONNS.forEach(c=>{const i=document.getElementById('C_'+c.id); if(i)i.checked=state.conns[c.id];});
+}
+function build(){
+  const pr=document.getElementById('presets');
+  Object.keys(PRESETS).forEach(name=>{const b=document.createElement('button');b.className='btn';b.textContent=name;b.dataset.p=name;b.onclick=()=>applyPreset(name);pr.appendChild(b);});
+  const lt=document.getElementById('layerToggles');
+  LAYERS.forEach(l=>{lt.insertAdjacentHTML('beforeend',`<label class="ck"><input type="checkbox" id="L_${l.id}" checked><span class="swatch" style="background:${l.color}"></span>${l.label}</label>`);
+    lt.querySelector('#L_'+l.id).onchange=e=>{state.layers[l.id]=e.target.checked;state.only=null;state.preset='(custom)';syncControls();renderAll();};});
+  const ct=document.getElementById('connToggles');
+  CONNS.forEach(c=>{ct.insertAdjacentHTML('beforeend',`<label class="ck"><input type="checkbox" id="C_${c.id}" checked><span class="lineswatch" style="border-color:${c.hex};border-top-style:${c.id==='dep'?'dotted':c.id==='render'?'dashed':'solid'}"></span>${c.label}</label>`);
+    ct.querySelector('#C_'+c.id).onchange=e=>{state.conns[c.id]=e.target.checked;renderAll();};});
+  document.getElementById('tree').innerHTML=TREE.map(([p,cls,cm])=>{
+    const col=TREECOLOR[cls]||'#9aa7b4';
+    return `<span style="color:${col}">${p.padEnd(30,' ')}</span><span class="c">${cm||''}</span>`;
+  }).join('\n');
+  document.getElementById('chips').innerHTML=STACK.map(([n,r])=>`<span class="chip"><b>${n}</b> <span>${r}</span></span>`).join('');
+  document.getElementById('copyBtn').onclick=()=>{navigator.clipboard.writeText(document.getElementById('prompt').textContent).then(()=>{const b=document.getElementById('copyBtn');b.textContent='Copied!';setTimeout(()=>b.textContent='Copy prompt',1200);});};
+  document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};
+}
+build(); applyPreset(DEFAULT_PRESET); renderComments();
+</script>
+</body>
+</html>
