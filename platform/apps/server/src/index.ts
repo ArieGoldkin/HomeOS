@@ -8,13 +8,21 @@ import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
+import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
 import { buildGoogleDeps } from "./http/oauth-routes.ts";
 import { createServer } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
 import { noopUploader, scheduleBackup } from "./infra/backup.ts";
 import { anthropicRawParse, createParser } from "./parsing/parser.ts";
-import { extractEventsTool, type GmailToolDeps, readGmailTool } from "./tools/tools.ts";
+import {
+  type CalendarToolDeps,
+  extractEventsTool,
+  type GmailToolDeps,
+  readCalendarTool,
+  readGmailTool,
+  type Tool,
+} from "./tools/tools.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
 
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).
@@ -49,11 +57,29 @@ const gmailDeps: GmailToolDeps | undefined = googleDeps
     }
   : undefined;
 
+// 📅 Calendar tool deps (#18): reuse googleDeps' oauth client + credential store (getValidAccessToken),
+// add the lean read client + the server-owned read clamps. Present only when Google is configured.
+const calendarDeps: CalendarToolDeps | undefined = googleDeps
+  ? {
+      client: httpCalendarClient(),
+      oauthClient: googleDeps.client,
+      credentials: googleDeps.credentials,
+      calendarId: config.calendarId,
+      windowDays: config.calendarWindowDays,
+      maxEvents: config.calendarMaxEvents,
+      log,
+    }
+  : undefined;
+
 // The tool-using agent: a bounded loop reusing `parse`. extract_events handles forwards; read_gmail
-// (registered only when Google is configured) handles the סנכרן מייל sync. Two model surfaces, one credential.
+// (סנכרן מייל) and read_calendar (סנכרן יומן) are registered only when Google is configured. One credential.
+const tools: Tool[] = [extractEventsTool(parse)];
+if (gmailDeps) tools.push(readGmailTool(parse));
+if (calendarDeps) tools.push(readCalendarTool());
+
 const agent = createAgent({
   callModel: anthropicCallModel(anthropic, config.anthropicModel),
-  tools: gmailDeps ? [extractEventsTool(parse), readGmailTool(parse)] : [extractEventsTool(parse)],
+  tools,
   log,
 });
 
@@ -69,6 +95,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     members: config.members,
     maxPerSenderPerDay: config.maxPerSenderPerDay,
     google: gmailDeps,
+    calendar: calendarDeps,
     log,
   });
 

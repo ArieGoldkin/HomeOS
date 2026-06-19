@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsedEventSchema, parsedMessageSchema } from "../src/index.ts";
+import { parsedEventSchema, parsedMessageSchema, sanitizeUserText } from "../src/index.ts";
 
 const valid = {
   kind: "event",
@@ -90,5 +90,26 @@ describe("content bounds + sanitization (G1/G15)", () => {
   it("still accepts ordinary Hebrew with spaces, digits, and punctuation", () => {
     const ok = { ...valid, title_he: "חוג כדורגל (יום א׳) 16:00", assignee: "אבא" };
     expect(parsedEventSchema.parse(ok)).toMatchObject({ assignee: "אבא" });
+  });
+});
+
+// #18: provider text (a typed Google Calendar summary) is mapped straight to a ParsedEvent — no model
+// in the path — so it is *sanitized* (the bad codepoints removed) rather than rejected, then validated.
+describe("sanitizeUserText (G15 stripper for directly-mapped provider text)", () => {
+  it("leaves clean Hebrew untouched", () => {
+    expect(sanitizeUserText("חוג כדורגל (יום א׳) 16:00")).toBe("חוג כדורגל (יום א׳) 16:00");
+  });
+  it("strips a bidi/RTL-override codepoint (U+202E)", () => {
+    expect(sanitizeUserText("אסיפה‮גזל")).toBe("אסיפהגזל");
+  });
+  it("strips a smuggled zero-width char (U+200B)", () => {
+    expect(sanitizeUserText("אבא​")).toBe("אבא");
+  });
+  it("strips control chars incl. an embedded newline (UI-spoof)", () => {
+    expect(sanitizeUserText("שלום\nהוספתי")).toBe("שלוםהוספתי");
+  });
+  it("keeps ordinary spaces and the result re-validates against the schema", () => {
+    const title = sanitizeUserText("פגישת​צוות").trim();
+    expect(parsedEventSchema.safeParse({ ...valid, title_he: title }).success).toBe(true);
   });
 });

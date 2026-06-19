@@ -3,10 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
 import { TransientError } from "../../src/core/errors.ts";
 import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
+import type { CalendarEvent } from "../../src/google/calendar.ts";
 import {
   buildGmailQuery,
+  type CalendarToolDeps,
   extractEventsTool,
   type GmailToolDeps,
+  mapCalendarEvent,
+  readCalendarTool,
   readGmailTool,
   type ToolContext,
 } from "../../src/tools/tools.ts";
@@ -250,5 +254,156 @@ describe("readGmailTool (#72)", () => {
     });
     const { ctx } = makeCtx({ google });
     await expect(readGmailTool(vi.fn()).run({}, ctx)).rejects.toBeInstanceOf(TransientError);
+  });
+});
+
+const calTimed: CalendarEvent = {
+  id: "e1",
+  summary: "פגישת הורים",
+  location: "גן רימון",
+  description: "אסיפה שנתית",
+  start: { dateTime: "2026-06-21T18:30:00+03:00" },
+};
+const calAllDay: CalendarEvent = { id: "e2", summary: "טיול שנתי", start: { date: "2026-06-22" } };
+
+describe("mapCalendarEvent (Google event → board ParsedEvent, #18)", () => {
+  it("maps a timed event to the Jerusalem date+time (no UTC drift, AC3)", () => {
+    expect(mapCalendarEvent(calTimed)).toEqual({
+      kind: "event",
+      title_he: "פגישת הורים",
+      date_iso: "2026-06-21",
+      time: "18:30",
+      location: "גן רימון",
+      assignee: null,
+      recurrence: null,
+      source_text: "פגישת הורים · גן רימון · אסיפה שנתית",
+    });
+  });
+
+  it("maps an all-day event to a dated, time-less board event", () => {
+    expect(mapCalendarEvent(calAllDay)).toMatchObject({
+      title_he: "טיול שנתי",
+      date_iso: "2026-06-22",
+      time: null,
+      location: null,
+    });
+  });
+
+  it("keeps a late-evening timed event on its Jerusalem day", () => {
+    expect(
+      mapCalendarEvent({ ...calTimed, start: { dateTime: "2026-06-21T23:30:00+03:00" } }),
+    ).toMatchObject({
+      date_iso: "2026-06-21",
+      time: "23:30",
+    });
+  });
+
+  it("skips a cancelled instance, an untitled block, and an event with no start", () => {
+    expect(mapCalendarEvent({ ...calAllDay, status: "cancelled" })).toBeNull();
+    expect(mapCalendarEvent({ id: "x", summary: "   ", start: { date: "2026-06-22" } })).toBeNull();
+    expect(mapCalendarEvent({ id: "x", summary: "כותרת", start: {} })).toBeNull();
+  });
+
+  it("sanitizes a summary with a bidi/RTL-override codepoint instead of dropping the event (G15)", () => {
+    const mapped = mapCalendarEvent({ ...calAllDay, summary: "אסיפה‮גזל" });
+    expect(mapped?.title_he).toBe("אסיפהגזל");
+  });
+
+  it("bounds an over-length summary to the schema's 80-char title", () => {
+    const mapped = mapCalendarEvent({ ...calAllDay, summary: "א".repeat(200) });
+    expect(mapped?.title_he).toBe("א".repeat(80));
+  });
+
+  it("returns null when the dateTime is unparseable (backstop, never stored malformed)", () => {
+    expect(mapCalendarEvent({ ...calTimed, start: { dateTime: "not-a-date" } })).toBeNull();
+  });
+});
+
+// A fake Calendar seam: a connected credential (non-expired), a mock read client, a fixed clock.
+function makeCalendar(over: Record<string, unknown> = {}): CalendarToolDeps {
+  return {
+    client: { list: vi.fn(async () => []) },
+    oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
+    credentials: {
+      get: vi.fn(() => ({
+        accessToken: "acc",
+        refreshToken: "ref",
+        expiry: "2099-01-01 00:00:00",
+        scopes: [],
+      })),
+      updateTokens: vi.fn(),
+      delete: vi.fn(),
+    },
+    calendarId: "primary",
+    windowDays: 30,
+    maxEvents: 20,
+    now: () => new Date("2026-06-20T08:00:00Z"),
+    ...over,
+  } as unknown as CalendarToolDeps;
+}
+
+describe("readCalendarTool (#18)", () => {
+  it("is opt-in: no ctx.calendar → { saved: [] }", async () => {
+    const { ctx } = makeCtx();
+    expect((await readCalendarTool().run({}, ctx)).saved).toEqual([]);
+  });
+
+  it("not connected (no credential) → { saved: [] }, ZERO calendar calls", async () => {
+    const calendar = makeCalendar({
+      credentials: { get: vi.fn(() => null), updateTokens: vi.fn(), delete: vi.fn() },
+    });
+    const { ctx } = makeCtx({ calendar });
+    expect((await readCalendarTool().run({}, ctx)).saved).toEqual([]);
+    expect(calendar.client.list).not.toHaveBeenCalled();
+  });
+
+  it("connected: lists with server-owned clamps (calendarId/timeMin/timeMax/maxResults)", async () => {
+    const calendar = makeCalendar();
+    const { ctx } = makeCtx({ calendar });
+    await readCalendarTool().run({}, ctx);
+    // now = 2026-06-20 08:00Z (IDT +3) → Jerusalem day-start 2026-06-19 21:00Z; +30d window.
+    expect(calendar.client.list).toHaveBeenCalledWith("acc", {
+      calendarId: "primary",
+      timeMin: "2026-06-19T21:00:00.000Z",
+      timeMax: "2026-07-20T08:00:00.000Z",
+      maxResults: 20,
+    });
+  });
+
+  it("persists each mapped event under gcal:<id>, seq 0, tagged source_provider google", async () => {
+    const calendar = makeCalendar({ client: { list: vi.fn(async () => [calTimed, calAllDay]) } });
+    const { ctx, saveEvent } = makeCtx({ calendar });
+    const out = await readCalendarTool().run({}, ctx);
+
+    expect(saveEvent.mock.calls[0]![1]).toEqual({
+      fromPhone: "972501234567",
+      waMessageId: "gcal:e1",
+      seq: 0,
+      sourceProvider: "google",
+    });
+    expect(saveEvent.mock.calls[1]![1]!.waMessageId).toBe("gcal:e2");
+    expect(out.saved).toHaveLength(2);
+    expect(out.saved.every((e) => e.source_provider === "google")).toBe(true);
+  });
+
+  it("skips unmappable events but keeps the rest", async () => {
+    const untitled: CalendarEvent = { id: "e3", summary: "   ", start: { date: "2026-06-23" } };
+    const calendar = makeCalendar({ client: { list: vi.fn(async () => [calTimed, untitled]) } });
+    const { ctx, saveEvent } = makeCtx({ calendar });
+    const out = await readCalendarTool().run({}, ctx);
+    expect(out.saved).toHaveLength(1);
+    expect(saveEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates a Calendar TransientError out of run (→ inbound row stays pending)", async () => {
+    const calendar = makeCalendar({
+      client: {
+        list: vi.fn(async () => {
+          throw new TransientError("calendar 429");
+        }),
+      },
+    });
+    const { ctx } = makeCtx({ calendar });
+    await expect(readCalendarTool().run({}, ctx)).rejects.toBeInstanceOf(TransientError);
   });
 });
