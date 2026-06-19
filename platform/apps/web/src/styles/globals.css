@@ -1,0 +1,283 @@
+/* ============================================================================
+ * HomeOS — "Ocean × Rubik" design tokens (globals.css)  ·  v0.2 (2026-06-19)
+ * ----------------------------------------------------------------------------
+ * Tailwind v4 (CSS-first, no tailwind.config.js) + shadcn/ui (copy-in).
+ * Single source of truth: every shadcn component inherits these variables, so
+ * the skin is applied mechanically (the anti-slop defense) — never per-component.
+ *
+ * Source of truth for: docs/design/DESIGN.md.
+ * Destination: copy to platform/apps/web/src/styles/globals.css when the
+ * frontend is scaffolded (React + Vite + TS + Tailwind v4 + shadcn `init --rtl`).
+ *
+ * v0.2 extracts the LOCKED prototype (docs/design/prototype/HomeOS-Prototype.dc.html,
+ * palette default "ocean") as the visual source of truth: a COOL blue-grey paper
+ * (oklch hue ~225 light / ~238 night) with a single OCEAN accent (--primary). This
+ * supersedes the retired v0.1 "Editorial Paper" terracotta/warm-brown/Frank-Ruhl.
+ * Light is :root; the always-on tablet NIGHT variant is [data-theme="night"].
+ * Colors are OKLCH and cool-tinted — never pure #000/#FFF, never zinc/slate.
+ * ========================================================================== */
+
+@import "tailwindcss";
+
+/* Night/dark variant is driven by a data attribute (manual control on the
+ * always-on tablet), not only by prefers-color-scheme. `dark:` utilities map to it. */
+@custom-variant dark (&:where([data-theme="night"], [data-theme="night"] *));
+
+/* ----------------------------------------------------------------------------
+ * 1. SEMANTIC TOKENS — light (cool paper)
+ * -------------------------------------------------------------------------- */
+:root {
+  --background: oklch(0.97 0.012 225);          /* cool paper-0 */
+  --foreground: oklch(0.27 0.032 235);          /* deep cool ink, not black */
+
+  --card: oklch(0.95 0.014 225);                /* raised paper-1 */
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.95 0.014 225);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.55 0.10 228);              /* OCEAN — the ONE accent (buttons, now-line, today, ring) */
+  --primary-foreground: oklch(0.98 0.01 225);   /* paper on ocean */
+
+  --secondary: oklch(0.92 0.018 225);           /* paper-2 — absence of color, not a 2nd hue */
+  --secondary-foreground: oklch(0.34 0.028 235);
+
+  --muted: oklch(0.92 0.018 225);
+  --muted-foreground: oklch(0.55 0.024 232);    /* meta only (>=14px) */
+
+  --accent: oklch(0.92 0.018 225);              /* kept NEUTRAL on purpose (hover/selected = paper, not a hue) */
+  --accent-foreground: var(--secondary-foreground);
+
+  --destructive: oklch(0.55 0.16 25);           /* warm-red — distinct from the cool world */
+  --destructive-foreground: oklch(0.98 0.01 225);
+
+  --border: oklch(0.87 0.018 225);              /* cool low-chroma hairline */
+  --input: oklch(0.82 0.022 225);               /* slightly stronger */
+  --ring: var(--primary);                        /* focus ring IS ocean — single-accent in tokens */
+
+  --radius: 0.75rem;                             /* 12px — prototype "calm" shape (pips/avatars stay 999px) */
+
+  /* charts: derive from the one accent + cool neutral steps (never a rainbow) */
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.62 0.05 210);
+  --chart-3: oklch(0.70 0.035 250);
+  --chart-4: oklch(0.78 0.022 225);
+  --chart-5: oklch(0.46 0.055 200);
+
+  /* phone sidebar/nav (text labels, never emoji icons) */
+  --sidebar: oklch(0.95 0.014 225);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.92 0.018 225);
+  --sidebar-accent-foreground: var(--secondary-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* fonts: Hebrew-first; Rubik is the friendly default everywhere (MVP ships Rubik only) */
+  --font-sans: "Rubik", system-ui, -apple-system, sans-serif;
+  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif; /* AVAILABLE — applied per-component only, never reassigned in :root */
+  --font-display: var(--font-sans);
+
+  /* -- THREE SIGNATURE TOKENS shadcn never ships (the highest-leverage anti-slop move) -- */
+  --hairline: var(--border);                     /* semantic divider color = the editorial structure */
+  --shadow-paper: inset 0 1px 0 oklch(0.995 0.01 225); /* the ONE bespoke shadow, used everywhere (no generic drop shadows) */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity: 0.045;                         /* near-zero by default — human-authorship signal, never noisy */
+
+  /* family-board kind language — signal via a PIP or title-color, NEVER a colored left-border */
+  --event: var(--muted-foreground);
+  --task: var(--muted-foreground);
+  --reminder: var(--primary);
+
+  /* WhatsApp brand green — Connections SVG / "connected" status only, NEVER the --primary accent.
+   * (Assignee colors are a RUNTIME concern — see shared/lib/assignee-color.ts — not tokens.) */
+  --wa-green: #3c8a52;
+
+  /* motion duration knob (keyframes below) */
+  --dur: 440ms;
+}
+
+/* ----------------------------------------------------------------------------
+ * 2. SEMANTIC TOKENS — NIGHT (always-on tablet; cool dark, never warm brown)
+ * -------------------------------------------------------------------------- */
+[data-theme="night"] {
+  --background: oklch(0.21 0.022 238);
+  --foreground: oklch(0.94 0.02 238);
+
+  --card: oklch(0.245 0.024 238);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.27 0.026 238);
+  --popover-foreground: var(--foreground);
+
+  --primary: oklch(0.72 0.11 222);              /* lightened ocean for contrast on dark */
+  --primary-foreground: oklch(0.20 0.022 238);
+
+  --secondary: oklch(0.27 0.026 238);
+  --secondary-foreground: oklch(0.84 0.018 238);
+  --muted: oklch(0.245 0.024 238);
+  --muted-foreground: oklch(0.68 0.028 238);
+
+  --accent: oklch(0.27 0.026 238);
+  --accent-foreground: oklch(0.84 0.018 238);
+
+  --destructive: oklch(0.62 0.16 25);
+  --destructive-foreground: oklch(0.20 0.022 238);
+
+  --border: oklch(0.33 0.026 238);
+  --input: oklch(0.37 0.028 238);
+  --ring: var(--primary);
+
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.66 0.05 210);
+  --chart-3: oklch(0.74 0.035 250);
+  --chart-4: oklch(0.80 0.025 225);
+  --chart-5: oklch(0.56 0.055 200);
+
+  --sidebar: oklch(0.245 0.024 238);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: oklch(0.27 0.026 238);
+  --sidebar-accent-foreground: var(--secondary-foreground);
+  --sidebar-border: var(--border);
+
+  --shadow-paper: none;                          /* dark mode lifts via tone steps, not a light edge */
+  --grain-opacity: 0.03;
+}
+
+/* ----------------------------------------------------------------------------
+ * 3. @theme inline — surface the tokens as Tailwind v4 utilities
+ *    (bg-background, text-foreground, border-border, rounded-md, font-display,
+ *     shadow-paper, text-reminder, etc.). `inline` = utilities read the live vars,
+ *     so theme swaps just work.
+ * -------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-hairline: var(--hairline);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-event: var(--event);
+  --color-task: var(--task);
+  --color-reminder: var(--reminder);
+  --color-wa-green: var(--wa-green);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-display: var(--font-display);
+
+  /* radius scale derived from the one --radius (shadcn convention) */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* the bespoke shadow as a utility: shadow-paper */
+  --shadow-paper: var(--shadow-paper);
+}
+
+/* ----------------------------------------------------------------------------
+ * 4. BASE — RTL-first, cool defaults, ledger-grade numerals
+ * -------------------------------------------------------------------------- */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    /* The app root is RTL Hebrew: <html dir="rtl" lang="he"> (scaffold with `init --rtl`). */
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  /* schedule data (times, dates) reads like a well-set ledger */
+  time,
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* display face for headings/dates/event titles (Rubik by default) */
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 5. SIGNATURE HELPERS
+ * -------------------------------------------------------------------------- */
+@layer components {
+  /* paper grain: a near-invisible tactility layer = human-authorship signal.
+   * Apply to the board root: <div class="paper-grain"> ... </div> */
+  .paper-grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .paper-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: var(--grain);
+    opacity: var(--grain-opacity);
+    mix-blend-mode: multiply;
+  }
+  [data-theme="night"] .paper-grain::before {
+    mix-blend-mode: screen;
+  }
+
+  /* the editorial divider — the primary structural element (used INSTEAD of boxed cards) */
+  .hairline {
+    border-color: var(--hairline);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. MOTION — the prototype's 5 keyframes (kept here, NOT per-component: they
+ *    collide). Restrained, composite-only; reduced-motion is table stakes.
+ * -------------------------------------------------------------------------- */
+@keyframes drawRule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes settleIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes sheetUp  { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop      { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
