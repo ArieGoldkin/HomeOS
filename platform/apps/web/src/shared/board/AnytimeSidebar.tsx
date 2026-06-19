@@ -35,21 +35,31 @@ export function AnytimeSidebar({
 }: AnytimeSidebarProps) {
   return (
     <aside className={cn("flex flex-col", className)}>
-      <SectionHeader className="mb-3">{tasksLabel}</SectionHeader>
-      <div>
-        {tasks.map((t) => (
-          <div key={t.id} className="border-border border-t py-2.5">
-            <EventCard event={t} showTime={false} density="compact" night={night} />
+      {tasks.length > 0 && (
+        <>
+          <SectionHeader className="mb-3">{tasksLabel}</SectionHeader>
+          <div>
+            {tasks.map((t) => (
+              <div key={t.id} className="border-border border-t py-2.5">
+                <EventCard event={t} showTime={false} density="compact" night={night} />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
-      <SectionHeader className="mt-6 mb-2">{tomorrowLabel}</SectionHeader>
-      <div>
-        {tomorrow.map((p) => (
-          <PeekRow key={`${p.time ?? ""}-${p.title}`} time={p.time ?? null} title={p.title} />
-        ))}
-      </div>
+      {tomorrow.length > 0 && (
+        <>
+          <SectionHeader className={cn("mb-2", tasks.length > 0 && "mt-6")}>
+            {tomorrowLabel}
+          </SectionHeader>
+          <div>
+            {tomorrow.map((p) => (
+              <PeekRow key={`${p.time ?? ""}-${p.title}`} time={p.time ?? null} title={p.title} />
+            ))}
+          </div>
+        </>
+      )}
     </aside>
   );
 }

@@ -22,3 +22,30 @@ export function startOfWeekSundayIso(iso: string): string {
   d.setUTCDate(d.getUTCDate() - d.getUTCDay());
   return d.toISOString().slice(0, 10);
 }
+
+/** Wall-clock `HH:MM` (24h) in Asia/Jerusalem — the tablet clock + the NowLine marker time. */
+export function jerusalemHhmm(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(now);
+}
+
+/** The 0–23 hour in Asia/Jerusalem (drives the time-of-day greeting). */
+export function jerusalemHour(now: Date = new Date()): number {
+  const hh = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(now);
+  return Number.parseInt(hh, 10);
+}
+
+/** `YYYY-MM-DD` shifted by `days` (UTC calendar math; crosses month/year). */
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}

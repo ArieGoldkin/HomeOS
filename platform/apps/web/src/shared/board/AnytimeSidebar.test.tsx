@@ -18,10 +18,24 @@ const task = (over: Partial<SavedEvent>): SavedEvent => ({
 });
 
 describe("AnytimeSidebar", () => {
-  it("renders default Hebrew section labels", () => {
-    render(<AnytimeSidebar tasks={[]} tomorrow={[]} />);
+  it("renders both default Hebrew section labels when both have content", () => {
+    render(
+      <AnytimeSidebar tasks={[task({ id: 1 })]} tomorrow={[{ time: "08:00", title: "חוג" }]} />,
+    );
     expect(screen.getByText("משימות להיום")).toBeInTheDocument();
     expect(screen.getByText("מחר")).toBeInTheDocument();
+  });
+
+  it("omits the tasks section when there are no tasks", () => {
+    render(<AnytimeSidebar tasks={[]} tomorrow={[{ time: "08:00", title: "חוג" }]} />);
+    expect(screen.queryByText("משימות להיום")).toBeNull();
+    expect(screen.getByText("מחר")).toBeInTheDocument();
+  });
+
+  it("omits the tomorrow section when there is no peek", () => {
+    render(<AnytimeSidebar tasks={[task({ id: 1, title_he: "משימה" })]} tomorrow={[]} />);
+    expect(screen.getByText("משימות להיום")).toBeInTheDocument();
+    expect(screen.queryByText("מחר")).toBeNull();
   });
 
   it("renders anytime tasks as task-variant EventCards (checkbox)", () => {
@@ -39,7 +53,14 @@ describe("AnytimeSidebar", () => {
   });
 
   it("accepts custom section labels", () => {
-    render(<AnytimeSidebar tasks={[]} tomorrow={[]} tasksLabel="Today" tomorrowLabel="Tomorrow" />);
+    render(
+      <AnytimeSidebar
+        tasks={[task({ id: 1 })]}
+        tomorrow={[{ time: "08:00", title: "x" }]}
+        tasksLabel="Today"
+        tomorrowLabel="Tomorrow"
+      />,
+    );
     expect(screen.getByText("Today")).toBeInTheDocument();
     expect(screen.getByText("Tomorrow")).toBeInTheDocument();
   });

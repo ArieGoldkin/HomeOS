@@ -1,10 +1,10 @@
+import { TabletBoard } from "@app/tablet";
 import { useEffect } from "react";
 import { TokensView } from "./dev/TokensView";
 
 /**
- * MVP shell. No router yet (TanStack Router lands at #96). The dev-only token
- * gallery renders at `#/tokens`; everything else is a minimal placeholder until
- * the tablet board (#93–#95) lands.
+ * MVP entry. No router yet (TanStack Router lands at #96): the default surface is the tablet board
+ * (#95), and the dev-only token gallery renders at `#/tokens`. QueryClientProvider lives in main.tsx.
  */
 export function App() {
   useEffect(() => {
@@ -19,15 +19,5 @@ export function App() {
   const showTokens = typeof window !== "undefined" && window.location.hash === "#/tokens";
   if (showTokens) return <TokensView />;
 
-  return (
-    <main className="paper-grain min-h-dvh bg-background text-foreground">
-      <div className="mx-auto max-w-md p-6">
-        <h1 className="font-display text-2xl font-bold">HomeOS</h1>
-        <p className="mt-2 text-muted-foreground">לוח המשפחה — בקרוב.</p>
-        <a className="mt-4 inline-block text-primary underline" href="#/tokens">
-          ← /tokens
-        </a>
-      </div>
-    </main>
-  );
+  return <TabletBoard />;
 }
