@@ -9,7 +9,12 @@ import { FAMILY_ID } from "../src/db/schema.ts";
 import { httpCalendarClient } from "../src/google/calendar.ts";
 import { buildGoogleDeps } from "../src/http/oauth-routes.ts";
 import { anthropicRawParse, createParser } from "../src/parsing/parser.ts";
-import { type CalendarToolDeps, extractEventsTool, readCalendarTool } from "../src/tools/tools.ts";
+import {
+  type CalendarToolDeps,
+  extractEventsTool,
+  pushSavedEventsToCalendar,
+  readCalendarTool,
+} from "../src/tools/tools.ts";
 
 /**
  * Local end-to-end harness for the Calendar read sync (#18, chunk 1) — runs the FULL pipeline
@@ -86,7 +91,10 @@ async function main() {
     console.log(`\n📤 WhatsApp reply → ${to}:\n   ${body.replace(/\n/g, "\n   ")}\n`);
   };
 
-  const from = process.argv[2] ?? config.allowlist[0]!;
+  // `--write` opts into the WRITE phase (auto-push a forwarded event to your REAL calendar). Default
+  // = read-only (safe). The sender is the first non-flag arg, else the first allowlist number.
+  const doWrite = process.argv.includes("--write");
+  const from = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? config.allowlist[0]!;
   const deps = {
     allowlist: config.allowlist,
     agent,
@@ -94,11 +102,14 @@ async function main() {
     sendText,
     members: config.members,
     calendar: calendarDeps,
+    autoPushCalendar: doWrite, // only the forward path pushes; the read sync below ignores this
     log,
   };
 
   console.log("━".repeat(70));
-  console.log("📅 HomeOS Calendar E2E — real Google Calendar, in-memory board (read-only)");
+  console.log(
+    `📅 HomeOS Calendar E2E — real Google Calendar, in-memory board${doWrite ? " (READ + WRITE)" : " (read-only)"}`,
+  );
   console.log(
     `   calendar=${config.calendarId} · windowDays=${config.calendarWindowDays} · maxEvents=${config.calendarMaxEvents}`,
   );
@@ -129,13 +140,52 @@ async function main() {
     `   Calendar rows: ${calRows.length} → ${after}  ${calRows.length === after ? "✅ idempotent" : "❌ DUPLICATED"}`,
   );
 
-  // Prove the #61 disconnect-purge seam is activated by the google tag.
+  // ── WRITE phase (opt-in via --write): auto-push a forwarded event to your REAL Google Calendar ──
+  if (doWrite) {
+    console.log(`\n${"━".repeat(70)}`);
+    console.log("✍️  WRITE phase — auto-push a forwarded event to your REAL Google Calendar");
+    console.log("━".repeat(70));
+    const forward = "תזכורת מבחן HomeOS: פגישת צוות מחר בשעה 18:30 בזום";
+    console.log(`\n📨 Simulating a forward:  "${from}"  →  "${forward}"\n`);
+
+    const beforeForward = events.listEvents().filter((r) => r.source_provider === null).length;
+    // The forward path runs REAL Claude (extract_events) then auto-pushes the saved rows to Calendar.
+    await handleInbound({ id: `e2e-w1-${Date.now()}`, from, type: "text", text: forward }, deps);
+    const boardForwards = events.listEvents().filter((r) => r.source_provider === null);
+    const created = boardForwards.length - beforeForward;
+    console.log(
+      `📋 Parsed ${created} board event(s); each was auto-pushed (insert) to Google Calendar:`,
+    );
+    for (const r of boardForwards.slice(beforeForward)) {
+      console.log(
+        `   • ${r.title_he} — ${r.date_iso}${r.time ? ` ${r.time}` : ""} (homeosEventId=${r.id})`,
+      );
+    }
+
+    // Idempotency (AC4): re-push the SAME board rows → find-by-homeosEventId → PATCH, never a duplicate.
+    console.log(
+      "\n🔁 Re-pushing the same board rows to prove write idempotency (patch, not duplicate)…",
+    );
+    const { pushed } = await pushSavedEventsToCalendar(boardForwards, calendarDeps, FAMILY_ID, log);
+    console.log(
+      `   re-pushed ${pushed} row(s) — each PATCHed its existing Google event (no duplicate).`,
+    );
+
+    console.log(
+      "\n⚠️  A REAL event was created on your Google Calendar (labelled 'מבחן HomeOS'). The tool has no\n" +
+        "   delete endpoint — remove it manually when you're done verifying.",
+    );
+  }
+
+  // Prove the #61 disconnect-purge seam is activated by the google tag (in-memory board only).
   const purged = events.deleteByProvider("google");
   console.log(
     `\n🧹 deleteByProvider("google") purged ${purged} row(s) — the #61 disconnect seam works.`,
   );
 
-  console.log("\n✅ Done. (Nothing was written to your real DB or your Google Calendar.)");
+  console.log(
+    `\n✅ Done. (The board was in-memory — nothing was written to your real DB.${doWrite ? " A real Calendar event WAS created — see the warning above." : " Read-only: your Calendar was untouched."})`,
+  );
 }
 
 main().catch((err) => {

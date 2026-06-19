@@ -40,6 +40,8 @@ function makeDeps(
     calendar?: boolean;
     /** #18: what the agent's read_calendar run returns on the sync path (default [sampleSaved]). */
     calSyncSaved?: SavedEvent[] | null;
+    /** #18 chunk 2: enable auto-push of forwarded events to Google Calendar. */
+    autoPush?: boolean;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -104,7 +106,12 @@ function makeDeps(
     opts.calendar === undefined
       ? undefined
       : ({
-          client: { list: vi.fn() },
+          client: {
+            list: vi.fn(),
+            findEventIdByPrivateProp: vi.fn(async () => null),
+            insertEvent: vi.fn(async () => ({ id: "gcal-new" })),
+            patchEvent: vi.fn(async () => ({ id: "gcal-p" })),
+          },
           oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
           credentials: {
             get: vi.fn(() =>
@@ -130,6 +137,7 @@ function makeDeps(
     members: opts.members,
     google,
     calendar,
+    autoPushCalendar: opts.autoPush,
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
     ...(opts.maxPerSenderPerDay !== undefined
       ? {
@@ -360,6 +368,37 @@ describe("handleInbound (M2)", () => {
       const { agent, deps } = makeDeps({ calendar: true });
       await handleInbound(textMsg, deps);
       expect(agent.run.mock.calls[0]![2]).toBeUndefined(); // default tool, not forced read_calendar
+    });
+  });
+
+  describe("Calendar auto-push on a forward (#18 chunk 2)", () => {
+    it("pushes the new board events to Google Calendar when connected + enabled", async () => {
+      const { sendText, deps } = makeDeps({ calendar: true, autoPush: true });
+      await handleInbound(textMsg, deps);
+      expect(sendText.mock.calls[0]![1]).toContain("הוספתי"); // confirm still sent first
+      expect(deps.calendar!.client.insertEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT push when auto-push is disabled (read-only calendar)", async () => {
+      const { deps } = makeDeps({ calendar: true, autoPush: false });
+      await handleInbound(textMsg, deps);
+      expect(deps.calendar!.client.insertEvent).not.toHaveBeenCalled();
+    });
+
+    it("does NOT push for an app-only family (no calendar deps), still confirms", async () => {
+      const { sendText, deps } = makeDeps({ autoPush: true }); // no calendar wired
+      await handleInbound(textMsg, deps);
+      expect(deps.calendar).toBeUndefined();
+      expect(sendText.mock.calls[0]![1]).toContain("הוספתי");
+    });
+
+    it("a push failure never breaks the confirm (best-effort, after the confirm)", async () => {
+      const { sendText, deps } = makeDeps({ calendar: true, autoPush: true });
+      vi.mocked(deps.calendar!.client.insertEvent).mockRejectedValueOnce(
+        new TransientError("blip"),
+      );
+      await expect(handleInbound(textMsg, deps)).resolves.toBeUndefined();
+      expect(sendText.mock.calls[0]![1]).toContain("הוספתי");
     });
   });
 

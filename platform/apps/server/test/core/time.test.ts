@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addDaysIso,
+  addWallClockHours,
   jerusalemDayStartIso,
   jerusalemDayStartSqlite,
   jerusalemWallClock,
@@ -65,6 +66,30 @@ describe("jerusalemWallClock (timed calendar event → board date/time, no UTC d
     expect(jerusalemWallClock(new Date("2026-01-15T22:30:00Z"))).toEqual({
       dateIso: "2026-01-16",
       time: "00:30",
+    });
+  });
+});
+
+describe("addWallClockHours (default event-end on a Calendar write, #18 chunk 2)", () => {
+  it("adds an hour within the same day", () => {
+    expect(addWallClockHours("2026-06-21", "18:30", 1)).toEqual({
+      dateIso: "2026-06-21",
+      time: "19:30",
+    });
+  });
+  it("rolls the date over a late-evening start", () => {
+    expect(addWallClockHours("2026-06-21", "23:30", 1)).toEqual({
+      dateIso: "2026-06-22",
+      time: "00:30",
+    });
+  });
+  it("computes the all-day exclusive end (next day) via +24h from midnight", () => {
+    expect(addWallClockHours("2026-06-22", "00:00", 24).dateIso).toBe("2026-06-23");
+  });
+  it("rolls a month boundary", () => {
+    expect(addWallClockHours("2026-06-30", "23:00", 1)).toEqual({
+      dateIso: "2026-07-01",
+      time: "00:00",
     });
   });
 });

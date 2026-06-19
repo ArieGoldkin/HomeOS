@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
 import { TransientError } from "../../src/core/errors.ts";
 import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
-import type { CalendarEvent } from "../../src/google/calendar.ts";
+import type { CalendarEvent, CalendarWriteEvent } from "../../src/google/calendar.ts";
 import {
   buildGmailQuery,
   type CalendarToolDeps,
   extractEventsTool,
   type GmailToolDeps,
   mapCalendarEvent,
+  mapToCalendarWrite,
+  pushSavedEventsToCalendar,
   readCalendarTool,
   readGmailTool,
   type ToolContext,
@@ -322,7 +324,12 @@ describe("mapCalendarEvent (Google event → board ParsedEvent, #18)", () => {
 // A fake Calendar seam: a connected credential (non-expired), a mock read client, a fixed clock.
 function makeCalendar(over: Record<string, unknown> = {}): CalendarToolDeps {
   return {
-    client: { list: vi.fn(async () => []) },
+    client: {
+      list: vi.fn(async () => []),
+      findEventIdByPrivateProp: vi.fn(async () => null),
+      insertEvent: vi.fn(async () => ({ id: "gcal-new" })),
+      patchEvent: vi.fn(async () => ({ id: "gcal-patched" })),
+    },
     oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
     credentials: {
       get: vi.fn(() => ({
@@ -405,5 +412,116 @@ describe("readCalendarTool (#18)", () => {
     });
     const { ctx } = makeCtx({ calendar });
     await expect(readCalendarTool().run({}, ctx)).rejects.toBeInstanceOf(TransientError);
+  });
+});
+
+const boardSaved: SavedEvent = { id: 7, source_provider: null, ...sampleEvent };
+const googleSaved: SavedEvent = { id: 8, source_provider: "google", ...sampleEvent };
+
+describe("mapToCalendarWrite (board ParsedEvent → Google write body, #18 chunk 2)", () => {
+  it("maps a timed event to dateTime+timeZone start/end (+1h) with the homeosEventId", () => {
+    expect(mapToCalendarWrite(sampleEvent, "7")).toEqual({
+      summary: "אסיפת הורים",
+      start: { dateTime: "2026-06-21T18:30:00", timeZone: "Asia/Jerusalem" },
+      end: { dateTime: "2026-06-21T19:30:00", timeZone: "Asia/Jerusalem" },
+      location: "גן רימון",
+      description: "אסיפת הורים מחר ב-18:30",
+      extendedProperties: { private: { homeosEventId: "7" } },
+    });
+  });
+
+  it("maps an all-day event to date start + exclusive next-day end, no timeZone", () => {
+    const allDay: ParsedEvent = { ...sampleEvent, time: null, location: null };
+    expect(mapToCalendarWrite(allDay, "9")).toMatchObject({
+      start: { date: "2026-06-21" },
+      end: { date: "2026-06-22" },
+    });
+    expect(mapToCalendarWrite(allDay, "9").location).toBeUndefined();
+  });
+
+  it("rolls the end past midnight for a late-evening start", () => {
+    const late: ParsedEvent = { ...sampleEvent, time: "23:30" };
+    expect(mapToCalendarWrite(late, "1").end).toEqual({
+      dateTime: "2026-06-22T00:30:00",
+      timeZone: "Asia/Jerusalem",
+    });
+  });
+
+  it("maps a weekly recurrence to an RRULE with the right BYDAY", () => {
+    const weekly: ParsedEvent = { ...sampleEvent, recurrence: { freq: "weekly", weekday: 2 } }; // Tue
+    expect(mapToCalendarWrite(weekly, "1").recurrence).toEqual(["RRULE:FREQ=WEEKLY;BYDAY=TU"]);
+  });
+});
+
+describe("pushSavedEventsToCalendar (#18 chunk 2 auto-push)", () => {
+  it("skips when there are no board-originated rows (provider rows are never written back, AC5)", async () => {
+    const calendar = makeCalendar();
+    const out = await pushSavedEventsToCalendar([googleSaved], calendar, "default");
+    expect(out.pushed).toBe(0);
+    expect(calendar.client.findEventIdByPrivateProp).not.toHaveBeenCalled();
+  });
+
+  it("not connected → pushed 0, no insert/patch (AC6)", async () => {
+    const calendar = makeCalendar({
+      credentials: { get: vi.fn(() => null), updateTokens: vi.fn(), delete: vi.fn() },
+    });
+    const out = await pushSavedEventsToCalendar([boardSaved], calendar, "default");
+    expect(out.pushed).toBe(0);
+    expect(calendar.client.insertEvent).not.toHaveBeenCalled();
+  });
+
+  it("inserts a new event when the homeosEventId lookup misses (idempotency, AC4)", async () => {
+    const calendar = makeCalendar();
+    const out = await pushSavedEventsToCalendar([boardSaved], calendar, "default");
+    expect(calendar.client.findEventIdByPrivateProp).toHaveBeenCalledWith(
+      "acc",
+      "primary",
+      "homeosEventId",
+      "7",
+    );
+    expect(calendar.client.insertEvent).toHaveBeenCalledWith(
+      "acc",
+      "primary",
+      mapToCalendarWrite(boardSaved, "7"),
+    );
+    expect(calendar.client.patchEvent).not.toHaveBeenCalled();
+    expect(out.pushed).toBe(1);
+  });
+
+  it("patches the existing event when the homeosEventId is found (board-wins, no duplicate, AC5)", async () => {
+    const calendar = makeCalendar({
+      client: {
+        list: vi.fn(),
+        findEventIdByPrivateProp: vi.fn(async () => "gcal-existing"),
+        insertEvent: vi.fn(),
+        patchEvent: vi.fn(async () => ({ id: "gcal-existing" })),
+      },
+    });
+    const out = await pushSavedEventsToCalendar([boardSaved], calendar, "default");
+    expect(calendar.client.patchEvent).toHaveBeenCalledWith(
+      "acc",
+      "primary",
+      "gcal-existing",
+      mapToCalendarWrite(boardSaved, "7"),
+    );
+    expect(calendar.client.insertEvent).not.toHaveBeenCalled();
+    expect(out.pushed).toBe(1);
+  });
+
+  it("is best-effort: a push error is logged, the rest continue, and it NEVER throws", async () => {
+    const second: SavedEvent = { ...boardSaved, id: 9, title_he: "טיול" };
+    const calendar = makeCalendar({
+      client: {
+        list: vi.fn(),
+        findEventIdByPrivateProp: vi.fn(async () => null),
+        insertEvent: vi.fn(async (_t: string, _c: string, body: CalendarWriteEvent) => {
+          if (body.summary === "אסיפת הורים") throw new TransientError("calendar 429");
+          return { id: "ok" };
+        }),
+        patchEvent: vi.fn(),
+      },
+    });
+    const out = await pushSavedEventsToCalendar([boardSaved, second], calendar, "default");
+    expect(out.pushed).toBe(1); // the second event still pushed; the first failed without throwing
   });
 });

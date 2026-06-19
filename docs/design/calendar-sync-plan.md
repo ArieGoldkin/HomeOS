@@ -22,7 +22,7 @@ the first *write*-to-provider path, grafted onto existing seams)
 | **Write id mapping** (chunk 2, AC4) | Google `extendedProperties.private.homeosEventId` | **Zero local schema change** (the #17/#71 principle); Google becomes the dedupe authority — re-push finds + patches the existing event by our id. |
 | **Conflict rule** (chunk 2, AC5) | Provenance source-of-truth, **no bidirectional merge** | *Board-originated* events: board wins (we PATCH the calendar copy). *Calendar-originated* events: read-only mirror, never written back. Simple to document + enforce. |
 
-This doc specifies **chunk 1 (read)** in full and sketches **chunk 2 (write)** in §9.
+Both chunks are now **built**: **chunk 1 (read)** in §1–§8, **chunk 2 (write/auto-push)** in §9.
 
 ---
 
@@ -308,25 +308,29 @@ foundation-first.
 
 ---
 
-## 9. Chunk 2 sketch — write (board → Google Calendar), for the next PR
+## 9. Chunk 2 — write (board → Google Calendar) · **BUILT**
 
-> Auto-push: when `extract_events` persists a forwarded event, also create it on the family's Google
-> Calendar. This is the first *write* path to a provider.
+> Auto-push: after a forwarded event is saved + confirmed, the **handler** pushes it to the family's
+> Google Calendar. The first *write* path to a provider. Implemented as a handler post-step (not inside a
+> tool / the agent loop), so the model can never trigger a write and a push failure can't fail the confirm.
 
-- **New scope already present** (`calendar` is read/write). Client gains `insert` + `patch` (+ a `list` by
-  `privateExtendedProperty` to find existing mappings) — still lean `node:fetch`.
-- **Idempotent write (AC4):** on insert, set `extendedProperties.private.homeosEventId = <board id>`; on
-  re-push, `list?privateExtendedProperty=homeosEventId=<id>` → if found, `patch` instead of `insert`. Google
-  is the dedupe authority ⇒ **no local schema change**.
-- **Mapping (AC1):** `ParsedEvent` → Google event. All-day when `time` is null (`start.date`); timed
-  otherwise (`start.dateTime` + `timeZone: "Asia/Jerusalem"`, AC3, **no UTC drift on the round-trip**).
-- **Conflict (AC5):** board-originated events ⇒ board wins (PATCH the calendar copy on change);
-  calendar-originated rows (`gcal:`-sourced, from chunk 1) are **never** written back — a read-only mirror.
-  Documented rule, mechanically enforced by checking the row's origin before any write.
-- **Trigger (locked):** auto on every forwarded `extract_events` save. App-only families ⇒ `ctx.calendar`
-  absent ⇒ no write (AC6). A write failure must **not** fail the WhatsApp confirm — the board save is the
-  source of truth; a transient push is retried, a permanent one logged (the row already exists locally).
-- **Cost:** one write call per new/changed board event; bounded by the existing G2/G16 inbound limits.
+- **No scope/schema change** (`calendar` is already read/write; idempotency keyed in Google, not locally).
+  `google/calendar.ts` gained `insertEvent` / `patchEvent` / `findEventIdByPrivateProp` (still lean `node:fetch`).
+- **Idempotent write (AC4):** every write carries `extendedProperties.private.homeosEventId = <board id>`;
+  `pushSavedEventsToCalendar` does `findEventIdByPrivateProp` → `patch` if found, else `insert`. Google is
+  the dedupe authority ⇒ a re-push (e.g. boot-replay, same board id) patches, never duplicates.
+- **Mapping (AC1/AC3):** `mapToCalendarWrite` — all-day when `time` is null (`start.date` + exclusive
+  next-day `end.date`); timed otherwise (`start/end.dateTime` + `timeZone: "Asia/Jerusalem"`, +1h default
+  end, **no UTC drift**). A weekly board recurrence → `RRULE:FREQ=WEEKLY;BYDAY=…`.
+- **Conflict (AC5):** the push **only writes `source_provider === null` (board-originated) rows** —
+  `gcal:`/`gmail:`-derived rows are never written back (no read→write loop). Board-wins on a re-push (patch).
+- **Trigger (locked):** auto, in the handler's forward branch, after the confirm. App-only / not-connected
+  ⇒ zero writes (AC6). **Best-effort:** `pushSavedEventsToCalendar` swallows + logs every error and never
+  throws — the board save + confirm already succeeded (board is source of truth). Kill switch:
+  `CALENDAR_AUTO_PUSH=false` keeps Calendar read-only.
+- **Known limitation:** a failed push is logged, not retried (no push queue). The event lands on the board
+  but may miss the calendar until a future re-push; acceptable for the dogfooding phase.
+- **Cost:** ≤ one find + one write per forwarded event; bounded by the existing G2/G16 inbound limits.
 
 ---
 

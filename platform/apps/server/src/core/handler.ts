@@ -3,7 +3,12 @@ import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
-import type { CalendarToolDeps, GmailToolDeps, ToolContext } from "../tools/tools.ts";
+import {
+  type CalendarToolDeps,
+  type GmailToolDeps,
+  pushSavedEventsToCalendar,
+  type ToolContext,
+} from "../tools/tools.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
@@ -28,6 +33,8 @@ export interface HandlerDeps {
   google?: GmailToolDeps;
   /** Calendar tool deps (#18) — present only when the GOOGLE_* bundle is configured. Drives the `סנכרן יומן` sync. */
   calendar?: CalendarToolDeps;
+  /** #18 chunk 2: auto-push forwarded board events to Google Calendar. Off (or no `calendar`) ⇒ read-only. */
+  autoPushCalendar?: boolean;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -279,6 +286,14 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   // thin — just send one Hebrew confirm covering all of them.
   log("saved events", { id: msg.id, count: saved.length });
   await deps.sendText(msg.from, formatConfirm(saved));
+
+  // #18 chunk 2: auto-push the new board events to Google Calendar — best-effort, AFTER the confirm.
+  // The board is the source of truth; a push failure is logged, never fails the confirm or replays the
+  // row. App-only / disabled ⇒ no-op; only board-originated rows are written (the push filters them).
+  if (deps.autoPushCalendar && deps.calendar) {
+    const { pushed } = await pushSavedEventsToCalendar(saved, deps.calendar, FAMILY_ID, log);
+    if (pushed > 0) log("auto-pushed to calendar", { id: msg.id, pushed });
+  }
 }
 
 /**

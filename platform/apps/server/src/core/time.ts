@@ -87,3 +87,25 @@ export function jerusalemWallClock(instant: Date): { dateIso: string; time: stri
     time: `${hh}:${get("minute")}`,
   };
 }
+
+/**
+ * Add `hours` to a FLOATING Jerusalem wall-clock (`date_iso`, `HH:MM`), rolling the date over — the
+ * default event-end on a Calendar write (#18 chunk 2): a timed event ends 1h after it starts; an
+ * all-day event's exclusive end is the next day (`addWallClockHours(date, "00:00", 24).dateIso`).
+ * Computed as floating time (the write carries `timeZone: "Asia/Jerusalem"`, so Google re-anchors it);
+ * a DST transition landing exactly inside the added hour is not modelled (negligible for a 1h end).
+ */
+export function addWallClockHours(
+  dateIso: string,
+  time: string,
+  hours: number,
+): { dateIso: string; time: string } {
+  const [y = 0, m = 1, d = 1] = dateIso.split("-").map(Number);
+  const [hh = 0, mm = 0] = time.split(":").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, hh + hours, mm));
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return {
+    dateIso: `${dt.getUTCFullYear()}-${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}`,
+    time: `${p(dt.getUTCHours())}:${p(dt.getUTCMinutes())}`,
+  };
+}
