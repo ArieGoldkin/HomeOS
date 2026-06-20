@@ -1,7 +1,7 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type CallModel, createAgent } from "../../src/core/agent.ts";
-import { processInbound } from "../../src/core/handler.ts";
+import { processInbound } from "../../src/core/handler/index.ts";
 import { createEventStore } from "../../src/db/event-store.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import { createServer } from "../../src/http/server.ts";

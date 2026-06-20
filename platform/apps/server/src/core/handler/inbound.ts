@@ -1,0 +1,274 @@
+import { FAMILY_ID } from "../../db/schema.ts";
+import type { InboundMessage } from "../../http/webhook.ts";
+import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
+import type { AgentResult } from "../agent.ts";
+import { isAllowed } from "../allowlist.ts";
+import { TransientError } from "../errors.ts";
+import { jerusalemDayStartSqlite, sqliteUtc } from "../time.ts";
+import { routeCancelByRef } from "./cancel.ts";
+import { openClarifyThread } from "./clarify.ts";
+import { applyCorrection } from "./correction.ts";
+import { routeEditByRef } from "./edit.ts";
+import { handleResume } from "./resume.ts";
+import {
+  ABORT_THREAD_HE,
+  CAL_NOT_CONNECTED_HE,
+  CANCEL_REF_RE,
+  CANCEL_TRIGGER,
+  CORRECTION_RE,
+  cancelReply,
+  clarifyOf,
+  EDIT_REF_RE,
+  formatConfirm,
+  type HandlerDeps,
+  hasScheduleSignal,
+  jerusalemToday,
+  MAX_INPUT,
+  NOT_CONNECTED_HE,
+  type ProcessDeps,
+  RATE_LIMIT_HE,
+  REFUSAL_HE,
+  REPHRASE_HE,
+  SYNC_CAL_INTENT,
+  SYNC_CAL_NONE_HE,
+  SYNC_CAL_TRIGGER,
+  SYNC_INTENT,
+  SYNC_MAIL_TRIGGER,
+  SYNC_NONE_HE,
+  savedOf,
+  TEXT_ONLY_HE,
+  TRANSIENT_HE,
+} from "./shared.ts";
+import { runSyncIntent } from "./sync.ts";
+
+/**
+ * M2 inbound handling: allowlist gate → parse (Claude) → persist → Hebrew confirm.
+ * Voice/media is deferred to M2b, so non-text messages get a friendly "text only" reply.
+ * Dedupe + durability now live in the inbound queue (the message is persisted before the
+ * ack and de-duped on wa_message_id); `processInbound` wraps this and settles the row.
+ */
+export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Promise<void> {
+  const log = deps.log ?? (() => {});
+
+  // 🔒 Allowlist gate — only family numbers are processed.
+  if (!isAllowed(msg.from, deps.allowlist)) {
+    log("rejected non-allowlisted sender", { from: msg.from });
+    await deps.sendText(msg.from, REFUSAL_HE);
+    return;
+  }
+
+  // G16: per-sender daily ceiling — the allowlist bounds *who* and the input cap (G2) bounds
+  // message *size*; this bounds *rate*, the last unbounded cost axis vs ≤$100/mo. Checked here
+  // (after the allowlist so non-family senders are never counted, before any model call). The
+  // message is already enqueued (persist-before-ack), so the count includes it; resets at
+  // Jerusalem midnight. Off unless both the ceiling and the inbound counter are wired.
+  if (deps.maxPerSenderPerDay !== undefined && deps.inbound) {
+    const since = jerusalemDayStartSqlite((deps.now ?? (() => new Date()))());
+    const count = deps.inbound.countFromSenderSince(msg.from, since);
+    if (count > deps.maxPerSenderPerDay) {
+      log("per-sender daily ceiling hit", { from: msg.from, count, max: deps.maxPerSenderPerDay });
+      await deps.sendText(msg.from, RATE_LIMIT_HE);
+      return;
+    }
+  }
+
+  // M2a is text-only; voice/images land in M2b.
+  const text = msg.text?.trim();
+  if (!text) {
+    await deps.sendText(msg.from, TEXT_ONLY_HE);
+    return;
+  }
+
+  const today = jerusalemToday((deps.now ?? (() => new Date()))());
+
+  // G2: input-length cap — short-circuit BEFORE any model call, including the clarify-RESUME re-parse
+  // below (an answer to "מתי זה?" is model-bound too). Placed ahead of the resume + exact-match triggers
+  // (ביטול/syncs are short, so capping them is harmless) so no path can send Claude an oversized payload.
+  if (text.length > MAX_INPUT) {
+    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+
+  // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): it sits AFTER the allowlist + G16
+  // rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open thread,
+  // their next message is an ANSWER → route it to the deterministic resume, never re-parse it as a
+  // fresh forward (G17). Sweep stale rows first (G24 boot+per-inbound) so an expired question never
+  // resumes. Inert unless `conversations` is wired, so the branch is fully additive.
+  if (deps.conversations) {
+    const nowSqlite = sqliteUtc((deps.now ?? (() => new Date()))());
+    deps.conversations.expireStale(nowSqlite);
+    const pending = deps.conversations.getPending(msg.from, nowSqlite);
+    if (pending) {
+      // Bare "ביטול" is the universal escape hatch: it ABORTS the open thread (resolve, NO undo) — the
+      // open op takes precedence over the last-message undo (§2).
+      if (text === CANCEL_TRIGGER) {
+        deps.conversations.resolve(pending.id);
+        log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
+        await deps.sendText(msg.from, ABORT_THREAD_HE);
+        return;
+      }
+      // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
+      if (CORRECTION_RE.test(text)) {
+        await applyCorrection(deps, msg, pending, today);
+        return;
+      }
+      // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
+      // (e.g. "לא נשכח את יום ההולדת ביום שישי") is a NEW forward, not a thread answer — abort the thread
+      // and let it fall through to agent.run. A bare "לא יודע" (no schedule signal) is just a non-answer
+      // → handleResume (→ rephrase / re-parse). Any other message is the thread's answer → handleResume.
+      if (/^לא[\s,]/u.test(text) && hasScheduleSignal(text)) {
+        deps.conversations.resolve(pending.id);
+        log("non-correction 'לא' with a schedule signal → new forward", { from: msg.from });
+      } else {
+        await handleResume(deps, msg, pending);
+        return;
+      }
+    }
+  }
+
+  // Undo: a bare "ביטול" removes the sender's last message's events — caught before parse so it's
+  // never sent to Claude. The confirm (with the resolved Hebrew date) is what makes a misparse
+  // catchable; this is the recovery.
+  if (text === CANCEL_TRIGGER) {
+    const removed = deps.events.deleteLastFromSender(msg.from);
+    log("cancel", { from: msg.from, removed });
+    await deps.sendText(msg.from, cancelReply(removed));
+    return;
+  }
+
+  // Gmail sync (#72): a bare "סנכרן מייל" pulls the family's recent matching emails onto the board.
+  // Deterministic route (sibling to ביטול) → an agent run that forces `read_gmail` on turn 0 (keeps
+  // G4). Opt-in: with no Google bundle or no stored credential we reply "connect first" and make ZERO
+  // Gmail/parse/model calls. The command already counted against the G16 ceiling above.
+  if (text === SYNC_MAIL_TRIGGER) {
+    if (!deps.google?.credentials.get(FAMILY_ID)) {
+      log("sync mail — not connected", { from: msg.from });
+      await deps.sendText(msg.from, NOT_CONNECTED_HE);
+      return;
+    }
+    await runSyncIntent(deps, msg, SYNC_INTENT, "read_gmail", SYNC_NONE_HE, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+      google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
+    });
+    return;
+  }
+
+  // Calendar sync (#18): a bare "סנכרן יומן" pulls the family's upcoming Google Calendar events onto the
+  // board. Same shape as the mail sync — deterministic route (sibling to ביטול), forces `read_calendar`
+  // on turn 0 (keeps G4), opt-in: no Google bundle / no stored credential ⇒ "connect first", ZERO calls.
+  if (text === SYNC_CAL_TRIGGER) {
+    if (!deps.calendar?.credentials.get(FAMILY_ID)) {
+      log("sync calendar — not connected", { from: msg.from });
+      await deps.sendText(msg.from, CAL_NOT_CONNECTED_HE);
+      return;
+    }
+    await runSyncIntent(deps, msg, SYNC_CAL_INTENT, "read_calendar", SYNC_CAL_NONE_HE, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+      calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
+    });
+    return;
+  }
+
+  // #85 cancel-BY-REFERENCE: a deterministic route (NO model call) — "בטל/מחק/הסר <ref>". The reference
+  // is extracted SERVER-side; findEventsByRef scopes to the family's board rows (source_provider IS NULL).
+  // 0 → not-found; 1 → delete + best-effort Google delete; N>1 → a numbered disambiguation thread (never
+  // auto-pick — the board is shared, G20). A forward that merely CONTAINS "בטל…" deletes nothing unless a
+  // real board event matches (state-not-content, G22).
+  if (CANCEL_REF_RE.test(text)) {
+    await routeCancelByRef(deps, msg, text, today);
+    return;
+  }
+
+  // #86 EXPLICIT EDIT: "שנה/ערוך/תקן/עדכן <ref> ל-<field>" — deterministic (NO model call). Needs a
+  // recognized field delta AND a specific reference; 0 (לא מצאתי) | 1 (apply, refusing a synced row) |
+  // N>1 (numbered kind='edit' thread holding the patch). Same family/state-not-content guards as cancel.
+  if (EDIT_REF_RE.test(text)) {
+    await routeEditByRef(deps, msg, text, today);
+    return;
+  }
+
+  let result: AgentResult;
+  try {
+    // The agent decides parse-vs-act, runs a tool, and the TOOL persists its own rows (#71) — the
+    // handler no longer saves. Anchor + sender + familyId + the events store are server-supplied via
+    // ToolContext (G8); senderName (from the members map) drives first-person → assignee (#14).
+    result = await deps.agent.run(text, {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+    });
+  } catch (err) {
+    if (err instanceof TransientError) {
+      // The provider hiccuped — tell the user to retry (NOT "rephrase") and rethrow so the
+      // inbound row stays `pending` for boot-replay rather than being lost or marked failed.
+      log("transient parse error", { id: msg.id });
+      await deps.sendText(msg.from, TRANSIENT_HE);
+    }
+    throw err;
+  }
+
+  // #84: the parse flagged a required-slot guess → ask ONE templated question + open a thread; save
+  // NOTHING, no confirm. The next message resumes via the #83 RESUME branch above.
+  const clarify = clarifyOf(result);
+  if (clarify) {
+    await openClarifyThread(deps, msg, clarify);
+    return;
+  }
+
+  const saved = savedOf(result);
+  if (!saved || saved.length === 0) {
+    log("unparseable message", { id: msg.id });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+
+  // The tool already persisted each event (idempotent on (wa_message_id, seq)); the handler is now
+  // thin — just send one Hebrew confirm covering all of them.
+  log("saved events", { id: msg.id, count: saved.length });
+  await deps.sendText(msg.from, formatConfirm(saved));
+
+  // #18 chunk 2: auto-push the new board events to Google Calendar — best-effort, AFTER the confirm.
+  // The board is the source of truth; a push failure is logged, never fails the confirm or replays the
+  // row. App-only / disabled ⇒ no-op; only board-originated rows are written (the push filters them).
+  if (deps.autoPushCalendar && deps.calendar) {
+    const { pushed } = await pushSavedEventsToCalendar(saved, deps.calendar, FAMILY_ID, log);
+    if (pushed > 0) log("auto-pushed to calendar", { id: msg.id, pushed });
+  }
+}
+
+/**
+ * Process one persisted inbound and settle its queue row. Used both for live messages (after
+ * `inbound.enqueue`) and on boot-replay of `pending` rows. markDone on success; markFailed on
+ * throw, so a poison message isn't replayed forever (item J later adds transient-vs-permanent
+ * retry; today a failure is terminal + visible in the row's status).
+ */
+export async function processInbound(msg: InboundMessage, deps: ProcessDeps): Promise<void> {
+  const log = deps.log ?? (() => {});
+  try {
+    await handleInbound(msg, deps);
+    deps.inbound.markDone(msg.id);
+  } catch (err) {
+    if (err instanceof TransientError) {
+      // Leave the row `pending` (don't settle) so boot-replay retries it — a service blip
+      // shouldn't lose the message. NOT a DLQ; just "try again next boot".
+      log("transient failure — left pending for replay", { id: msg.id });
+      return;
+    }
+    deps.inbound.markFailed(msg.id);
+    log("processInbound failed", { id: msg.id, error: String(err) });
+  }
+}
