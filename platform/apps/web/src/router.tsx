@@ -1,8 +1,10 @@
 import { PhoneShell, PhoneToday } from "@app/phone";
 import { TabletBoard } from "@app/tablet";
+import { WebShell } from "@app/web";
+import { ConnectionsView } from "@features/connections";
 import { FamilyView } from "@features/family";
 import { SettingsView } from "@features/settings";
-import { WeekView } from "@features/week-view";
+import { WebWeekView, WeekView } from "@features/week-view";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
@@ -57,6 +59,30 @@ function PhoneWeekScreen() {
       onSelectDate={(d) => navigate({ to: "/phone/today", search: { date: d } })}
     />
   );
+}
+
+// Web screens reuse the SAME data-connected views as phone (PhoneToday) plus the web-specific WebWeekView
+// (7-column grid) and a 2-column FamilyView — surface differences are layout/density only.
+const webTodayApi = getRouteApi("/web/today");
+function WebTodayScreen() {
+  const { date } = webTodayApi.useSearch();
+  return <PhoneToday dateIso={coerceDateIso(date)} />;
+}
+
+const webWeekApi = getRouteApi("/web/week");
+function WebWeekScreen() {
+  const { date } = webWeekApi.useSearch();
+  const navigate = useNavigate();
+  return (
+    <WebWeekView
+      dateIso={coerceDateIso(date)}
+      onSelectDate={(d) => navigate({ to: "/web/today", search: { date: d } })}
+    />
+  );
+}
+
+function WebFamilyScreen() {
+  return <FamilyView columns={2} />;
 }
 
 /**
@@ -120,6 +146,53 @@ function buildRouteTree() {
     component: SettingsView,
   });
 
+  // `/web` is a layout route: WebShell chrome (sidebar nav + top-bar Add) wraps each screen via <Outlet/>.
+  const webRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/web",
+    component: WebShell,
+  });
+
+  const webIndexRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "/",
+    beforeLoad: () => {
+      throw redirect({ to: "/web/today" });
+    },
+  });
+
+  const webTodayRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "today",
+    validateSearch: validateDateSearch,
+    component: WebTodayScreen,
+  });
+
+  const webWeekRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "week",
+    validateSearch: validateDateSearch,
+    component: WebWeekScreen,
+  });
+
+  const webFamilyRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "family",
+    component: WebFamilyScreen,
+  });
+
+  const webConnectionsRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "connections",
+    component: ConnectionsView,
+  });
+
+  const webSettingsRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "settings",
+    component: SettingsView,
+  });
+
   return rootRoute.addChildren([
     indexRoute,
     tokensRoute,
@@ -129,6 +202,14 @@ function buildRouteTree() {
       phoneWeekRoute,
       phoneFamilyRoute,
       phoneSettingsRoute,
+    ]),
+    webRoute.addChildren([
+      webIndexRoute,
+      webTodayRoute,
+      webWeekRoute,
+      webFamilyRoute,
+      webConnectionsRoute,
+      webSettingsRoute,
     ]),
   ]);
 }
