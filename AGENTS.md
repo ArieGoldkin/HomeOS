@@ -32,7 +32,8 @@ next, **M2b** (voice notes via `mlx_whisper`). M1 (echo bot) and the research/st
 - `platform/` — **all application code** (pnpm monorepo; node_modules isolated here, not at root):
   - `apps/server/` — `@homeos/server`, the WhatsApp webhook → parse → confirm service (M1–M2). See its README.
   - `packages/shared/` — `@homeos/shared`: the `ParsedEvent` schema/contract (server produces, P1 display consumes).
-  - `apps/web/` — (P1) React RTL kitchen display, not yet built.
+  - `apps/web/` — `@homeos/web`: the responsive React RTL family-board UI (tablet `/` · phone `/phone/*` ·
+    web `/web/*`). Built (Milestone #9). Folder conventions + surfaces: see its README.
 - `docs/idea/` — research & strategy:
   - `assessment.md` — initial product assessment
   - `market-research.md` — deep-research report (sources, confidence, verdict)
