@@ -2,8 +2,8 @@ import { AddEventModal } from "@features/add-event";
 import { IconButton } from "@shared/ui";
 import { Outlet } from "@tanstack/react-router";
 import { useState } from "react";
-import { AvatarStack } from "./AvatarStack";
-import { SidebarNav } from "./SidebarNav";
+import { AvatarStack } from "./components/AvatarStack";
+import { SidebarNav } from "./components/SidebarNav";
 
 /** The known family roster shown in the sidebar footer (mirrors FamilyView's KNOWN_ROSTER). */
 const ROSTER = ["אבא", "אמא", "יואב", "נועה"];

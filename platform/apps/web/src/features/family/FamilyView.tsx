@@ -2,7 +2,7 @@ import { SectionHeader } from "@shared/board";
 import { useEvents } from "@shared/hooks";
 import { cn } from "@shared/lib";
 import { Skeleton } from "@shared/ui";
-import { FamilyGrid } from "./FamilyGrid";
+import { FamilyGrid } from "./components/FamilyGrid";
 
 /** The 4 known family persons (excluding "כולם" which is a group term, not a person). */
 const KNOWN_ROSTER = ["אבא", "אמא", "יואב", "נועה"] as const;
