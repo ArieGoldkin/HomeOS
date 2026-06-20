@@ -12,6 +12,8 @@ const SKELETON_ROWS = ["sk1", "sk2", "sk3", "sk4"];
 export interface FamilyViewProps {
   /** Called when the user activates the "הוספת בן משפחה" button. */
   onAddMember?: () => void;
+  /** Grid columns — 1 (phone default) or 2 (the wider web surface). */
+  columns?: 1 | 2;
   className?: string;
 }
 
@@ -20,7 +22,7 @@ export interface FamilyViewProps {
  * any distinct non-null assignees from fetched events (excluding "כולם"). Presence is not yet
  * backed by a server — all members render as offline (online=false).
  */
-export function FamilyView({ onAddMember, className }: FamilyViewProps) {
+export function FamilyView({ onAddMember, className, columns = 1 }: FamilyViewProps) {
   const { status, data: events } = useEvents();
 
   if (status === "pending") {
@@ -58,7 +60,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
   return (
     <div className={className}>
       <SectionHeader className="mb-3">המשפחה</SectionHeader>
-      <FamilyGrid members={members} columns={1} onAddMember={onAddMember} />
+      <FamilyGrid members={members} columns={columns} onAddMember={onAddMember} />
     </div>
   );
 }

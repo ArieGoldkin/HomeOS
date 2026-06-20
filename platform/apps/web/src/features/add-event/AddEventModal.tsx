@@ -1,9 +1,9 @@
 import type { ParsedEvent } from "@homeos/shared";
-import { Sheet } from "@shared/ui";
+import { Modal } from "@shared/ui";
 import { AddItemForm } from "./AddItemForm";
 import { useAddEventController } from "./use-add-event";
 
-export interface AddEventSheetProps {
+export interface AddEventModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Optional notification fired with the validated event after it persists (analytics/tests). */
@@ -11,16 +11,16 @@ export interface AddEventSheetProps {
 }
 
 /**
- * The phone AddEvent surface: the shared AddItemForm inside a bottom Sheet (Radix → focus-trap + ESC).
- * Persistence + close/error behavior lives in the shared {@link useAddEventController} (also used by the
- * web AddEventModal): Save disabled while the create is in flight, closes on success, error notice on
- * failure; cancel/ESC/overlay-close all reset the mutation so a stale error never lingers on reopen.
+ * The web AddEvent surface: the shared AddItemForm inside a centered {@link Modal} (Radix Dialog).
+ * Identical persistence behavior to the phone {@link AddEventSheet} — both share
+ * {@link useAddEventController} (the create mutation + close/reset) and AddItemForm (the form) — and
+ * differ only in the container chrome (centered modal vs bottom sheet).
  */
-export function AddEventSheet({ open, onOpenChange, onCreate }: AddEventSheetProps) {
+export function AddEventModal({ open, onOpenChange, onCreate }: AddEventModalProps) {
   const { submitting, isError, submit, close } = useAddEventController(onOpenChange, onCreate);
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       title="הוספה ללוח"
@@ -31,6 +31,6 @@ export function AddEventSheet({ open, onOpenChange, onCreate }: AddEventSheetPro
           לא הצלחנו לשמור. נסו שוב.
         </p>
       )}
-    </Sheet>
+    </Modal>
   );
 }
