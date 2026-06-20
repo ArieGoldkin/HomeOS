@@ -50,6 +50,14 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, READ_TOKEN: "read-secret" }).readToken).toBe("read-secret");
   });
 
+  it("leaves WRITE_TOKEN undefined when unset, and keeps it independent of READ_TOKEN", () => {
+    expect(loadConfig(base).writeToken).toBeUndefined();
+    // The web/phone write seam token is a DISTINCT secret — it must never alias the read token.
+    const cfg = loadConfig({ ...base, READ_TOKEN: "read-secret", WRITE_TOKEN: "write-secret" });
+    expect(cfg.writeToken).toBe("write-secret");
+    expect(cfg.readToken).toBe("read-secret");
+  });
+
   it("defaults DIGEST_HOUR to 21 and respects ADMIN_PHONE / DIGEST_HOUR overrides", () => {
     expect(loadConfig(base).digestHour).toBe(21);
     expect(loadConfig(base).adminPhone).toBeUndefined();

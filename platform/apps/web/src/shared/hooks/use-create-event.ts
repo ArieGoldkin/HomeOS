@@ -8,8 +8,8 @@ import { eventsQueryKey } from "./use-events";
  * On success it invalidates the `eventsQueryKey` cache so `useEvents` re-fetches
  * and the new row appears on the tablet without a manual refresh.
  *
- * The server route is not built yet — this hook wires the client seam only (issue #96).
- * When the server is ready, no changes here are needed: just remove the msw stub.
+ * The server route `POST /events` is live (PR #119); this hook wires the client seam to it.
+ * Tests use the msw stub for the network.
  */
 export function useCreateEvent(): UseMutationResult<SavedEvent, Error, ParsedEvent> {
   const qc = useQueryClient();
