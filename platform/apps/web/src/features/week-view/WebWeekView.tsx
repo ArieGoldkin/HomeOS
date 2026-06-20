@@ -1,6 +1,6 @@
 import { useWeekDays } from "@shared/hooks";
 import { Skeleton } from "@shared/ui";
-import { WeekGrid } from "./WeekGrid";
+import { WeekGrid } from "./components/WeekGrid";
 
 const SKELETON_COLS = ["c0", "c1", "c2", "c3", "c4", "c5", "c6"];
 

@@ -1,6 +1,6 @@
 import { useWeekDays } from "@shared/hooks";
 import { Skeleton } from "@shared/ui";
-import { WeekList } from "./WeekList";
+import { WeekList } from "./components/WeekList";
 
 const SKELETON_ROWS = ["s0", "s1", "s2", "s3", "s4", "s5", "s6"];
 

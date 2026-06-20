@@ -1,5 +1,5 @@
-import { SettingsList } from "./SettingsList";
-import { SettingsRow } from "./SettingsRow";
+import { SettingsList } from "./components/SettingsList";
+import { SettingsRow } from "./components/SettingsRow";
 
 /** Static version string — bump when releasing new builds. */
 const APP_VERSION = "0.0.0";
