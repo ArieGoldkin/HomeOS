@@ -61,6 +61,13 @@ function makeCtx(over: Partial<ToolContext> = {}) {
   return { ctx, saveEvent };
 }
 
+// #84: tool.run now returns a {saved}|{clarify} union. read_gmail/read_calendar (and the happy
+// extract_events path) always save — narrow for the assertions; a {clarify} here is a test failure.
+function savedRows(out: { saved: SavedEvent[] } | { clarify: unknown }): SavedEvent[] {
+  if (!("saved" in out)) throw new Error("expected a {saved} result, got {clarify}");
+  return out.saved;
+}
+
 describe("extractEventsTool", () => {
   it("has the declarative tool shape (name, description, zod inputSchema)", () => {
     const tool = extractEventsTool(vi.fn());
@@ -81,7 +88,7 @@ describe("extractEventsTool", () => {
       waMessageId: "wamid.1",
       seq: 0,
     });
-    expect(out.saved).toEqual([{ id: 1, source_provider: null, ...sampleEvent }]);
+    expect(savedRows(out)).toEqual([{ id: 1, source_provider: null, ...sampleEvent }]);
   });
 
   it("passes the server-supplied senderName to parse (first-person → assignee, G8/#14)", async () => {
@@ -94,7 +101,7 @@ describe("extractEventsTool", () => {
   it("maps a null parse (unparseable) to an empty saved list — nothing persisted", async () => {
     const { ctx, saveEvent } = makeCtx();
     const out = await extractEventsTool(vi.fn(async () => null)).run({ text: "???" }, ctx);
-    expect(out.saved).toEqual([]);
+    expect(savedRows(out)).toEqual([]);
     expect(saveEvent).not.toHaveBeenCalled();
   });
 
@@ -115,8 +122,39 @@ describe("extractEventsTool", () => {
       waMessageId: "wamid.1",
       seq: 1,
     });
-    expect(out.saved).toHaveLength(2);
-    expect(out.saved.map((e) => e.source_provider)).toEqual([null, null]); // forwards, not provider rows
+    expect(savedRows(out)).toHaveLength(2);
+    expect(savedRows(out).map((e) => e.source_provider)).toEqual([null, null]); // forwards, not provider rows
+  });
+
+  it("#84: surfaces a {clarify} arm and saves NOTHING when the model flags a required slot", async () => {
+    const flagged: ParsedEvent = {
+      ...sampleEvent,
+      needs_clarification: { reason: "missing_date" },
+    };
+    const parse = vi.fn(async () => [flagged]);
+    const { ctx, saveEvent } = makeCtx();
+
+    const out = await extractEventsTool(parse).run({ text: "פגישה עם הגננת" }, ctx);
+
+    expect("clarify" in out).toBe(true);
+    if ("clarify" in out) {
+      expect(out.clarify.reason).toBe("missing_date");
+      expect(out.clarify.draft.title_he).toBe(sampleEvent.title_he);
+    }
+    expect(saveEvent).not.toHaveBeenCalled(); // the conservative gate saves nothing on a clarify
+  });
+
+  it("#84: an OPTIONAL-slot flag (missing_time) does NOT clarify — still auto-adds (conservative gate)", async () => {
+    const flagged: ParsedEvent = {
+      ...sampleEvent,
+      needs_clarification: { reason: "missing_time" },
+    };
+    const { ctx, saveEvent } = makeCtx();
+
+    const out = await extractEventsTool(vi.fn(async () => [flagged])).run({ text: "x" }, ctx);
+
+    expect(savedRows(out)).toHaveLength(1); // time is optional → saved, never asked
+    expect(saveEvent).toHaveBeenCalledTimes(1);
   });
 
   it("rejects missing / empty / oversized text via inputSchema (a structured error, not a throw)", () => {
@@ -186,7 +224,7 @@ describe("readGmailTool (#72)", () => {
   it("is opt-in: no ctx.google → { saved: [] }, zero parse calls", async () => {
     const parse = vi.fn();
     const { ctx } = makeCtx();
-    expect((await readGmailTool(parse).run({}, ctx)).saved).toEqual([]);
+    expect(savedRows(await readGmailTool(parse).run({}, ctx))).toEqual([]);
     expect(parse).not.toHaveBeenCalled();
   });
 
@@ -196,7 +234,7 @@ describe("readGmailTool (#72)", () => {
     });
     const parse = vi.fn();
     const { ctx } = makeCtx({ google });
-    expect((await readGmailTool(parse).run({}, ctx)).saved).toEqual([]);
+    expect(savedRows(await readGmailTool(parse).run({}, ctx))).toEqual([]);
     expect(google.client.list).not.toHaveBeenCalled();
     expect(parse).not.toHaveBeenCalled();
   });
@@ -227,8 +265,8 @@ describe("readGmailTool (#72)", () => {
       seq: 0,
       sourceProvider: "google",
     });
-    expect(out.saved).toHaveLength(2);
-    expect(out.saved.every((e) => e.source_provider === "google")).toBe(true);
+    expect(savedRows(out)).toHaveLength(2);
+    expect(savedRows(out).every((e) => e.source_provider === "google")).toBe(true);
   });
 
   it("clamps the model's query hints (label allowlisted + fromSender sanitised)", async () => {
@@ -352,7 +390,7 @@ function makeCalendar(over: Record<string, unknown> = {}): CalendarToolDeps {
 describe("readCalendarTool (#18)", () => {
   it("is opt-in: no ctx.calendar → { saved: [] }", async () => {
     const { ctx } = makeCtx();
-    expect((await readCalendarTool().run({}, ctx)).saved).toEqual([]);
+    expect(savedRows(await readCalendarTool().run({}, ctx))).toEqual([]);
   });
 
   it("not connected (no credential) → { saved: [] }, ZERO calendar calls", async () => {
@@ -360,7 +398,7 @@ describe("readCalendarTool (#18)", () => {
       credentials: { get: vi.fn(() => null), updateTokens: vi.fn(), delete: vi.fn() },
     });
     const { ctx } = makeCtx({ calendar });
-    expect((await readCalendarTool().run({}, ctx)).saved).toEqual([]);
+    expect(savedRows(await readCalendarTool().run({}, ctx))).toEqual([]);
     expect(calendar.client.list).not.toHaveBeenCalled();
   });
 
@@ -389,8 +427,8 @@ describe("readCalendarTool (#18)", () => {
       sourceProvider: "google",
     });
     expect(saveEvent.mock.calls[1]![1]!.waMessageId).toBe("gcal:e2");
-    expect(out.saved).toHaveLength(2);
-    expect(out.saved.every((e) => e.source_provider === "google")).toBe(true);
+    expect(savedRows(out)).toHaveLength(2);
+    expect(savedRows(out).every((e) => e.source_provider === "google")).toBe(true);
   });
 
   it("skips unmappable events but keeps the rest", async () => {
@@ -398,7 +436,7 @@ describe("readCalendarTool (#18)", () => {
     const calendar = makeCalendar({ client: { list: vi.fn(async () => [calTimed, untitled]) } });
     const { ctx, saveEvent } = makeCtx({ calendar });
     const out = await readCalendarTool().run({}, ctx);
-    expect(out.saved).toHaveLength(1);
+    expect(savedRows(out)).toHaveLength(1);
     expect(saveEvent).toHaveBeenCalledTimes(1);
   });
 

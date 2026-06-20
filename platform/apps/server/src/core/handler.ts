@@ -1,17 +1,24 @@
-import type { ParsedEvent } from "@homeos/shared";
-import type { ConversationStore } from "../db/conversation-store.ts";
+import {
+  type ClarifyReason,
+  type ParsedEvent,
+  parsedEventSchema,
+  sanitizeUserText,
+} from "@homeos/shared";
+import { type ConversationStore, clarifyPayloadSchema } from "../db/conversation-store.ts";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
+import type { ParseMessage } from "../parsing/parser.ts";
 import {
   type CalendarToolDeps,
+  type ClarifyResult,
   type GmailToolDeps,
   pushSavedEventsToCalendar,
   type ToolContext,
 } from "../tools/tools.ts";
 import type { SendText } from "../whatsapp/client.ts";
-import type { Agent } from "./agent.ts";
+import type { Agent, AgentResult } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
 import { TransientError } from "./errors.ts";
 import { jerusalemDayStartSqlite, sqliteUtc } from "./time.ts";
@@ -42,6 +49,12 @@ export interface HandlerDeps {
    * Optional so the branch is fully additive: unset ⇒ the handler behaves exactly as before.
    */
   conversations?: ConversationStore;
+  /**
+   * #84 — the non-persisting parse seam, used by a clarify RESUME to re-resolve a free-form Hebrew date
+   * answer ("ביום ראשון בשמונה") into the held draft WITHOUT saving (a single structured call, never an
+   * auto agent turn — G17). Optional: a `missing_date` resume degrades to REPHRASE when it's unwired.
+   */
+  parse?: ParseMessage;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -74,8 +87,18 @@ const CAL_NOT_CONNECTED_HE = "חשבון Google לא מחובר 🔌 כדי לס
 const SYNC_CAL_NONE_HE = "לא נמצאו אירועים חדשים ביומן 📭";
 /** A permanent Gmail failure (e.g. a 4xx on a revoked/scope-changed token) — the explicit סנכרן מייל command deserves a reply, not silence. */
 const SYNC_FAILED_HE = "הסנכרון נכשל 🙁 נסו שוב מאוחר יותר.";
-/** #83 echo stub: the clarify-resume acknowledgement. #84 replaces this with the merged-event confirm. */
-const RESUME_ACK_HE = "קיבלתי את התשובה ✓";
+/**
+ * #84 — SERVER-OWNED Hebrew clarify templates. The model NEVER composes the question (Meta 2026
+ * single-purpose red line): it only emits a constrained reason enum; the handler picks the template.
+ * `Partial` + a `REPHRASE_HE` fallback honours "no template → rephrase". Only the required-slot reasons
+ * the gate can emit are present; `missing_time` is intentionally absent (it never opens a thread).
+ */
+const CLARIFY_QUESTIONS: Partial<Record<ClarifyReason, string>> = {
+  missing_date: "לא הבנתי מתי זה — לאיזה תאריך לקבוע? 🗓️",
+  ambiguous_title: "מה לרשום ככותרת? 🤔",
+};
+/** Open-thread TTL (#84/G24): a clarify question expires after 30 min so a stale "מתי זה?" never resumes. */
+const CONVERSATION_TTL_MS = 30 * 60 * 1000;
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
@@ -139,9 +162,9 @@ async function runSyncIntent(
   ctx: ToolContext,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
-  let synced: SavedEvent[] | null;
+  let result: AgentResult;
   try {
-    synced = await deps.agent.run(intent, ctx, { forceTool });
+    result = await deps.agent.run(intent, ctx, { forceTool });
   } catch (err) {
     if (err instanceof TransientError) {
       // A provider blip (429/5xx/network) → "try again" and rethrow so the row stays pending for replay.
@@ -155,6 +178,9 @@ async function runSyncIntent(
     }
     throw err;
   }
+  // The sync tools (read_gmail/read_calendar) only ever return saved rows — never a clarify; narrow
+  // defensively so a clarify (which the gate can't produce here) degrades to "nothing new", not a throw.
+  const synced = savedOf(result);
   if (!synced || synced.length === 0) {
     await deps.sendText(msg.from, noneReply);
     return;
@@ -178,19 +204,144 @@ async function handleResume(
   row: ConversationRow,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
-  deps.conversations?.resolve(row.id); // single-use: consume the thread before doing the work (G24)
   switch (row.kind) {
     case "clarify":
-      log("resume clarify (echo stub)", { from: msg.from, id: row.id });
-      await deps.sendText(msg.from, RESUME_ACK_HE);
-      return;
+      // resumeClarify OWNS the resolve so a TRANSIENT re-parse error leaves the thread intact for
+      // boot-replay (F2) — resolving up front would drop the held draft on a provider blip.
+      return resumeClarify(deps, msg, row);
     default:
-      // cancel/edit threads can't be opened until #85/#86; resolve defensively and ask to rephrase
+      // cancel/edit threads can't be opened until #85/#86; consume defensively and ask to rephrase
       // rather than silently drop an answer to a thread this version doesn't yet know how to resume.
+      deps.conversations?.resolve(row.id);
       log("resume — unimplemented kind", { from: msg.from, id: row.id, kind: row.kind });
       await deps.sendText(msg.from, REPHRASE_HE);
       return;
   }
+}
+
+/** JSON.parse that returns null instead of throwing on a corrupt blob (paired with clarifyPayloadSchema). */
+function safeJsonParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * #84 — complete a clarify draft from the sender's answer, then save + confirm. Turn cap = 1: the
+ * thread is resolved (DELETEd) once this turn is consumed, so a second answer finds nothing pending and
+ * falls through to a fresh parse. The raw answer NEVER enters an auto agent turn (G17): `ambiguous_title`
+ * takes the answer verbatim as the title; `missing_date` re-resolves it through the non-persisting
+ * `parse` seam (a single structured call). RESOLVE happens AFTER the (possibly-throwing) re-parse so a
+ * `TransientError` leaves the thread intact for boot-replay (F2); the persisted payload is re-validated
+ * (F3) and the merged event re-validated by `parsedEventSchema` BEFORE the write (G20). Any failure
+ * abandons the draft with REPHRASE_HE.
+ */
+async function resumeClarify(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  row: ConversationRow,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+
+  // F3: the persisted blob is trusted-but-VERIFY — a corrupt/stale/tampered row degrades to rephrase,
+  // never crashes on access nor saves garbage. Consume the thread (it can't be completed) and bail.
+  const parsed = clarifyPayloadSchema.safeParse(safeJsonParse(row.payload_json));
+  if (!parsed.success) {
+    deps.conversations?.resolve(row.id);
+    log("clarify resume — invalid persisted payload", { from: msg.from, id: row.id });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const payload = parsed.data;
+  const answer = msg.text?.trim() ?? "";
+  let merged: ParsedEvent | null = null;
+
+  if (payload.reason === "ambiguous_title") {
+    // The answer IS the title — sanitize (G15); safeParse bounds it (G1).
+    merged = {
+      ...payload.draft,
+      title_he: sanitizeUserText(answer),
+      needs_clarification: undefined,
+    };
+  } else if (deps.parse) {
+    // missing_date: re-resolve the date through the parser FIRST (no save). A TransientError propagates
+    // with the thread STILL OPEN (F2) so boot-replay retries; the answer is already ≤ MAX_INPUT (G2).
+    const today = jerusalemToday((deps.now ?? (() => new Date()))());
+    const a = (await deps.parse(answer, today, deps.members?.[msg.from]))?.[0];
+    if (a) {
+      merged = {
+        ...payload.draft,
+        date_iso: a.date_iso,
+        time: a.time ?? payload.draft.time,
+        needs_clarification: undefined,
+      };
+    }
+  }
+
+  // Past any model call without a transient throw → consume the thread now (single-use, turn cap 1).
+  deps.conversations?.resolve(row.id);
+
+  const validated = merged ? parsedEventSchema.safeParse(merged) : null;
+  if (!validated?.success) {
+    log("clarify resume — could not complete the draft", {
+      from: msg.from,
+      reason: payload.reason,
+    });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+
+  const saved = deps.events.saveEvent(validated.data, { fromPhone: msg.from, waMessageId: msg.id });
+  log("clarify resume — saved", { from: msg.from, id: saved.id });
+  await deps.sendText(msg.from, formatConfirm([saved]));
+
+  // Auto-push to Calendar — the same best-effort follower as the main forward path (#18 chunk 2).
+  if (deps.autoPushCalendar && deps.calendar) {
+    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, FAMILY_ID, log);
+    if (pushed > 0) log("auto-pushed clarify resume to calendar", { id: msg.id, pushed });
+  }
+}
+
+/**
+ * #84 — open a clarify thread: pick the SERVER-OWNED template for the model's reason enum, persist the
+ * draft on a `kind:'clarify'` thread (#83 store), send ONE question, save NOTHING, no confirm. No
+ * template (or no store wired) → REPHRASE_HE. processInbound marks the inbound done on normal return, so
+ * boot-replay never re-asks (the conversation row carries the open state). Red-line: the user only ever
+ * sees a server template, never model prose.
+ */
+async function openClarifyThread(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  clarify: ClarifyResult,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  const question = CLARIFY_QUESTIONS[clarify.reason];
+  if (!question || !deps.conversations) {
+    log("clarify — no template or no store; degrading", { from: msg.from, reason: clarify.reason });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const expiresAt = sqliteUtc(
+    new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
+  );
+  deps.conversations.create({
+    fromPhone: msg.from,
+    kind: "clarify",
+    payload: { kind: "clarify", reason: clarify.reason, draft: clarify.draft },
+    expiresAt,
+  });
+  log("clarify thread opened", { from: msg.from, reason: clarify.reason });
+  await deps.sendText(msg.from, question);
+}
+
+/** #84: narrow the agent's 3-arm result. `clarify` → the request to ask; otherwise saved rows (or null). */
+function clarifyOf(r: AgentResult): ClarifyResult | null {
+  return r && "clarify" in r ? r.clarify : null;
+}
+function savedOf(r: AgentResult): SavedEvent[] | null {
+  return r && "clarify" in r ? null : r;
 }
 
 /**
@@ -232,6 +383,15 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   }
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
+
+  // G2: input-length cap — short-circuit BEFORE any model call, including the clarify-RESUME re-parse
+  // below (an answer to "מתי זה?" is model-bound too). Placed ahead of the resume + exact-match triggers
+  // (ביטול/syncs are short, so capping them is harmless) so no path can send Claude an oversized payload.
+  if (text.length > MAX_INPUT) {
+    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
 
   // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): it sits AFTER the allowlist + G16
   // rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open thread,
@@ -301,19 +461,12 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  // G2: input-length cap — short-circuit before the model ever sees an oversized payload.
-  if (text.length > MAX_INPUT) {
-    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
-    await deps.sendText(msg.from, REPHRASE_HE);
-    return;
-  }
-
-  let saved: SavedEvent[] | null;
+  let result: AgentResult;
   try {
     // The agent decides parse-vs-act, runs a tool, and the TOOL persists its own rows (#71) — the
     // handler no longer saves. Anchor + sender + familyId + the events store are server-supplied via
     // ToolContext (G8); senderName (from the members map) drives first-person → assignee (#14).
-    saved = await deps.agent.run(text, {
+    result = await deps.agent.run(text, {
       todayIso: today,
       from: msg.from,
       waMessageId: msg.id,
@@ -330,6 +483,16 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     }
     throw err;
   }
+
+  // #84: the parse flagged a required-slot guess → ask ONE templated question + open a thread; save
+  // NOTHING, no confirm. The next message resumes via the #83 RESUME branch above.
+  const clarify = clarifyOf(result);
+  if (clarify) {
+    await openClarifyThread(deps, msg, clarify);
+    return;
+  }
+
+  const saved = savedOf(result);
   if (!saved || saved.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);

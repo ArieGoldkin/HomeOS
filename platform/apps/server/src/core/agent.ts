@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
 import type { SavedEvent } from "../db/event-store.ts";
-import type { Tool, ToolContext } from "../tools/tools.ts";
+import type { ClarifyResult, Tool, ToolContext } from "../tools/tools.ts";
 import { isProgrammingError, isTransient, TransientError } from "./errors.ts";
 
 /**
@@ -42,13 +42,18 @@ export interface ModelRequest {
 /** The injected seam: one model round-trip. Production = `anthropicCallModel`; tests = a `vi.fn`. */
 export type CallModel = (req: ModelRequest) => Promise<ModelResponse>;
 
+/** #84: the agent's third return arm — a tool asked to clarify instead of saving. The handler opens a
+ *  templated thread; the draft inside NEVER passed through the model loop (G17). */
+export type AgentResult = SavedEvent[] | { clarify: ClarifyResult } | null;
+
 export interface Agent {
   /**
-   * The rows the tools persisted, or `null` (→ "please rephrase"). The handler only confirms them.
+   * The rows the tools persisted, a `{ clarify }` request (#84), or `null` (→ "please rephrase"). The
+   * handler confirms saved rows, asks the templated question on clarify, or rephrases on null.
    * `opts.forceTool` sets which tool turn 0 forces (default `extract_events` for a forward; the
    * handler passes `read_gmail` for the `סנכרן מייל` sync intent) — G4's forced-first-turn stays intact.
    */
-  run(text: string, ctx: ToolContext, opts?: { forceTool?: string }): Promise<SavedEvent[] | null>;
+  run(text: string, ctx: ToolContext, opts?: { forceTool?: string }): Promise<AgentResult>;
 }
 
 export interface AgentConfig {
@@ -118,6 +123,7 @@ export function createAgent(cfg: AgentConfig): Agent {
     block: { id: string; name: string; input: unknown },
     ctx: ToolContext,
     collected: SavedEvent[],
+    clarify: { value: ClarifyResult | null },
   ): Promise<ToolResultBlock> {
     const tool = cfg.tools.find((t) => t.name === block.name);
     if (!tool) {
@@ -140,13 +146,23 @@ export function createAgent(cfg: AgentConfig): Agent {
         is_error: true,
       };
     }
-    const { saved } = await tool.run(parsed.data, ctx);
-    collected.push(...saved);
+    const result = await tool.run(parsed.data, ctx);
+    if ("clarify" in result) {
+      // #84/G17: the draft goes ONLY to the side-channel — the tool_result is a content-free flag, so
+      // neither the draft nor any of its fields ever re-enters `messages[]` for a later model turn.
+      clarify.value = result.clarify;
+      return {
+        type: "tool_result",
+        tool_use_id: block.id,
+        content: JSON.stringify({ needs_clarification: true }),
+      };
+    }
+    collected.push(...result.saved);
     // Tool result is a structured COUNT ack — never echo untrusted text back into the loop (G7).
     return {
       type: "tool_result",
       tool_use_id: block.id,
-      content: JSON.stringify({ saved: saved.length }),
+      content: JSON.stringify({ saved: result.saved.length }),
     };
   }
 
@@ -161,6 +177,7 @@ export function createAgent(cfg: AgentConfig): Agent {
           : text;
       const messages: ModelRequest["messages"] = [{ role: "user", content: firstContent }];
       const collected: SavedEvent[] = [];
+      const clarify: { value: ClarifyResult | null } = { value: null };
 
       for (let i = 0; i < maxIterations; i++) {
         // Turn 0 forces the chosen tool (no free-text first turn, G4); later turns are auto.
@@ -201,7 +218,11 @@ export function createAgent(cfg: AgentConfig): Agent {
         // message — splitting them or dropping a block breaks the transcript on the next call.
         messages.push({ role: "assistant", content: res.content });
         const results: ToolResultBlock[] = [];
-        for (const tu of toolUses) results.push(await dispatch(tu, ctx, collected));
+        for (const tu of toolUses) results.push(await dispatch(tu, ctx, collected, clarify));
+        // #84: a clarify request ends the loop — return the draft straight to the handler WITHOUT
+        // appending the tool_results to `messages` (nothing more goes to the model). G17 holds: the
+        // draft was never in any model-bound message.
+        if (clarify.value) return { clarify: clarify.value };
         messages.push({ role: "user", content: results });
       }
       // Hit the bound: degrade to what we have (or null), NEVER throw — a poison message must not

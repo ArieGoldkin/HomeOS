@@ -99,6 +99,30 @@ describe("createAgent (bounded tool-use loop)", () => {
     });
   });
 
+  it("#84: returns the {clarify} arm; the loop ends and the draft NEVER enters a model message (G17)", async () => {
+    const DRAFT_MARKER = "פגישה_עם_הגננת_מארקר"; // a distinctive title to scan the model transcript for
+    const flagged: ParsedEvent = {
+      ...sampleEvent,
+      title_he: DRAFT_MARKER,
+      needs_clarification: { reason: "missing_date" },
+    };
+    // turn 0 forces extract_events; the clarify terminates the loop → NO second model call.
+    const callModel = vi.fn().mockResolvedValueOnce(toolUse());
+    const { agent, ctx } = makeAgent(callModel, [flagged]);
+
+    const out = await agent.run(TEXT, ctx);
+
+    expect(out && "clarify" in out).toBe(true);
+    if (out && "clarify" in out) {
+      expect(out.clarify.reason).toBe("missing_date");
+      expect(out.clarify.draft.title_he).toBe(DRAFT_MARKER); // the draft DID reach the handler
+    }
+    // LOAD-BEARING (G17): the loop stopped after turn 0, and the draft's distinctive title is absent
+    // from EVERY model-bound message (every callModel arg) — it left only via the side-channel arm.
+    expect(callModel).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(callModel.mock.calls)).not.toContain(DRAFT_MARKER);
+  });
+
   it("single-purpose: an end_turn-with-prose response yields null — no model prose escapes (G3)", async () => {
     const callModel = vi
       .fn()

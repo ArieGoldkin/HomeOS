@@ -1,4 +1,9 @@
-import { type ParsedEvent, parsedEventSchema, sanitizeUserText } from "@homeos/shared";
+import {
+  type ClarifyReason,
+  type ParsedEvent,
+  parsedEventSchema,
+  sanitizeUserText,
+} from "@homeos/shared";
 import { z } from "zod/v4";
 import {
   addDaysIso,
@@ -86,11 +91,25 @@ export interface ToolContext {
  * `run` returns the rows it PERSISTED (`saved`), not raw events: the tool stamps its own idempotency
  * key + `source_provider`, so per-tool provenance survives the agent loop's flattening (#71/§1).
  */
+/**
+ * #84 — the clarify draft a tool surfaces INSTEAD of saving when a required slot is an unconfirmed
+ * guess. It crosses tool → agent → handler via this typed arm and is NEVER serialized into a
+ * `tool_result` or any `messages[]` entry (G17): the agent captures it in a side-channel and the
+ * tool_result stays a content-free ack. The handler asks ONE templated question and resumes (#84/§4.A).
+ */
+export interface ClarifyResult {
+  draft: ParsedEvent;
+  reason: ClarifyReason;
+}
+
+/** A tool either persisted rows (`saved`) OR is requesting a clarification (`clarify`) — never both. */
+export type ToolResult = { saved: SavedEvent[] } | { clarify: ClarifyResult };
+
 export interface Tool<I = unknown> {
   name: string;
   description: string;
   inputSchema: z.ZodType<I>;
-  run(input: I, ctx: ToolContext): Promise<{ saved: SavedEvent[] }>;
+  run(input: I, ctx: ToolContext): Promise<ToolResult>;
 }
 
 /**
@@ -108,6 +127,16 @@ const MAX_TOOL_TEXT = 8000;
  * the handler did before, `source_provider` left null (a forward, not a provider-derived row) — so
  * behaviour is identical; the one `saveEvent` line just moved down a layer.
  */
+/**
+ * #84 confidence gate — DETERMINISTIC + conservative: only a REQUIRED-slot gap opens a clarify thread.
+ * `missing_time` is intentionally excluded (time is optional → never ask), so a clear-but-timeless parse
+ * still auto-adds and keeps the instant magic. The model EMITS the enum flag; this code decides to act.
+ */
+const CLARIFY_REQUIRED_REASONS: ReadonlySet<ClarifyReason> = new Set([
+  "missing_date",
+  "ambiguous_title",
+]);
+
 export function extractEventsTool(parse: ParseMessage): Tool<{ text: string }> {
   return {
     name: "extract_events",
@@ -116,6 +145,15 @@ export function extractEventsTool(parse: ParseMessage): Tool<{ text: string }> {
     inputSchema: z.object({ text: z.string().min(1).max(MAX_TOOL_TEXT) }),
     async run({ text }, ctx) {
       const events = await parse(text, ctx.todayIso, ctx.senderName);
+      // #84: if the model flagged an event's required slot as a guess, ask ONE question instead of
+      // saving. Gate on the conservative reason set (code-decided) and surface the FIRST flagged draft —
+      // it goes ONLY to the handler via the clarify arm, never into the model loop. Save NOTHING.
+      const flagged = (events ?? []).find(
+        (e) => e.needs_clarification && CLARIFY_REQUIRED_REASONS.has(e.needs_clarification.reason),
+      );
+      if (flagged?.needs_clarification) {
+        return { clarify: { draft: flagged, reason: flagged.needs_clarification.reason } };
+      }
       // One message → several events, each under its own seq (idempotent on (wa_message_id, seq)).
       const saved = (events ?? []).map((event, seq) =>
         ctx.events.saveEvent(event, { fromPhone: ctx.from, waMessageId: ctx.waMessageId, seq }),

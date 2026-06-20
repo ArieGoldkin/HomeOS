@@ -1,7 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { ParsedEvent } from "@homeos/shared";
+import { clarifyReasonSchema, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
+import { z } from "zod/v4";
 import {
   type ConversationRow,
   CREATE_CONVERSATIONS_INDEX,
@@ -24,6 +25,18 @@ export type ConversationKind = "clarify" | "cancel" | "edit";
  * narrows it to the `ClarifyReason` enum keying the server-owned question templates.
  */
 export type ConversationPayload = { kind: "clarify"; reason: string; draft: ParsedEvent };
+
+/**
+ * #84/F3 — runtime guard for a persisted clarify payload before it drives a write. The DB row is
+ * trusted-but-VERIFY: a corrupt, stale, or hand-tampered blob (e.g. an old schema, an invalid reason,
+ * a draft missing a required slot) must degrade to "rephrase", never crash on access or save garbage.
+ * The handler `safeParse`s `payload_json` through this before merging/saving.
+ */
+export const clarifyPayloadSchema = z.object({
+  kind: z.literal("clarify"),
+  reason: clarifyReasonSchema,
+  draft: parsedEventSchema,
+});
 
 /**
  * The bounded-conversation seam (#83). Sibling to `EventStore`/`InboundStore`/`CredentialStore`: same
