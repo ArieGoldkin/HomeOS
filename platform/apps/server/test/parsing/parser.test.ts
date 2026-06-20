@@ -34,6 +34,17 @@ describe("buildSystemPrompt", () => {
     expect(withSender).toMatch(/sender/i);
     expect(buildSystemPrompt("2026-06-20")).not.toContain("רוני"); // absent by default
   });
+
+  it("instructs a CONSERVATIVE needs_clarification on required-slot guesses only (#84)", () => {
+    // Lock the prompt contract: it names the field, both required-slot reasons, and the OMIT default.
+    // (Real-model conservativeness is the #87 eval's job; here we only assert the instruction is present.)
+    const p = buildSystemPrompt("2026-06-20");
+    expect(p).toContain("needs_clarification");
+    expect(p).toContain("missing_date");
+    expect(p).toContain("ambiguous_title");
+    expect(p).toMatch(/OMIT/);
+    expect(p).toMatch(/never write a free-text question/i); // the server owns the Hebrew templates
+  });
 });
 
 describe("createParser", () => {
@@ -61,6 +72,15 @@ describe("createParser", () => {
     const result = await createParser(async () => multi)("...", "2026-06-20");
     expect(result).toHaveLength(2);
     expect(result![1]).toMatchObject({ title_he: "טיול שנתי" });
+  });
+
+  it("round-trips a model-emitted needs_clarification reason through the schema (#84)", async () => {
+    // The gate (extract_events) acts on this downstream; here we only assert the enum survives the
+    // parser's schema validation so a flagged event still reaches the handler intact.
+    const flagged = { ...validEvent, needs_clarification: { reason: "missing_date" } };
+    const result = await createParser(async () => ({ events: [flagged] }))("...", "2026-06-20");
+    expect(result).toHaveLength(1);
+    expect(result![0]!.needs_clarification).toEqual({ reason: "missing_date" });
   });
 
   it("returns null when the model output fails schema validation", async () => {

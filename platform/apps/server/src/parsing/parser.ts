@@ -51,6 +51,19 @@ export function buildSystemPrompt(todayIso: string, senderName?: string): string
     '- recurrence: { "freq": "weekly", "weekday": 0-6 } if it repeats weekly (e.g. חוגים; ' +
       "0=Sunday … 6=Saturday), otherwise null.",
     "- source_text: the original text for this item, copied verbatim.",
+    // #84: the model's only confidence signal — a CONSTRAINED ENUM the server turns into ONE templated
+    // Hebrew question (the model NEVER writes the question itself; that is the single-purpose red line).
+    // Be CONSERVATIVE: a clear parse must auto-add instantly (the product's "instant magic"), so
+    // over-flagging is the main failure to avoid — when in doubt, OMIT the field and just parse.
+    "- needs_clarification: OMIT this field entirely for a clear parse. Set it ONLY when a REQUIRED " +
+      'slot is genuinely a guess, as { "reason": <one of the values below> }:',
+    '  - "missing_date": the message gives NO discernible date or day and you would otherwise be ' +
+      'GUESSING the date. Relative dates ARE discernible — "מחר", "מחרתיים", "ביום ראשון", ' +
+      '"בשבוע הבא", a weekday name, or an explicit date all resolve to a real date, so do NOT flag those.',
+    '  - "ambiguous_title": you cannot tell WHAT the event is — there is no sensible Hebrew title to give it.',
+    "  NEVER set needs_clarification for a missing time or any other optional field (time, location, " +
+      'assignee, recurrence are allowed to be null — a missing time is normal, never "missing_time" here). ' +
+      "NEVER invent a reason outside the two values above, and NEVER write a free-text question.",
   ].join("\n");
 }
 

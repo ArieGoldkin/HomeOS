@@ -99,6 +99,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     sendText: wa.sendText,
     inbound,
     conversations,
+    parse, // #84: the non-persisting re-parse seam a clarify RESUME uses to complete a date answer
     members: config.members,
     maxPerSenderPerDay: config.maxPerSenderPerDay,
     google: gmailDeps,

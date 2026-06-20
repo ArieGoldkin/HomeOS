@@ -73,6 +73,20 @@ export const recurrenceSchema = z.object({
 export type Recurrence = z.infer<typeof recurrenceSchema>;
 
 /**
+ * #84 — the confidence signal the MODEL emits as a CONSTRAINED ENUM (never free prose): it flags a
+ * parse whose required slot is a guess so the handler can ask ONE templated Hebrew question. The
+ * deterministic code gate (extract_events) decides whether to ACT on it — only required-slot reasons
+ * (`missing_date`/`ambiguous_title`) open a thread; `missing_time` is optional and never asks. Keeping
+ * this an enum (not a model-authored question string) is the Meta-2026 single-purpose red line.
+ */
+export const CLARIFY_REASONS = ["missing_date", "missing_time", "ambiguous_title"] as const;
+export const clarifyReasonSchema = z.enum(CLARIFY_REASONS);
+export type ClarifyReason = z.infer<typeof clarifyReasonSchema>;
+
+export const needsClarificationSchema = z.object({ reason: clarifyReasonSchema });
+export type NeedsClarification = z.infer<typeof needsClarificationSchema>;
+
+/**
  * The contract: the structured shape Claude extracts from a forwarded Hebrew message, produced
  * by the server/agent and consumed by the dashboard + kiosk. Dates are anchored to
  * Asia/Jerusalem upstream; `time`/`location`/`assignee`/`recurrence` are null when absent.
@@ -91,6 +105,12 @@ export const parsedEventSchema = z.object({
   // Verbatim original slice for this item (not rendered in the confirm) — bound length only, since
   // it may legitimately contain newlines. The handler's input cap (G2) bounds the message as a whole.
   source_text: z.string().max(2000),
+  // #84: `.nullish()` (optional + nullable) so the field is backward-compatible in BOTH runtime and
+  // TYPE — the model omits it for a clear parse (→ undefined) or may send null, and every existing
+  // ParsedEvent/SavedEvent literal stays valid (a `.default(null)` would force it required in the
+  // inferred output type and break those literals). The PROMPT + the code gate enforce
+  // conservativeness, not the schema. The gate treats null/undefined alike via a truthy check.
+  needs_clarification: needsClarificationSchema.nullish(),
 });
 export type ParsedEvent = z.infer<typeof parsedEventSchema>;
 

@@ -1,5 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
+import type { AgentResult } from "../../src/core/agent.ts";
 import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
 import { handleInbound, processInbound } from "../../src/core/handler.ts";
@@ -11,7 +12,12 @@ import {
 import type { SavedEvent } from "../../src/db/event-store.ts";
 import type { InboundStore } from "../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
-import type { CalendarToolDeps, GmailToolDeps, ToolContext } from "../../src/tools/tools.ts";
+import type {
+  CalendarToolDeps,
+  ClarifyResult,
+  GmailToolDeps,
+  ToolContext,
+} from "../../src/tools/tools.ts";
 
 const allowlist = ["972501234567"];
 
@@ -49,6 +55,10 @@ function makeDeps(
     autoPush?: boolean;
     /** #83: wire an open-thread store so the RESUME branch engages (omitted ⇒ branch inert). */
     conversations?: ConversationStore;
+    /** #84: when set, agent.run (the main path) returns this clarify arm instead of saved rows. */
+    clarifyResult?: ClarifyResult;
+    /** #84: when defined, wires deps.parse (the clarify-resume re-parse seam) to return this. */
+    parseReturns?: ParsedEvent[] | null;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -69,14 +79,14 @@ function makeDeps(
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
   };
-  // The handler depends on the agent; run() now returns the persisted SavedEvent[] (or null). The
-  // sync path is distinguished by opts.forceTool === "read_gmail" (3rd arg), so the mock can branch.
+  // The handler depends on the agent; run() returns persisted SavedEvent[], a {clarify} arm (#84), or
+  // null. The sync path is distinguished by opts.forceTool === "read_gmail" (3rd arg), so it can branch.
   const run = vi.fn(
     async (
       _text: string,
       _ctx: ToolContext,
       runOpts?: { forceTool?: string },
-    ): Promise<SavedEvent[] | null> => {
+    ): Promise<AgentResult> => {
       if (opts.agentThrows) throw opts.agentThrows;
       if (runOpts?.forceTool === "read_gmail") {
         return opts.syncSaved === undefined ? [sampleSaved] : opts.syncSaved;
@@ -84,6 +94,8 @@ function makeDeps(
       if (runOpts?.forceTool === "read_calendar") {
         return opts.calSyncSaved === undefined ? [sampleSaved] : opts.calSyncSaved;
       }
+      // #84: the main forward path returns a clarify arm when the parse flagged a required slot.
+      if (opts.clarifyResult) return { clarify: opts.clarifyResult };
       return opts.saved === undefined ? [sampleSaved] : opts.saved;
     },
   );
@@ -146,6 +158,9 @@ function makeDeps(
     calendar,
     autoPushCalendar: opts.autoPush,
     ...(opts.conversations ? { conversations: opts.conversations } : {}),
+    ...(opts.parseReturns !== undefined
+      ? { parse: vi.fn(async () => opts.parseReturns ?? null) }
+      : {}),
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
     ...(opts.maxPerSenderPerDay !== undefined
       ? {
@@ -455,25 +470,25 @@ describe("handleInbound — #83 RESUME branch", () => {
   const NOW_SQLITE = "2026-06-20 09:00:00";
   const FUTURE = "2026-06-20 12:00:00"; // expiresAt after NOW → thread is open
   const PAST = "2026-06-20 08:00:00"; // expiresAt before NOW → thread is expired
-  const RESUME_ACK_HE = "קיבלתי את התשובה ✓";
   const clarifyPayload: ConversationPayload = {
     kind: "clarify",
-    reason: "missing_time",
+    reason: "ambiguous_title", // the answer becomes the title — no re-parse seam needed for routing
     draft: sampleEvent,
   };
   function seed(store: ConversationStore, expiresAt: string) {
     store.create({ fromPhone: textMsg.from, kind: "clarify", payload: clarifyPayload, expiresAt });
   }
 
-  it("routes an answer to the resume (echo) and NEVER calls agent.run (G17)", async () => {
+  it("routes an answer to the resume (completes the draft + saves) and NEVER calls agent.run (G17)", async () => {
     const conversations = createConversationStore(":memory:");
     seed(conversations, FUTURE);
-    const { deps, sendText, agent } = makeDeps({ conversations });
+    const { deps, sendText, agent, events } = makeDeps({ conversations });
 
     await handleInbound(textMsg, deps);
 
-    expect(agent.run).not.toHaveBeenCalled(); // the answer is never re-parsed as a fresh forward
-    expect(sendText).toHaveBeenCalledWith(textMsg.from, RESUME_ACK_HE);
+    expect(agent.run).not.toHaveBeenCalled(); // the answer never enters the auto agent loop
+    expect(events.saveEvent).toHaveBeenCalledTimes(1); // ambiguous_title → answer becomes title, saved
+    expect(sendText.mock.calls[0]?.[1]).toContain("הוספתי"); // a confirm, not model prose
     expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // resolved (single-use)
   });
 
@@ -520,6 +535,85 @@ describe("handleInbound — #83 RESUME branch", () => {
 
     expect(inbound.markDone).toHaveBeenCalledWith("wamid.1");
     expect(agent.run).not.toHaveBeenCalled();
+  });
+});
+
+// #84 (Milestone #8): the confidence gate. A clarify arm from agent.run opens a templated thread and
+// saves nothing — the user only ever sees a SERVER template, never model prose (red line).
+describe("handleInbound — #84 clarify gate", () => {
+  const clarifyDraft: ParsedEvent = {
+    ...sampleEvent,
+    needs_clarification: { reason: "missing_date" },
+  };
+  const clarifyResult: ClarifyResult = { draft: clarifyDraft, reason: "missing_date" };
+
+  it("opens a clarify thread, sends the server template, and never confirms/saves", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, sendText } = makeDeps({ conversations, clarifyResult });
+
+    await handleInbound(textMsg, deps);
+
+    // exactly ONE message — the templated Hebrew question (no confirm follows, no model prose)
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText.mock.calls[0]?.[1]).toContain("תאריך"); // the missing_date template asks for the date
+    // a clarify thread now holds the draft for this sender (NOW_SQLITE from makeDeps' pinned clock)
+    const pending = conversations.getPending(textMsg.from, "2026-06-20 09:00:00");
+    expect(pending?.kind).toBe("clarify");
+    expect(JSON.parse(pending?.payload_json ?? "{}").draft.title_he).toBe(sampleEvent.title_he);
+  });
+
+  it("degrades to REPHRASE when no conversations store is wired (no thread to open)", async () => {
+    const { deps, sendText } = makeDeps({ clarifyResult }); // conversations unset
+    await handleInbound(textMsg, deps);
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
+  });
+});
+
+// #84 — the clarify RESUME merge: complete the held draft from the answer, re-validate, save + confirm.
+describe("handleInbound — #84 clarify resume (merge)", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const dateDraft: ParsedEvent = {
+    ...sampleEvent,
+    date_iso: "2026-06-20", // a placeholder the model guessed; the answer overwrites it
+    needs_clarification: { reason: "missing_date" },
+  };
+  function seedDateThread(store: ConversationStore) {
+    store.create({
+      fromPhone: textMsg.from,
+      kind: "clarify",
+      payload: { kind: "clarify", reason: "missing_date", draft: dateDraft },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+  }
+
+  it("missing_date: re-parses the answer, merges the date into the draft, saves + confirms", async () => {
+    const conversations = createConversationStore(":memory:");
+    seedDateThread(conversations);
+    const dated: ParsedEvent = { ...sampleEvent, date_iso: "2026-06-21", time: "20:00" };
+    const { deps, sendText, events, agent } = makeDeps({ conversations, parseReturns: [dated] });
+
+    await handleInbound({ ...textMsg, text: "ביום ראשון בשמונה בערב" }, deps);
+
+    expect(agent.run).not.toHaveBeenCalled(); // re-parse via the parse seam, never the auto agent loop
+    expect(events.saveEvent).toHaveBeenCalledTimes(1);
+    const savedArg = events.saveEvent.mock.calls[0]?.[0];
+    expect(savedArg?.date_iso).toBe("2026-06-21"); // the re-parsed date merged in
+    expect(savedArg?.time).toBe("20:00");
+    expect(savedArg?.title_he).toBe(sampleEvent.title_he); // the draft's title is preserved
+    expect(sendText.mock.calls[0]?.[1]).toContain("הוספתי"); // a confirm
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("missing_date: an unparseable answer abandons the draft with REPHRASE (nothing saved, turn cap 1)", async () => {
+    const conversations = createConversationStore(":memory:");
+    seedDateThread(conversations);
+    const { deps, sendText, events } = makeDeps({ conversations, parseReturns: null });
+
+    await handleInbound({ ...textMsg, text: "מתישהו" }, deps);
+
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // resolved → a 2nd answer is fresh
   });
 });
 

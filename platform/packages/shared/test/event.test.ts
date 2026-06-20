@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parsedEventSchema, parsedMessageSchema, sanitizeUserText } from "../src/index.ts";
+import {
+  clarifyReasonSchema,
+  parsedEventSchema,
+  parsedMessageSchema,
+  sanitizeUserText,
+} from "../src/index.ts";
 
 const valid = {
   kind: "event",
@@ -45,6 +50,41 @@ describe("parsedEventSchema", () => {
   });
   it("rejects a malformed time", () => {
     expect(() => parsedEventSchema.parse({ ...valid, time: "25:99" })).toThrow();
+  });
+});
+
+describe("parsedEventSchema — needs_clarification (#84)", () => {
+  it("is absent when the model omits it (backward-compatible — existing parses/literals unchanged)", () => {
+    // every existing parse + ParsedEvent literal lacks the field — it must still validate (→ undefined).
+    expect(parsedEventSchema.parse(valid).needs_clarification).toBeUndefined();
+  });
+
+  it("accepts an explicit null", () => {
+    expect(
+      parsedEventSchema.parse({ ...valid, needs_clarification: null }).needs_clarification,
+    ).toBeNull();
+  });
+
+  it("accepts a constrained clarify reason", () => {
+    const parsed = parsedEventSchema.parse({
+      ...valid,
+      needs_clarification: { reason: "missing_date" },
+    });
+    expect(parsed.needs_clarification).toEqual({ reason: "missing_date" });
+  });
+
+  it("rejects an unknown reason (constrained enum, never free prose)", () => {
+    expect(() =>
+      parsedEventSchema.parse({ ...valid, needs_clarification: { reason: "because" } }),
+    ).toThrow();
+  });
+
+  it("clarifyReasonSchema enumerates exactly the three reasons", () => {
+    expect(clarifyReasonSchema.options).toEqual([
+      "missing_date",
+      "missing_time",
+      "ambiguous_title",
+    ]);
   });
 });
 
