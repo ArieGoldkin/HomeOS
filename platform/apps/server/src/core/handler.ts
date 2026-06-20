@@ -124,7 +124,9 @@ const ABORT_THREAD_HE = "בסדר, ביטלתי 👍";
 const EDIT_REF_RE = /^(שנה|ערוך|תקן|עדכן)\s+\S+/u;
 const CORRECTION_RE = /^לא,?\s+(ב-|ה-|בשעה|במיקום)/u;
 const EDIT_TIME_RE = /ל(?:שעה\s*)?-?\s*(\d{1,2}):(\d{2})/u;
-const EDIT_LOCATION_RE = /ל(?:מיקום|כתובת)\s+(.+)$/u;
+// #126/F2 — non-greedy + bounded: the location stops before a following ל-/בשעה time/day token so it
+// can't swallow it (e.g. "למיקום בית הספר ל-18:00" → location "בית הספר", time still extracted).
+const EDIT_LOCATION_RE = /ל(?:מיקום|כתובת)\s+(.+?)(?=\s+ל-?\s*\d|\s+בשעה|$)/u;
 const EDIT_DAY_RE = /ל-?(\d{1,2})(?![:\d])/u;
 const EDIT_SYNCED_HE = "אי אפשר לערוך אירוע שמסונכרן מהיומן 🔒";
 /**
@@ -571,7 +573,8 @@ async function resumeEdit(
  */
 function extractCorrectionDelta(text: string, todayIso: string): EventPatch | null {
   const patch: EventPatch = {};
-  const loc = /במיקום\s+(.+)$/u.exec(text);
+  // #126/F2 — bounded so it can't swallow a trailing time/day token ("במיקום בית הספר בשעה 18:00").
+  const loc = /במיקום\s+(.+?)(?=\s+בשעה|\s+[בל]-?\s*\d|$)/u.exec(text);
   if (loc?.[1]) patch.location = sanitizeUserText(loc[1].trim());
   const lastT = [...text.matchAll(/(\d{1,2}):(\d{2})/gu)].at(-1);
   if (lastT?.[1] && lastT[2])

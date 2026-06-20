@@ -941,3 +941,23 @@ describe("handleInbound — #86 edit in place + correction", () => {
     expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // thread aborted
   });
 });
+
+describe("extractEditDelta location bound (#126/F2)", () => {
+  it("a location delta does NOT swallow a trailing time token", async () => {
+    const { deps, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([
+      { ...sampleEvent, id: 9, source_provider: null } as SavedEvent,
+    ]);
+    events.updateEvent.mockReturnValue({
+      ...sampleEvent,
+      id: 9,
+      source_provider: null,
+    } as SavedEvent);
+    await handleInbound({ ...textMsg, text: "שנה את הפגישה למיקום בית הספר ל-18:00" }, deps);
+    expect(events.updateEvent).toHaveBeenCalledWith(
+      9,
+      { location: "בית הספר", time: "18:00" }, // both extracted; the time is NOT swallowed into location
+      "default",
+    );
+  });
+});
