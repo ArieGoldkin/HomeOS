@@ -5,7 +5,7 @@ import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
 import { anthropicCallModel, createAgent } from "./core/agent.ts";
 import { scheduleDigest } from "./core/digest.ts";
-import { processInbound } from "./core/handler.ts";
+import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
