@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentResult } from "../../src/core/agent.ts";
 import { TransientError } from "../../src/core/errors.ts";
 import type { HandlerDeps, ProcessDeps } from "../../src/core/handler.ts";
-import { handleInbound, processInbound } from "../../src/core/handler.ts";
+import { extractCancelRef, handleInbound, processInbound } from "../../src/core/handler.ts";
 import {
   type ConversationPayload,
   type ConversationStore,
@@ -794,5 +794,46 @@ describe("handleInbound — #85 cancel by reference", () => {
     expect(events.deleteLastFromSender).not.toHaveBeenCalled(); // open op takes precedence
     expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // thread aborted
     expect(sendText.mock.calls[0]?.[1]).toContain("ביטלתי");
+  });
+});
+
+describe("extractCancelRef + cancel specificity (#125/F1+F2)", () => {
+  const TODAY = "2026-06-20"; // a Saturday
+
+  it("pulls an explicit time, hour zero-padded", () => {
+    expect(extractCancelRef("בטל פגישה ב-3:30", TODAY)).toMatchObject({ time: "03:30" });
+  });
+
+  it("resolves היום / מחר / מחרתיים and strips them from the hint", () => {
+    expect(extractCancelRef("בטל את הפגישה היום", TODAY).dateIso).toBe("2026-06-20");
+    expect(extractCancelRef("בטל את הפגישה מחר", TODAY).dateIso).toBe("2026-06-21");
+    expect(extractCancelRef("בטל את הפגישה מחרתיים", TODAY).dateIso).toBe("2026-06-22");
+    expect(extractCancelRef("בטל מחר", TODAY).titleHint).toBeUndefined();
+  });
+
+  it("resolves a weekday to its NEXT occurrence (ביום ראשון from a Saturday → tomorrow)", () => {
+    expect(extractCancelRef("בטל את הפגישה ביום ראשון", TODAY).dateIso).toBe("2026-06-21");
+  });
+
+  it("yields nothing matchable for a bare/stopword-only reference", () => {
+    expect(extractCancelRef("בטל את", TODAY)).toEqual({});
+  });
+
+  it("F1: a stopword-only 'בטל את' matches NOTHING — no findEventsByRef, no delete", async () => {
+    const { deps, sendText, events } = makeDeps();
+    await handleInbound({ ...textMsg, text: "בטל את" }, deps);
+    expect(events.findEventsByRef).not.toHaveBeenCalled();
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
+  });
+
+  it("F2: a date-bearing cancel passes the resolved date to findEventsByRef", async () => {
+    const { deps, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([]);
+    await handleInbound({ ...textMsg, text: "בטל את הפגישה מחר" }, deps);
+    expect(events.findEventsByRef).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({ dateIso: "2026-06-21" }),
+    );
   });
 });

@@ -198,3 +198,18 @@ describe("EventStore (in-memory SQLite)", () => {
     });
   });
 });
+
+describe("findEventsByRef — LIKE wildcard escaping (#125/F3)", () => {
+  it("treats % / _ in the title hint as literals, not wildcards", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent({ ...event, title_he: "5000 שקל" }, { fromPhone: "9725", waMessageId: "a" });
+    store.saveEvent(
+      { ...event, title_he: "מבצע 50% הנחה" },
+      { fromPhone: "9725", waMessageId: "b" },
+    );
+    // unescaped, "50%" → LIKE %50%% would also catch "5000 שקל"; escaped, only the literal "50%" matches.
+    const found = store.findEventsByRef(FAMILY_ID, { titleHint: "50%" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.title_he).toContain("50%");
+  });
+});

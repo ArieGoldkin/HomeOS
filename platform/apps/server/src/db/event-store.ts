@@ -108,13 +108,15 @@ export function createEventStore(dbPath: string): EventStore {
   // provider-derived row even if the id matches.
   const deleteByIdStmt = db.prepare("DELETE FROM events WHERE id = ? AND source_provider IS NULL;");
   // #85: each ref field is "null OR matches" so one prepared statement handles any subset; the title is
-  // a substring (LIKE %hint%). Newest-first, cap 5, no ranking — the handler disambiguates N>1.
+  // a substring (LIKE %hint%). The caller escapes the hint's LIKE metacharacters (%/_/\) and we declare
+  // ESCAPE '\' so a literal '%' in a title can't broaden a DESTRUCTIVE match (#125/F3). Newest-first,
+  // cap 5, no ranking — the handler disambiguates N>1.
   const findByRefStmt = db.prepare(
     `SELECT * FROM events
      WHERE source_provider IS NULL
        AND (? IS NULL OR date_iso = ?)
        AND (? IS NULL OR time = ?)
-       AND (? IS NULL OR title_he LIKE ?)
+       AND (? IS NULL OR title_he LIKE ? ESCAPE '\\')
      ORDER BY id DESC
      LIMIT 5;`,
   );
@@ -155,7 +157,8 @@ export function createEventStore(dbPath: string): EventStore {
       return Number(deleteByIdStmt.run(id).changes);
     },
     findEventsByRef(_familyId, ref) {
-      const titleLike = ref.titleHint ? `%${ref.titleHint}%` : null;
+      // Escape LIKE metacharacters so a hint like "50%" matches literally, not as a wildcard (#125/F3).
+      const titleLike = ref.titleHint ? `%${ref.titleHint.replace(/[\\%_]/g, "\\$&")}%` : null;
       const rows = findByRefStmt.all(
         ref.dateIso ?? null,
         ref.dateIso ?? null,
