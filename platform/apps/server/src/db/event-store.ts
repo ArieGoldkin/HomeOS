@@ -35,6 +35,20 @@ export interface EventStore {
   countSince(sinceIso: string): number;
   /** Purge every row tagged with `provider` — the disconnect deletion seam (#61/MF5). Returns the count. */
   deleteByProvider(provider: string): number;
+  /**
+   * #85 — delete ONE board row by id. FAMILY-scoped (`source_provider IS NULL` only: a board row, never a
+   * gcal/gmail-derived row); `familyId` is the reserved Phase-8 contract. Returns the count (0 or 1).
+   */
+  deleteById(id: number, familyId: string): number;
+  /**
+   * #85 — FAMILY-scoped reference lookup for `בטל <ref>` (board rows only, `source_provider IS NULL`).
+   * ANDs the provided fields (date_iso = / time = / title_he LIKE %hint%), newest-first (ORDER BY id DESC),
+   * capped at 5 with NO speculative ranking — N>1 goes to a disambiguation thread. `familyId` is reserved.
+   */
+  findEventsByRef(
+    familyId: string,
+    ref: { dateIso?: string; time?: string; titleHint?: string },
+  ): SavedEvent[];
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -90,6 +104,20 @@ export function createEventStore(dbPath: string): EventStore {
   );
   const countSinceStmt = db.prepare("SELECT COUNT(*) AS c FROM events WHERE created_at >= ?;");
   const deleteByProviderStmt = db.prepare("DELETE FROM events WHERE source_provider = ?;");
+  // #85: family-scoped = board rows only (source_provider IS NULL). Delete by id never touches a
+  // provider-derived row even if the id matches.
+  const deleteByIdStmt = db.prepare("DELETE FROM events WHERE id = ? AND source_provider IS NULL;");
+  // #85: each ref field is "null OR matches" so one prepared statement handles any subset; the title is
+  // a substring (LIKE %hint%). Newest-first, cap 5, no ranking — the handler disambiguates N>1.
+  const findByRefStmt = db.prepare(
+    `SELECT * FROM events
+     WHERE source_provider IS NULL
+       AND (? IS NULL OR date_iso = ?)
+       AND (? IS NULL OR time = ?)
+       AND (? IS NULL OR title_he LIKE ?)
+     ORDER BY id DESC
+     LIMIT 5;`,
+  );
 
   return {
     saveEvent(event, meta) {
@@ -121,6 +149,22 @@ export function createEventStore(dbPath: string): EventStore {
     },
     deleteByProvider(provider) {
       return Number(deleteByProviderStmt.run(provider).changes);
+    },
+    deleteById(id, _familyId) {
+      // _familyId is the reserved contract — family-scope today is "board rows only" (above).
+      return Number(deleteByIdStmt.run(id).changes);
+    },
+    findEventsByRef(_familyId, ref) {
+      const titleLike = ref.titleHint ? `%${ref.titleHint}%` : null;
+      const rows = findByRefStmt.all(
+        ref.dateIso ?? null,
+        ref.dateIso ?? null,
+        ref.time ?? null,
+        ref.time ?? null,
+        titleLike,
+        titleLike,
+      ) as unknown as EventRow[];
+      return rows.map(rowToSaved);
     },
   };
 }

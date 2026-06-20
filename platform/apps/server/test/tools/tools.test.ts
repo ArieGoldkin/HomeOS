@@ -7,6 +7,7 @@ import type { CalendarEvent, CalendarWriteEvent } from "../../src/google/calenda
 import {
   buildGmailQuery,
   type CalendarToolDeps,
+  deleteFromCalendar,
   extractEventsTool,
   type GmailToolDeps,
   mapCalendarEvent,
@@ -44,6 +45,8 @@ function makeStore() {
     deleteLastFromSender: vi.fn(() => 0),
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn(() => []),
   } as unknown as EventStore;
   return { store, saveEvent };
 }
@@ -367,6 +370,7 @@ function makeCalendar(over: Record<string, unknown> = {}): CalendarToolDeps {
       findEventIdByPrivateProp: vi.fn(async () => null),
       insertEvent: vi.fn(async () => ({ id: "gcal-new" })),
       patchEvent: vi.fn(async () => ({ id: "gcal-patched" })),
+      deleteEvent: vi.fn(async () => {}),
     },
     oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
     credentials: {
@@ -561,5 +565,56 @@ describe("pushSavedEventsToCalendar (#18 chunk 2 auto-push)", () => {
     });
     const out = await pushSavedEventsToCalendar([boardSaved, second], calendar, "default");
     expect(out.pushed).toBe(1); // the second event still pushed; the first failed without throwing
+  });
+});
+
+describe("deleteFromCalendar (#85 best-effort, idempotent Google delete)", () => {
+  it("resolves the Google id by homeosEventId and deletes it", async () => {
+    const calendar = makeCalendar({
+      client: {
+        list: vi.fn(),
+        findEventIdByPrivateProp: vi.fn(async () => "gcal-7"),
+        insertEvent: vi.fn(),
+        patchEvent: vi.fn(),
+        deleteEvent: vi.fn(async () => {}),
+      },
+    });
+    await deleteFromCalendar(7, calendar, "default");
+    expect(calendar.client.findEventIdByPrivateProp).toHaveBeenCalledWith(
+      "acc",
+      "primary",
+      "homeosEventId",
+      "7",
+    );
+    expect(calendar.client.deleteEvent).toHaveBeenCalledWith("acc", "primary", "gcal-7");
+  });
+
+  it("does nothing when no Google event matches (id null)", async () => {
+    const calendar = makeCalendar(); // findEventIdByPrivateProp → null
+    await deleteFromCalendar(7, calendar, "default");
+    expect(calendar.client.deleteEvent).not.toHaveBeenCalled();
+  });
+
+  it("never throws when the Google delete fails (best-effort)", async () => {
+    const calendar = makeCalendar({
+      client: {
+        list: vi.fn(),
+        findEventIdByPrivateProp: vi.fn(async () => "gcal-7"),
+        insertEvent: vi.fn(),
+        patchEvent: vi.fn(),
+        deleteEvent: vi.fn(async () => {
+          throw new Error("boom");
+        }),
+      },
+    });
+    await expect(deleteFromCalendar(7, calendar, "default")).resolves.toBeUndefined();
+  });
+
+  it("skips entirely when not connected (no stored credential)", async () => {
+    const calendar = makeCalendar({
+      credentials: { get: vi.fn(() => null), updateTokens: vi.fn(), delete: vi.fn() },
+    });
+    await deleteFromCalendar(7, calendar, "default");
+    expect(calendar.client.findEventIdByPrivateProp).not.toHaveBeenCalled();
   });
 });

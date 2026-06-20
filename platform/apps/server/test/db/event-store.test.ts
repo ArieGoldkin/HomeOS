@@ -1,6 +1,7 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it } from "vitest";
 import { createEventStore } from "../../src/db/event-store.ts";
+import { FAMILY_ID } from "../../src/db/schema.ts";
 
 const event: ParsedEvent = {
   kind: "event",
@@ -133,6 +134,67 @@ describe("EventStore (in-memory SQLite)", () => {
       store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.y" });
       expect(store.countSince("2000-01-01 00:00:00")).toBe(2);
       expect(store.countSince("2999-01-01 00:00:00")).toBe(0); // future cutoff → none
+    });
+  });
+
+  describe("cancel-by-reference seams (#85) — findEventsByRef + deleteById", () => {
+    it("matches board rows by time, newest-first, capped at 5, never a 'google' row", () => {
+      const store = createEventStore(":memory:");
+      // a provider-derived row at the same time must NEVER be returned (source_provider IS NULL only).
+      store.saveEvent(
+        { ...event, time: "15:30" },
+        { fromPhone: "9725", waMessageId: "g1", sourceProvider: "google" },
+      );
+      const ids: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        ids.push(
+          store.saveEvent({ ...event, time: "15:30" }, { fromPhone: "9725", waMessageId: `w${i}` })
+            .id,
+        );
+      }
+      const found = store.findEventsByRef(FAMILY_ID, { time: "15:30" });
+      expect(found).toHaveLength(5); // cap 5
+      expect(found.every((e) => e.source_provider === null)).toBe(true); // never google
+      expect(found[0]?.id).toBe(ids[5]); // newest first (ORDER BY id DESC)
+    });
+
+    it("ANDs the provided ref fields (titleHint substring + dateIso)", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(
+        { ...event, title_he: "פגישה עם הגננת", date_iso: "2026-06-21" },
+        { fromPhone: "9725", waMessageId: "a" },
+      );
+      store.saveEvent(
+        { ...event, title_he: "טיול שנתי", date_iso: "2026-06-21" },
+        { fromPhone: "9725", waMessageId: "b" },
+      );
+      const found = store.findEventsByRef(FAMILY_ID, { titleHint: "גננת", dateIso: "2026-06-21" });
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title_he).toBe("פגישה עם הגננת");
+    });
+
+    it("an empty ref returns the family's board rows (newest-first, cap 5)", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(event, { fromPhone: "9725", waMessageId: "x" });
+      expect(store.findEventsByRef(FAMILY_ID, {})).toHaveLength(1);
+    });
+
+    it("deleteById removes a board row (returns 1), never a 'google' row (returns 0)", () => {
+      const store = createEventStore(":memory:");
+      const board = store.saveEvent(event, { fromPhone: "9725", waMessageId: "b1" });
+      const google = store.saveEvent(event, {
+        fromPhone: "9725",
+        waMessageId: "g1",
+        sourceProvider: "google",
+      });
+      expect(store.deleteById(board.id, FAMILY_ID)).toBe(1);
+      expect(store.deleteById(google.id, FAMILY_ID)).toBe(0); // source_provider IS NULL only
+      expect(store.listEvents().map((e) => e.id)).toEqual([google.id]); // the google row is untouched
+    });
+
+    it("deleteById returns 0 for a nonexistent id (idempotent redelivery)", () => {
+      const store = createEventStore(":memory:");
+      expect(store.deleteById(999, FAMILY_ID)).toBe(0);
     });
   });
 });

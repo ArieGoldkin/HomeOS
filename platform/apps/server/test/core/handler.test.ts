@@ -80,6 +80,8 @@ function makeDeps(
     deleteLastFromSender: vi.fn((_from: string) => opts.cancelCount ?? 1),
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn((): SavedEvent[] => []),
   };
   // The handler depends on the agent; run() returns persisted SavedEvent[], a {clarify} arm (#84), or
   // null. The sync path is distinguished by opts.forceTool === "read_gmail" (3rd arg), so it can branch.
@@ -484,7 +486,7 @@ describe("handleInbound — #83 RESUME branch", () => {
     draft: sampleEvent,
   };
   function seed(store: ConversationStore, expiresAt: string) {
-    store.create({ fromPhone: textMsg.from, kind: "clarify", payload: clarifyPayload, expiresAt });
+    store.create({ fromPhone: textMsg.from, payload: clarifyPayload, expiresAt });
   }
 
   it("routes an answer to the resume (completes the draft + saves) and NEVER calls agent.run (G17)", async () => {
@@ -588,7 +590,6 @@ describe("handleInbound — #84 clarify resume (merge)", () => {
   function seedDateThread(store: ConversationStore) {
     store.create({
       fromPhone: textMsg.from,
-      kind: "clarify",
       payload: { kind: "clarify", reason: "missing_date", draft: dateDraft },
       expiresAt: "2026-06-20 12:00:00",
     });
@@ -657,7 +658,6 @@ describe("handleInbound — #84 clarify resume (merge)", () => {
     // a draft missing required slots is not a valid ParsedEvent → clarifyPayloadSchema rejects it.
     conversations.create({
       fromPhone: textMsg.from,
-      kind: "clarify",
       payload: {
         kind: "clarify",
         reason: "missing_date",
@@ -710,5 +710,89 @@ describe("processInbound (queue settle)", () => {
     await processInbound(textMsg, { ...deps, inbound } as ProcessDeps); // never throws
     expect(inbound.markDone).not.toHaveBeenCalled();
     expect(inbound.markFailed).not.toHaveBeenCalled(); // stays pending → boot-replay retries
+  });
+});
+
+// #85 (Milestone #8): cancel by reference — a deterministic route (no model call) with 0/1/N behavior
+// and a numbered disambiguation thread. Family-scoped + state-not-content + single-use resume.
+describe("handleInbound — #85 cancel by reference", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const cand = (id: number, title: string, time: string): SavedEvent => ({
+    ...sampleEvent,
+    id,
+    title_he: title,
+    time,
+    source_provider: null,
+  });
+
+  it("0 matches → 'not found', deletes nothing (state-not-content)", async () => {
+    const { deps, sendText, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([]);
+    await handleInbound({ ...textMsg, text: "בטל את הפגישה ב-3:30" }, deps);
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
+    expect(events.deleteById).not.toHaveBeenCalled();
+  });
+
+  it("1 match → deletes that board row and confirms בוטל ✓", async () => {
+    const { deps, sendText, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([cand(42, "פגישה", "15:30")]);
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "בטל פגישה" }, deps);
+    expect(events.deleteById).toHaveBeenCalledWith(42, "default");
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("בוטל ✓"));
+  });
+
+  it("N>1 matches → opens a numbered thread, deletes nothing yet (never auto-pick)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.findEventsByRef.mockReturnValue([cand(1, "פגישה", "15:30"), cand(2, "פגישה", "15:30")]);
+    await handleInbound({ ...textMsg, text: "בטל פגישה" }, deps);
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("איזה מהם");
+    const pending = conversations.getPending(textMsg.from, NOW);
+    expect(pending?.kind).toBe("cancel");
+    expect(JSON.parse(pending?.payload_json ?? "{}").candidateIds).toEqual([1, 2]);
+  });
+
+  it("resume: a numbered reply deletes exactly that candidate (single-use)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11, 22] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "2" }, deps);
+    expect(events.deleteById).toHaveBeenCalledWith(22, "default"); // index 2 → candidateIds[1]
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("בוטל ✓"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // resolved → redelivered '2' is a no-op
+  });
+
+  it("resume: a NON-index reply deletes nothing (G20)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11, 22] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    await handleInbound({ ...textMsg, text: "לא יודע" }, deps);
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
+  });
+
+  it("bare ביטול while a thread is open ABORTS it — no last-message undo (§2)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    await handleInbound({ ...textMsg, text: "ביטול" }, deps);
+    expect(events.deleteLastFromSender).not.toHaveBeenCalled(); // open op takes precedence
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // thread aborted
+    expect(sendText.mock.calls[0]?.[1]).toContain("ביטלתי");
   });
 });

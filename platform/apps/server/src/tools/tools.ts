@@ -417,3 +417,39 @@ export async function pushSavedEventsToCalendar(
   }
   return { pushed };
 }
+
+/**
+ * #85 — best-effort, idempotent removal of a board event's Google Calendar mirror (the delete sibling of
+ * pushSavedEventsToCalendar). Resolves the Google id via the `homeosEventId` private prop (NOT a cached
+ * column), deletes it, and NEVER throws: the board is the source of truth, so a token blip or a missing
+ * mirror must not fail the `בוטל ✓`. Not connected ⇒ no-op (G25).
+ */
+export async function deleteFromCalendar(
+  boardEventId: number,
+  deps: CalendarToolDeps,
+  familyId: string,
+  log?: (msg: string, meta?: Record<string, unknown>) => void,
+): Promise<void> {
+  let tok: Awaited<ReturnType<typeof getValidAccessToken>>;
+  try {
+    tok = await getValidAccessToken(familyId, deps);
+  } catch (err) {
+    log?.("calendar delete: token unavailable", { error: String(err) });
+    return;
+  }
+  if (tok.status !== "ok") return; // not connected → nothing to remove
+  try {
+    const gid = await deps.client.findEventIdByPrivateProp(
+      tok.token,
+      deps.calendarId,
+      "homeosEventId",
+      String(boardEventId),
+    );
+    if (gid) {
+      await deps.client.deleteEvent(tok.token, deps.calendarId, gid);
+      log?.("calendar delete: removed mirror", { boardEventId, gid });
+    }
+  } catch (err) {
+    log?.("calendar delete failed", { boardEventId, error: String(err) });
+  }
+}

@@ -214,3 +214,48 @@ describe("httpCalendarClient write (insert/patch/find, #18 chunk 2)", () => {
     ).rejects.toBeInstanceOf(CalendarApiError);
   });
 });
+
+describe("httpCalendarClient.deleteEvent (#85)", () => {
+  // A 204 carries no body; json() would throw — proving deleteEvent must NOT parse it.
+  const noContent = {
+    ok: true,
+    status: 204,
+    json: async () => {
+      throw new Error("204 has no body");
+    },
+  } as unknown as Response;
+
+  it("deletes on 204 without parsing a body (DELETE to /events/<id>)", async () => {
+    const fetchImpl = vi.fn(async () => noContent);
+    await expect(
+      httpCalendarClient(fetchImpl as unknown as typeof fetch).deleteEvent(TOKEN, "primary", "ev1"),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining("/events/ev1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("treats 404 and 410 as idempotent success (already gone)", async () => {
+    for (const status of [404, 410]) {
+      const fetchImpl = vi.fn(async () => errJson(status));
+      await expect(
+        httpCalendarClient(fetchImpl as unknown as typeof fetch).deleteEvent(TOKEN, "primary", "x"),
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it("maps 5xx to TransientError (retryable)", async () => {
+    const fetchImpl = vi.fn(async () => errJson(503));
+    await expect(
+      httpCalendarClient(fetchImpl as unknown as typeof fetch).deleteEvent(TOKEN, "primary", "x"),
+    ).rejects.toBeInstanceOf(TransientError);
+  });
+
+  it("maps other 4xx to CalendarApiError (permanent)", async () => {
+    const fetchImpl = vi.fn(async () => errJson(400, { error: { message: "bad" } }));
+    await expect(
+      httpCalendarClient(fetchImpl as unknown as typeof fetch).deleteEvent(TOKEN, "primary", "x"),
+    ).rejects.toBeInstanceOf(CalendarApiError);
+  });
+});
