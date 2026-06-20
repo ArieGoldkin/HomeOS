@@ -1,7 +1,8 @@
 import type { ParsedEvent } from "@homeos/shared";
+import type { ConversationStore } from "../db/conversation-store.ts";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
-import { FAMILY_ID } from "../db/schema.ts";
+import { type ConversationRow, FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
 import {
   type CalendarToolDeps,
@@ -13,7 +14,7 @@ import type { SendText } from "../whatsapp/client.ts";
 import type { Agent } from "./agent.ts";
 import { isAllowed } from "./allowlist.ts";
 import { TransientError } from "./errors.ts";
-import { jerusalemDayStartSqlite } from "./time.ts";
+import { jerusalemDayStartSqlite, sqliteUtc } from "./time.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
@@ -35,6 +36,12 @@ export interface HandlerDeps {
   calendar?: CalendarToolDeps;
   /** #18 chunk 2: auto-push forwarded board events to Google Calendar. Off (or no `calendar`) ⇒ read-only. */
   autoPushCalendar?: boolean;
+  /**
+   * #83 (Milestone #8) — bounded-conversation store. When wired, an open thread routes the sender's
+   * next message to the deterministic RESUME branch (clarify/cancel/edit) instead of `agent.run`.
+   * Optional so the branch is fully additive: unset ⇒ the handler behaves exactly as before.
+   */
+  conversations?: ConversationStore;
   /** Injectable clock (default: now) so date anchoring is testable. */
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
@@ -67,6 +74,8 @@ const CAL_NOT_CONNECTED_HE = "חשבון Google לא מחובר 🔌 כדי לס
 const SYNC_CAL_NONE_HE = "לא נמצאו אירועים חדשים ביומן 📭";
 /** A permanent Gmail failure (e.g. a 4xx on a revoked/scope-changed token) — the explicit סנכרן מייל command deserves a reply, not silence. */
 const SYNC_FAILED_HE = "הסנכרון נכשל 🙁 נסו שוב מאוחר יותר.";
+/** #83 echo stub: the clarify-resume acknowledgement. #84 replaces this with the merged-event confirm. */
+const RESUME_ACK_HE = "קיבלתי את התשובה ✓";
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
@@ -155,6 +164,36 @@ async function runSyncIntent(
 }
 
 /**
+ * Resume an open conversation thread (#83, Milestone #8 foundation). Routes the sender's next message
+ * to the deterministic resolution for the thread's `kind` — NEVER back through `agent.run` (G17: a
+ * clarify answer must not be re-parsed as a fresh forward, nor enter an auto agent turn). The thread is
+ * consumed up front (`resolve` DELETEs it — single-use, G24), so a Meta at-least-once redelivery finds
+ * nothing pending and falls through to the normal path. For #83 the `clarify` arm is a trivial ECHO
+ * STUB that proves ask→wait→resume end-to-end; #84 replaces it with the slot-merge + re-validation,
+ * and #85/#86 add the `cancel`/`edit` arms.
+ */
+async function handleResume(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  row: ConversationRow,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  deps.conversations?.resolve(row.id); // single-use: consume the thread before doing the work (G24)
+  switch (row.kind) {
+    case "clarify":
+      log("resume clarify (echo stub)", { from: msg.from, id: row.id });
+      await deps.sendText(msg.from, RESUME_ACK_HE);
+      return;
+    default:
+      // cancel/edit threads can't be opened until #85/#86; resolve defensively and ask to rephrase
+      // rather than silently drop an answer to a thread this version doesn't yet know how to resume.
+      log("resume — unimplemented kind", { from: msg.from, id: row.id, kind: row.kind });
+      await deps.sendText(msg.from, REPHRASE_HE);
+      return;
+  }
+}
+
+/**
  * M2 inbound handling: allowlist gate → parse (Claude) → persist → Hebrew confirm.
  * Voice/media is deferred to M2b, so non-text messages get a friendly "text only" reply.
  * Dedupe + durability now live in the inbound queue (the message is persisted before the
@@ -193,6 +232,21 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   }
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
+
+  // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): it sits AFTER the allowlist + G16
+  // rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open thread,
+  // their next message is an ANSWER → route it to the deterministic resume, never re-parse it as a
+  // fresh forward (G17). Sweep stale rows first (G24 boot+per-inbound) so an expired question never
+  // resumes. Inert unless `conversations` is wired, so the branch is fully additive.
+  if (deps.conversations) {
+    const nowSqlite = sqliteUtc((deps.now ?? (() => new Date()))());
+    deps.conversations.expireStale(nowSqlite);
+    const pending = deps.conversations.getPending(msg.from, nowSqlite);
+    if (pending) {
+      await handleResume(deps, msg, pending);
+      return;
+    }
+  }
 
   // Undo: a bare "ביטול" removes the sender's last message's events — caught before parse so it's
   // never sent to Claude. The confirm (with the resolved Hebrew date) is what makes a misparse

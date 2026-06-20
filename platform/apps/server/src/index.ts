@@ -6,6 +6,8 @@ import { loadConfig } from "./config.ts";
 import { anthropicCallModel, createAgent } from "./core/agent.ts";
 import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler.ts";
+import { sqliteUtc } from "./core/time.ts";
+import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
@@ -34,6 +36,10 @@ const log = (msg: string, meta?: Record<string, unknown>) =>
 const wa = createWhatsAppClient(config);
 const events = createEventStore(config.dbPath);
 const inbound = createInboundStore(config.dbPath);
+// 💬 Bounded-conversation store (#83, Milestone #8): opens its own connection on the same family DB
+// file. The constructor creates the table (CREATE TABLE IF NOT EXISTS) + the one-thread-per-sender
+// index; the boot `expireStale` below both sweeps stale threads and acts as a table-exists boot check.
+const conversations = createConversationStore(config.dbPath);
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 
@@ -92,6 +98,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     events,
     sendText: wa.sendText,
     inbound,
+    conversations,
     members: config.members,
     maxPerSenderPerDay: config.maxPerSenderPerDay,
     google: gmailDeps,
@@ -113,6 +120,12 @@ const serverDeps: ServerDeps = {
 // Assigned (not a `:` pair) to sidestep the secret-scanner on the *Token key.
 serverDeps.writeToken = config.writeToken;
 const app = createServer(serverDeps);
+
+// 💬 Boot sweep (#83/G24): drop conversation threads that expired while the process was down, so a
+// stale "do you mean A or B?" never resumes after a redeploy. This also fails loud at boot (not at the
+// first inbound) if the conversations table is somehow unusable — the table-exists boot assertion.
+const sweptThreads = conversations.expireStale(sqliteUtc(new Date()));
+if (sweptThreads > 0) log("swept stale conversation threads on boot", { count: sweptThreads });
 
 // 🔁 Boot-replay: re-process anything persisted but never finished before the last shutdown
 // or crash (the ack-then-process window). Meta only retries non-2xx, so this is our safety net.
