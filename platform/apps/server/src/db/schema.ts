@@ -155,3 +155,43 @@ export interface OAuthStateRow {
   expires_at: string;
   created_at: string;
 }
+
+/**
+ * Bounded multi-turn conversation thread (#83, Milestone #8) — the "ask → wait → resume" primitive
+ * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 7 columns: the
+ * per-kind variant lives in one `payload_json` blob (NOT typed columns), and `status` is pinned to
+ * 'pending' because resolution DELETEs (single-use, like `oauth_state`) — only pending rows ever
+ * exist. `expires_at` (SQLite-UTC, injected clock) is the TTL, checked at READ time so a stale
+ * question never resumes. `kind`/`status` CHECKs keep the row well-formed at the DB layer.
+ */
+export const CREATE_CONVERSATIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS conversations (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_phone   TEXT    NOT NULL,
+    kind         TEXT    NOT NULL CHECK(kind IN ('clarify','cancel','edit')),
+    payload_json TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'pending' CHECK(status = 'pending'),
+    expires_at   TEXT    NOT NULL,
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+/**
+ * DB-layer enforcement of "at most ONE open thread per sender" — the SQLite analogue of
+ * `inbound_messages`' wa_message_id dedupe. Because resolution DELETEs, only pending rows exist, so a
+ * plain UNIQUE on `from_phone` suffices; `create` uses INSERT OR REPLACE to overwrite a prior thread.
+ */
+export const CREATE_CONVERSATIONS_INDEX = `
+  CREATE UNIQUE INDEX IF NOT EXISTS conversations_one_pending_per_sender
+    ON conversations(from_phone);
+`;
+
+export interface ConversationRow {
+  id: number;
+  from_phone: string;
+  kind: string;
+  payload_json: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
