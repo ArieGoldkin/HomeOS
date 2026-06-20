@@ -64,4 +64,14 @@ describe("AddItemForm", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     expect(onSubmit.mock.calls[0]?.[0].assignee).toBe("אמא");
   });
+
+  it("disables the submit button while submitting (double-submit guard)", () => {
+    render(<AddItemForm submitting onSubmit={() => {}} />);
+    expect(screen.getByRole("button", { name: "הוספה" })).toBeDisabled();
+  });
+
+  it("enables the submit button when not submitting", () => {
+    render(<AddItemForm onSubmit={() => {}} />);
+    expect(screen.getByRole("button", { name: "הוספה" })).toBeEnabled();
+  });
 });

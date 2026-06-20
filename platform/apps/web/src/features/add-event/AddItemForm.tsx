@@ -37,6 +37,8 @@ export interface AddItemFormProps {
   onSubmit: (event: ParsedEvent) => void;
   /** Called when the user cancels. */
   onCancel?: () => void;
+  /** When true, the submit button is disabled — the double-submit guard while a create is in flight. */
+  submitting?: boolean;
 }
 
 /**
@@ -45,7 +47,7 @@ export interface AddItemFormProps {
  * success, synthesizes source_text → emits a full ParsedEvent via `onSubmit`. Persistence is wired
  * separately (the useCreateEvent seam) — this form only validates + emits (#96).
  */
-export function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
+export function AddItemForm({ onSubmit, onCancel, submitting }: AddItemFormProps) {
   const {
     register,
     handleSubmit,
@@ -149,7 +151,7 @@ export function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
       </fieldset>
 
       <div className="mt-2 flex gap-3">
-        <Button type="submit" variant="primary" className="flex-1">
+        <Button type="submit" variant="primary" className="flex-1" disabled={submitting}>
           הוספה
         </Button>
         {onCancel && (

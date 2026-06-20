@@ -1,4 +1,5 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { parsedEventSchema } from "@homeos/shared";
 import { Hono } from "hono";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
@@ -24,6 +25,9 @@ export interface ServerDeps {
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
   google?: GoogleOAuthDeps;
+  /** Bearer token gating POST /events (the web/phone write seam). Undefined ⇒ disabled (503). A
+   *  DISTINCT credential from the read token — never falls back to it (a read-only deploy can't mutate). */
+  writeToken?: string;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
@@ -63,6 +67,31 @@ export function createServer(deps: ServerDeps): Hono {
       (a, b) => a.date_iso.localeCompare(b.date_iso) || (a.time ?? "").localeCompare(b.time ?? ""),
     );
     return c.json({ events });
+  });
+
+  // The web/phone write seam backing the client createEvent contract. Gated by a DISTINCT write token
+  // (never the read token) so the read-only kiosk can't mutate. A manual add has no WhatsApp message,
+  // so synthesize a unique `web:<uuid>` key and reuse saveEvent verbatim (sourceProvider omitted →
+  // source_provider null, calendar-pushable like a forward). Returns the SINGLE SavedEvent (bare row,
+  // NOT {events}-wrapped) so the client's savedEventSchema.parse of one row succeeds.
+  app.post("/events", async (c) => {
+    if (deps.writeToken === undefined) return c.text("Write API disabled", 503);
+    if (!bearerMatches(c.req.header("authorization"), deps.writeToken)) {
+      return c.text("Unauthorized", 401);
+    }
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.text("Invalid JSON", 400);
+    }
+    const parsed = parsedEventSchema.safeParse(body);
+    if (!parsed.success) return c.text("Invalid event", 400);
+    const saved = deps.events.saveEvent(parsed.data, {
+      fromPhone: "web",
+      waMessageId: `web:${randomUUID()}`,
+    });
+    return c.json(saved, 201);
   });
 
   app.get("/webhook", (c) => {
