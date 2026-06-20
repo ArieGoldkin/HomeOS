@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { clarifyReasonSchema, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { z } from "zod/v4";
+import type { EventPatch } from "./event-store.ts";
 import {
   type ConversationRow,
   CREATE_CONVERSATIONS_INDEX,
@@ -26,7 +27,8 @@ export type ConversationKind = "clarify" | "cancel" | "edit";
  */
 export type ConversationPayload =
   | { kind: "clarify"; reason: string; draft: ParsedEvent }
-  | { kind: "cancel"; candidateIds: number[] };
+  | { kind: "cancel"; candidateIds: number[] }
+  | { kind: "edit"; candidateIds: number[]; patch: EventPatch };
 
 /**
  * #84/F3 — runtime guard for a persisted clarify payload before it drives a write. The DB row is
@@ -47,6 +49,29 @@ export const clarifyPayloadSchema = z.object({
 export const cancelPayloadSchema = z.object({
   kind: z.literal("cancel"),
   candidateIds: z.array(z.number().int()).min(1).max(5),
+});
+
+/** The fields an edit/correction may change — a partial of the relevant ParsedEvent fields (#86). */
+const eventPatchSchema = parsedEventSchema
+  .pick({
+    date_iso: true,
+    time: true,
+    location: true,
+    title_he: true,
+    assignee: true,
+    recurrence: true,
+  })
+  .partial();
+
+/**
+ * #86/F3 — runtime guard for a persisted `edit` disambiguation payload. `candidateIds` are the board
+ * rows offered; `patch` is the held field delta re-applied on the picked index. A corrupt/stale blob
+ * degrades to "rephrase" rather than writing garbage.
+ */
+export const editPayloadSchema = z.object({
+  kind: z.literal("edit"),
+  candidateIds: z.array(z.number().int()).min(1).max(5),
+  patch: eventPatchSchema,
 });
 
 /**

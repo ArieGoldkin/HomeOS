@@ -88,6 +88,7 @@ function makeApp(
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
+    updateEvent: vi.fn(() => null),
   };
   const deps: ServerDeps = {
     verifyToken: "secret",

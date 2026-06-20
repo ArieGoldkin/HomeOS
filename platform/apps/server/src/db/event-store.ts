@@ -1,8 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import type { ParsedEvent } from "@homeos/shared";
+import { type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { ADD_EVENTS_SOURCE_PROVIDER, CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
+
+/** #86 — the fields a `שנה <ref>` / correction may change in place. A subset of ParsedEvent; merged
+ *  onto the target row and re-validated (G20) before the write. */
+export type EventPatch = Partial<
+  Pick<ParsedEvent, "date_iso" | "time" | "location" | "title_he" | "assignee" | "recurrence">
+>;
 
 // node:sqlite is a newer builtin that bundlers (Vite/Vitest) don't externalize cleanly;
 // loading it via createRequire keeps it a runtime resolution Node handles directly.
@@ -49,6 +55,13 @@ export interface EventStore {
     familyId: string,
     ref: { dateIso?: string; time?: string; titleHint?: string },
   ): SavedEvent[];
+  /**
+   * #86 — edit a board row in place. FAMILY-scoped (`source_provider IS NULL` only: a synced gcal/gmail
+   * row is NEVER written, preventing a read→write loop). Merges `patch` onto the row, re-validates the
+   * MERGED row via `parsedEventSchema` BEFORE the write (G20), and returns the updated `SavedEvent` — or
+   * null if the target isn't a board row or the merge is invalid (no write happens).
+   */
+  updateEvent(id: number, patch: EventPatch, familyId: string): SavedEvent | null;
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -107,6 +120,18 @@ export function createEventStore(dbPath: string): EventStore {
   // #85: family-scoped = board rows only (source_provider IS NULL). Delete by id never touches a
   // provider-derived row even if the id matches.
   const deleteByIdStmt = db.prepare("DELETE FROM events WHERE id = ? AND source_provider IS NULL;");
+  // #86: read the target board row (never a synced row), then write the re-validated merge back. Both
+  // statements are scoped `source_provider IS NULL` so a gcal/gmail row is never read OR written here.
+  const selectBoardByIdStmt = db.prepare(
+    "SELECT * FROM events WHERE id = ? AND source_provider IS NULL;",
+  );
+  const updateByIdStmt = db.prepare(
+    `UPDATE events
+       SET kind = ?, title_he = ?, date_iso = ?, time = ?, location = ?, assignee = ?,
+           recurrence_freq = ?, recurrence_weekday = ?
+     WHERE id = ? AND source_provider IS NULL
+     RETURNING *;`,
+  );
   // #85: each ref field is "null OR matches" so one prepared statement handles any subset; the title is
   // a substring (LIKE %hint%). The caller escapes the hint's LIKE metacharacters (%/_/\) and we declare
   // ESCAPE '\' so a literal '%' in a title can't broaden a DESTRUCTIVE match (#125/F3). Newest-first,
@@ -168,6 +193,27 @@ export function createEventStore(dbPath: string): EventStore {
         titleLike,
       ) as unknown as EventRow[];
       return rows.map(rowToSaved);
+    },
+    updateEvent(id, patch, _familyId) {
+      const row = selectBoardByIdStmt.get(id) as unknown as EventRow | undefined;
+      if (!row) return null; // not a board row (synced / nonexistent) → no write
+      // Merge the patch onto the current row, then re-validate the WHOLE candidate (G20). zod strips
+      // the `id`/`source_provider` extras; an invalid field (e.g. a bad date) fails → null, no write.
+      const parsed = parsedEventSchema.safeParse({ ...rowToSaved(row), ...patch });
+      if (!parsed.success) return null;
+      const e = parsed.data;
+      const updated = updateByIdStmt.get(
+        e.kind,
+        e.title_he,
+        e.date_iso,
+        e.time,
+        e.location,
+        e.assignee,
+        e.recurrence?.freq ?? null,
+        e.recurrence?.weekday ?? null,
+        id,
+      ) as unknown as EventRow;
+      return rowToSaved(updated);
     },
   };
 }
