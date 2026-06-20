@@ -41,6 +41,7 @@ function harness(over: Partial<GoogleOAuthDeps> = {}) {
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
+    updateEvent: vi.fn(() => null),
   };
   const deps: GoogleOAuthDeps = {
     client,

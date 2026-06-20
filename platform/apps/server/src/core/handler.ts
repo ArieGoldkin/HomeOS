@@ -8,8 +8,9 @@ import {
   type ConversationStore,
   cancelPayloadSchema,
   clarifyPayloadSchema,
+  editPayloadSchema,
 } from "../db/conversation-store.ts";
-import type { EventStore, SavedEvent } from "../db/event-store.ts";
+import type { EventPatch, EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../db/schema.ts";
 import type { InboundMessage } from "../http/webhook.ts";
@@ -115,6 +116,17 @@ const CANCEL_NOT_FOUND_HE = "לא מצאתי אירוע כזה 🤷 נסו עם 
 const CANCEL_WHICH_HE = "איזה מהם לבטל? השב/י במספר:";
 /** #85 — bare "ביטול" while a thread is open ABORTS the thread (it never falls through to the undo). */
 const ABORT_THREAD_HE = "בסדר, ביטלתי 👍";
+/**
+ * #86 edit-in-place: explicit "שנה/ערוך/תקן/עדכן <ref> <delta>" (deterministic, NO model call). The
+ * CORRECTION variant ("לא ב-28, ב-21") fires only INSIDE an open thread (G21). The field delta comes
+ * from a FIXED vocabulary (ל-HH:MM/לשעה→time, למיקום/לכתובת→location, ל-DD→day-of-month) — no open domain.
+ */
+const EDIT_REF_RE = /^(שנה|ערוך|תקן|עדכן)\s+\S+/u;
+const CORRECTION_RE = /^לא,?\s+(ב-|ה-|בשעה|במיקום)/u;
+const EDIT_TIME_RE = /ל(?:שעה\s*)?-?\s*(\d{1,2}):(\d{2})/u;
+const EDIT_LOCATION_RE = /ל(?:מיקום|כתובת)\s+(.+)$/u;
+const EDIT_DAY_RE = /ל-?(\d{1,2})(?![:\d])/u;
+const EDIT_SYNCED_HE = "אי אפשר לערוך אירוע שמסונכרן מהיומן 🔒";
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
@@ -227,9 +239,11 @@ async function handleResume(
       return resumeClarify(deps, msg, row);
     case "cancel":
       return resumeCancel(deps, msg, row);
+    case "edit":
+      return resumeEdit(deps, msg, row);
     default:
-      // 'edit' threads can't be opened until #86; consume defensively and ask to rephrase rather than
-      // silently drop an answer to a thread this version doesn't yet know how to resume.
+      // an unknown/forward-incompatible kind: consume defensively and ask to rephrase rather than
+      // silently drop an answer to a thread this version doesn't know how to resume.
       deps.conversations?.resolve(row.id);
       log("resume — unimplemented kind", { from: msg.from, id: row.id, kind: row.kind });
       await deps.sendText(msg.from, REPHRASE_HE);
@@ -348,6 +362,17 @@ function weekdayOfIso(iso: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
+/** #86 — does the text carry a date/time signal (weekday / relative-date / HH:MM / D.M)? A "לא …" that
+ *  isn't a field correction but DOES carry one is a real new forward, not a thread non-answer. */
+function hasScheduleSignal(text: string): boolean {
+  return (
+    WEEKDAY_RE.test(text) ||
+    /(?<!\p{L})(?:היום|מחר|מחרתיים)(?!\p{L})/u.test(text) ||
+    TIME_RE.test(text) ||
+    /\d{1,2}[./]\d{1,2}/u.test(text)
+  );
+}
+
 /**
  * #85 — extract a cancel REFERENCE server-side (NO model call): strip the verb, then pull an explicit
  * time (HH:MM, hour zero-padded), a relative Hebrew DATE (היום/מחר/מחרתיים or a weekday → its next
@@ -443,6 +468,156 @@ async function resumeCancel(
     return;
   }
   await cancelOne(deps, msg, id);
+}
+
+/**
+ * #86 — extract an explicit-edit REFERENCE + a field DELTA from a fixed vocabulary (server-side, NO
+ * model call). Returns null when no recognized delta is present, so "שנה X" without a `ל-<field>` is a
+ * miss (not a no-op write). "ל-DD" resolves to that day of TODAY's month (cross-month is a #87 item).
+ */
+function extractEditDelta(
+  text: string,
+  todayIso: string,
+): { ref: { dateIso?: string; time?: string; titleHint?: string }; patch: EventPatch } | null {
+  let rest = text.replace(/^(שנה|ערוך|תקן|עדכן)\s+/u, "");
+  const patch: EventPatch = {};
+  const loc = EDIT_LOCATION_RE.exec(rest);
+  if (loc?.[1]) {
+    patch.location = sanitizeUserText(loc[1].trim());
+    rest = rest.replace(EDIT_LOCATION_RE, " ");
+  }
+  const tm = EDIT_TIME_RE.exec(rest);
+  if (tm?.[1] && tm[2]) {
+    patch.time = `${String(Number(tm[1])).padStart(2, "0")}:${tm[2]}`;
+    rest = rest.replace(EDIT_TIME_RE, " ");
+  }
+  const dy = EDIT_DAY_RE.exec(rest);
+  if (dy?.[1]) {
+    patch.date_iso = `${todayIso.slice(0, 8)}${String(Number(dy[1])).padStart(2, "0")}`;
+    rest = rest.replace(EDIT_DAY_RE, " ");
+  }
+  if (Object.keys(patch).length === 0) return null;
+  return { ref: extractCancelRef(rest, todayIso), patch };
+}
+
+/**
+ * #86 — apply a patch to ONE board row by id: updateEvent re-validates the merge + enforces board-only
+ * (G20/G19), then best-effort Calendar patch (reusing the push helper's find(homeosEventId)→patch — no
+ * new client method), then "עודכן ✓" built SERVER-side from the updated row (G7). Null update → rephrase.
+ */
+async function applyPatchToId(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  id: number,
+  patch: EventPatch,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  const updated = deps.events.updateEvent(id, patch, FAMILY_ID);
+  if (!updated) {
+    await deps.sendText(msg.from, REPHRASE_HE); // synced row / invalid merge → no write happened
+    return;
+  }
+  if (deps.calendar) {
+    await pushSavedEventsToCalendar([updated], deps.calendar, FAMILY_ID, log); // G25 best-effort
+  }
+  log("edit applied", { from: msg.from, id: updated.id });
+  await deps.sendText(msg.from, `עודכן ✓\n${updated.title_he} · ${formatWhen(updated)}`);
+}
+
+/** #86 — the explicit 1-match edit: refuse a synced row up front (a read→write loop), else apply. */
+async function applyEdit(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidate: SavedEvent,
+  patch: EventPatch,
+): Promise<void> {
+  if (candidate.source_provider !== null) {
+    await deps.sendText(msg.from, EDIT_SYNCED_HE); // gcal/gmail row → refuse, NO write
+    return;
+  }
+  await applyPatchToId(deps, msg, candidate.id, patch);
+}
+
+/**
+ * #86 — resume an edit disambiguation: a numbered reply picks ONE candidate → apply the held patch
+ * (updateEvent enforces board-only, so a synced id can't be written). Non-index → no write. Single-use.
+ */
+async function resumeEdit(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  row: ConversationRow,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  deps.conversations?.resolve(row.id); // single-use (turn cap 1)
+  const parsed = editPayloadSchema.safeParse(safeJsonParse(row.payload_json));
+  if (!parsed.success) {
+    log("edit resume — invalid persisted payload", { from: msg.from, id: row.id });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const m = /^([1-5])$/.exec(msg.text?.trim() ?? "");
+  const id = m?.[1] ? parsed.data.candidateIds[Number(m[1]) - 1] : undefined;
+  if (id === undefined) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  await applyPatchToId(deps, msg, id, parsed.data.patch);
+}
+
+/**
+ * #86 — extract the NEW field value from a terse correction ("לא ב-28, ב-21" → day 21; "לא בשעה 4:00" →
+ * time; "לא במיקום X" → location). Takes the LAST value of each field (the ASSERTED one, after the
+ * negated one). Day resolves to today's month (#87: cross-month). Null when no field is present.
+ */
+function extractCorrectionDelta(text: string, todayIso: string): EventPatch | null {
+  const patch: EventPatch = {};
+  const loc = /במיקום\s+(.+)$/u.exec(text);
+  if (loc?.[1]) patch.location = sanitizeUserText(loc[1].trim());
+  const lastT = [...text.matchAll(/(\d{1,2}):(\d{2})/gu)].at(-1);
+  if (lastT?.[1] && lastT[2])
+    patch.time = `${String(Number(lastT[1])).padStart(2, "0")}:${lastT[2]}`;
+  const lastD = [...text.matchAll(/ב-?(\d{1,2})(?![:\d])/gu)].at(-1);
+  if (lastD?.[1])
+    patch.date_iso = `${todayIso.slice(0, 8)}${String(Number(lastD[1])).padStart(2, "0")}`;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * #86 CORRECTION (the live 2-reminder bug fix) — apply a terse "לא …" correction to the held CLARIFY
+ * draft IN PLACE (never a 2nd event): merge the new field value, re-validate, save + confirm. A clarify
+ * draft was never persisted, so completing it here is one save, not a duplicate. Single-use.
+ */
+async function applyCorrection(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  row: ConversationRow,
+  todayIso: string,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  deps.conversations?.resolve(row.id);
+  const parsed = clarifyPayloadSchema.safeParse(safeJsonParse(row.payload_json));
+  const delta = extractCorrectionDelta(msg.text?.trim() ?? "", todayIso);
+  // Corrections target a single held draft → clarify threads only; anything else degrades to rephrase.
+  if (!parsed.success || !delta) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const validated = parsedEventSchema.safeParse({
+    ...parsed.data.draft,
+    ...delta,
+    needs_clarification: undefined,
+  });
+  if (!validated.success) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const saved = deps.events.saveEvent(validated.data, { fromPhone: msg.from, waMessageId: msg.id });
+  log("correction applied", { from: msg.from, id: saved.id });
+  await deps.sendText(msg.from, formatConfirm([saved]));
+  if (deps.autoPushCalendar && deps.calendar) {
+    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, FAMILY_ID, log);
+    if (pushed > 0) log("auto-pushed correction", { id: msg.id, pushed });
+  }
 }
 
 /**
@@ -544,15 +719,29 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     const pending = deps.conversations.getPending(msg.from, nowSqlite);
     if (pending) {
       // Bare "ביטול" is the universal escape hatch: it ABORTS the open thread (resolve, NO undo) — the
-      // open op takes precedence over the last-message undo (§2). Any other message is the answer.
+      // open op takes precedence over the last-message undo (§2).
       if (text === CANCEL_TRIGGER) {
         deps.conversations.resolve(pending.id);
         log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
         await deps.sendText(msg.from, ABORT_THREAD_HE);
+        return;
+      }
+      // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
+      if (CORRECTION_RE.test(text)) {
+        await applyCorrection(deps, msg, pending, today);
+        return;
+      }
+      // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
+      // (e.g. "לא נשכח את יום ההולדת ביום שישי") is a NEW forward, not a thread answer — abort the thread
+      // and let it fall through to agent.run. A bare "לא יודע" (no schedule signal) is just a non-answer
+      // → handleResume (→ rephrase / re-parse). Any other message is the thread's answer → handleResume.
+      if (/^לא[\s,]/u.test(text) && hasScheduleSignal(text)) {
+        deps.conversations.resolve(pending.id);
+        log("non-correction 'לא' with a schedule signal → new forward", { from: msg.from });
       } else {
         await handleResume(deps, msg, pending);
+        return;
       }
-      return;
     }
   }
 
@@ -651,6 +840,48 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
       await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
     } else {
       await deps.sendText(msg.from, REPHRASE_HE); // no store wired → can't disambiguate
+    }
+    return;
+  }
+
+  // #86 EXPLICIT EDIT: "שנה/ערוך/תקן/עדכן <ref> ל-<field>" — deterministic (NO model call). Needs a
+  // recognized field delta AND a specific reference; 0 (לא מצאתי) | 1 (apply, refusing a synced row) |
+  // N>1 (numbered kind='edit' thread holding the patch). Same family/state-not-content guards as cancel.
+  if (EDIT_REF_RE.test(text)) {
+    const edit = extractEditDelta(text, today);
+    const ref = edit?.ref;
+    const specific = Boolean(
+      ref?.time || ref?.dateIso || (ref?.titleHint && ref.titleHint.length >= 2),
+    );
+    if (!edit || !specific) {
+      await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+      return;
+    }
+    const candidates = deps.events.findEventsByRef(FAMILY_ID, edit.ref);
+    if (candidates.length === 0) {
+      await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+      return;
+    }
+    if (candidates.length === 1) {
+      await applyEdit(deps, msg, candidates[0]!, edit.patch);
+      return;
+    }
+    if (deps.conversations) {
+      const list = candidates
+        .map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`)
+        .join("\n");
+      const expiresAt = sqliteUtc(
+        new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
+      );
+      deps.conversations.create({
+        fromPhone: msg.from,
+        payload: { kind: "edit", candidateIds: candidates.map((e) => e.id), patch: edit.patch },
+        expiresAt,
+      });
+      log("edit disambiguation opened", { from: msg.from, count: candidates.length });
+      await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
+    } else {
+      await deps.sendText(msg.from, REPHRASE_HE);
     }
     return;
   }

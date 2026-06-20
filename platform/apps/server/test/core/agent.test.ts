@@ -50,6 +50,7 @@ function makeStore() {
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
+    updateEvent: vi.fn(() => null),
   } as unknown as EventStore;
 }
 

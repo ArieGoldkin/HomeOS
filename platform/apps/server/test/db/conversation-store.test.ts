@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ConversationPayload,
   createConversationStore,
+  editPayloadSchema,
 } from "../../src/db/conversation-store.ts";
 
 const draft: ParsedEvent = {
@@ -106,5 +107,28 @@ describe("ConversationStore", () => {
     expect(swept).toBe(1);
     expect(store.getPending(A, "2026-06-20 12:05:00")).toBeNull(); // A deleted outright
     expect(store.getPending(B, "2026-06-20 12:30:00")).not.toBeNull(); // B survives
+  });
+});
+
+describe("editPayloadSchema + create derives kind (#86)", () => {
+  it("validates an edit payload and rejects a bad patch field", () => {
+    expect(
+      editPayloadSchema.safeParse({ kind: "edit", candidateIds: [1, 2], patch: { time: "16:00" } })
+        .success,
+    ).toBe(true);
+    expect(
+      editPayloadSchema.safeParse({ kind: "edit", candidateIds: [1], patch: { date_iso: "nope" } })
+        .success,
+    ).toBe(false);
+  });
+
+  it("create() derives the row kind from the edit payload's discriminant", () => {
+    const store = createConversationStore(":memory:");
+    const row = store.create({
+      fromPhone: "972500000009",
+      payload: { kind: "edit", candidateIds: [7], patch: { time: "18:00" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    expect(row.kind).toBe("edit");
   });
 });

@@ -213,3 +213,41 @@ describe("findEventsByRef — LIKE wildcard escaping (#125/F3)", () => {
     expect(found[0]?.title_he).toContain("50%");
   });
 });
+
+describe("updateEvent (#86 edit in place)", () => {
+  it("applies a patch to a board row, re-validates, and returns the updated event", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(
+      { ...event, time: "16:00" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    const updated = store.updateEvent(saved.id, { time: "18:00", location: "בית הספר" }, FAMILY_ID);
+    expect(updated?.time).toBe("18:00");
+    expect(updated?.location).toBe("בית הספר");
+    expect(updated?.title_he).toBe(event.title_he); // unchanged fields preserved
+    expect(store.listEvents()[0]?.time).toBe("18:00"); // persisted
+  });
+
+  it("never updates a 'google' row (returns null, no write)", () => {
+    const store = createEventStore(":memory:");
+    const g = store.saveEvent(event, {
+      fromPhone: "9725",
+      waMessageId: "g",
+      sourceProvider: "google",
+    });
+    expect(store.updateEvent(g.id, { time: "09:00" }, FAMILY_ID)).toBeNull();
+    expect(store.listEvents()[0]?.time).toBe("18:30"); // untouched
+  });
+
+  it("returns null when the merged row fails validation (no write)", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "a" });
+    expect(store.updateEvent(saved.id, { date_iso: "not-a-date" }, FAMILY_ID)).toBeNull();
+    expect(store.listEvents()[0]?.date_iso).toBe("2026-06-20"); // unchanged
+  });
+
+  it("returns null for a nonexistent id", () => {
+    const store = createEventStore(":memory:");
+    expect(store.updateEvent(999, { time: "09:00" }, FAMILY_ID)).toBeNull();
+  });
+});
