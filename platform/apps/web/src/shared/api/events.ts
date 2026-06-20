@@ -8,9 +8,9 @@ import {
 const API_BASE = import.meta.env.VITE_HOMEOS_API_BASE ?? "";
 const READ_TOKEN = import.meta.env.VITE_HOMEOS_READ_TOKEN ?? "";
 /**
- * Separate write token so read-only deployments can't mutate. Falls back to the read token
- * for local dev where a single token covers both. The server route for POST /events is not
- * built yet — this is the client seam only (issue #96).
+ * Separate write token so read-only deployments can't mutate. For local dev it falls back to the
+ * read token so one token works — but the server (PR #119) requires a DISTINCT write token and will
+ * not accept the read token for writes, so set VITE_HOMEOS_WRITE_TOKEN to match the server's value.
  */
 const WRITE_TOKEN =
   import.meta.env.VITE_HOMEOS_WRITE_TOKEN ?? import.meta.env.VITE_HOMEOS_READ_TOKEN ?? "";
@@ -33,9 +33,9 @@ export async function fetchEvents(signal?: AbortSignal): Promise<SavedEvent[]> {
 }
 
 /**
- * POST a newly-parsed event to the family board. The server route (`POST /events`) is not
- * built yet — this is the client-side contract seam only (issue #96). The write token falls
- * back to the read token so local dev works with a single `VITE_HOMEOS_READ_TOKEN`.
+ * POST a newly-parsed event to the family board via the server `POST /events` write seam (PR #119).
+ * The write token falls back to the read token for local dev, but the server requires a distinct
+ * write token and won't accept the read token for writes.
  *
  * Throws `Error("POST /events failed (<status>)")` on any non-2xx response.
  * Parses the server's single-row JSON response with `savedEventSchema` so shape drift
