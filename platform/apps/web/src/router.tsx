@@ -3,6 +3,8 @@ import { TabletBoard } from "@app/tablet";
 import { WebShell } from "@app/web";
 import { ConnectionsView } from "@features/connections";
 import { FamilyView } from "@features/family";
+import { WhatsAppIngestion } from "@features/ingestion";
+import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
 import { WebWeekView, WeekView } from "@features/week-view";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
@@ -83,6 +85,12 @@ function WebWeekScreen() {
 
 function WebFamilyScreen() {
   return <FamilyView columns={2} />;
+}
+
+// First-run onboarding (standalone, no shell). onDone enters the web board.
+function WelcomeScreen() {
+  const navigate = useNavigate();
+  return <Onboarding onDone={() => navigate({ to: "/web/today" })} />;
 }
 
 /**
@@ -193,6 +201,19 @@ function buildRouteTree() {
     component: SettingsView,
   });
 
+  // Standalone marketing surfaces (no shell chrome): first-run onboarding + the how-it-works demo.
+  const welcomeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/welcome",
+    component: WelcomeScreen,
+  });
+
+  const ingestionRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/ingestion",
+    component: WhatsAppIngestion,
+  });
+
   return rootRoute.addChildren([
     indexRoute,
     tokensRoute,
@@ -211,6 +232,8 @@ function buildRouteTree() {
       webConnectionsRoute,
       webSettingsRoute,
     ]),
+    welcomeRoute,
+    ingestionRoute,
   ]);
 }
 
