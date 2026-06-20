@@ -29,7 +29,6 @@ describe("ConversationStore", () => {
     const store = createConversationStore(":memory:");
     const created = store.create({
       fromPhone: A,
-      kind: "clarify",
       payload: clarifyPayload,
       expiresAt: EXPIRES_AT,
     });
@@ -44,10 +43,9 @@ describe("ConversationStore", () => {
 
   it("a second create for the same sender overwrites the prior pending row (one thread per sender)", () => {
     const store = createConversationStore(":memory:");
-    store.create({ fromPhone: A, kind: "clarify", payload: clarifyPayload, expiresAt: EXPIRES_AT });
+    store.create({ fromPhone: A, payload: clarifyPayload, expiresAt: EXPIRES_AT });
     const second = store.create({
       fromPhone: A,
-      kind: "clarify",
       payload: { ...clarifyPayload, reason: "missing_date" },
       expiresAt: EXPIRES_AT,
     });
@@ -59,8 +57,8 @@ describe("ConversationStore", () => {
 
   it("two senders hold independent threads", () => {
     const store = createConversationStore(":memory:");
-    store.create({ fromPhone: A, kind: "clarify", payload: clarifyPayload, expiresAt: EXPIRES_AT });
-    store.create({ fromPhone: B, kind: "clarify", payload: clarifyPayload, expiresAt: EXPIRES_AT });
+    store.create({ fromPhone: A, payload: clarifyPayload, expiresAt: EXPIRES_AT });
+    store.create({ fromPhone: B, payload: clarifyPayload, expiresAt: EXPIRES_AT });
 
     const a = store.getPending(A, BEFORE);
     expect(a).not.toBeNull();
@@ -73,7 +71,7 @@ describe("ConversationStore", () => {
 
   it("getPending returns null for an expired row (TTL checked at read, row still present)", () => {
     const store = createConversationStore(":memory:");
-    store.create({ fromPhone: A, kind: "clarify", payload: clarifyPayload, expiresAt: EXPIRES_AT });
+    store.create({ fromPhone: A, payload: clarifyPayload, expiresAt: EXPIRES_AT });
     expect(store.getPending(A, AFTER)).toBeNull(); // now > expiresAt → invisible
     expect(store.getPending(A, BEFORE)).not.toBeNull(); // not swept, just hidden when expired
   });
@@ -82,7 +80,6 @@ describe("ConversationStore", () => {
     const store = createConversationStore(":memory:");
     const created = store.create({
       fromPhone: A,
-      kind: "clarify",
       payload: clarifyPayload,
       expiresAt: EXPIRES_AT,
     });
@@ -96,13 +93,11 @@ describe("ConversationStore", () => {
     const store = createConversationStore(":memory:");
     store.create({
       fromPhone: A,
-      kind: "clarify",
       payload: clarifyPayload,
       expiresAt: "2026-06-20 12:10:00",
     });
     store.create({
       fromPhone: B,
-      kind: "clarify",
       payload: clarifyPayload,
       expiresAt: "2026-06-20 13:00:00",
     });

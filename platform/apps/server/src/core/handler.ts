@@ -4,7 +4,11 @@ import {
   parsedEventSchema,
   sanitizeUserText,
 } from "@homeos/shared";
-import { type ConversationStore, clarifyPayloadSchema } from "../db/conversation-store.ts";
+import {
+  type ConversationStore,
+  cancelPayloadSchema,
+  clarifyPayloadSchema,
+} from "../db/conversation-store.ts";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../db/schema.ts";
@@ -13,6 +17,7 @@ import type { ParseMessage } from "../parsing/parser.ts";
 import {
   type CalendarToolDeps,
   type ClarifyResult,
+  deleteFromCalendar,
   type GmailToolDeps,
   pushSavedEventsToCalendar,
   type ToolContext,
@@ -99,6 +104,17 @@ const CLARIFY_QUESTIONS: Partial<Record<ClarifyReason, string>> = {
 };
 /** Open-thread TTL (#84/G24): a clarify question expires after 30 min so a stale "מתי זה?" never resumes. */
 const CONVERSATION_TTL_MS = 30 * 60 * 1000;
+/**
+ * #85 cancel-BY-REFERENCE (distinct from bare ביטול): a deterministic verb-prefix route — "בטל/מחק/הסר
+ * <ref>". The `\S+` requires a referent so a bare "ביטול" still hits the undo branch. The reference is
+ * extracted SERVER-side (no model call); the family lookup decides 0/1/N, never the message content.
+ */
+const CANCEL_REF_RE = /^(בטל|מחק|הסר)\s+\S+/u;
+const TIME_RE = /(\d{1,2}):(\d{2})/u;
+const CANCEL_NOT_FOUND_HE = "לא מצאתי אירוע כזה 🤷 נסו עם תאריך/שעה מדויקים";
+const CANCEL_WHICH_HE = "איזה מהם לבטל? השב/י במספר:";
+/** #85 — bare "ביטול" while a thread is open ABORTS the thread (it never falls through to the undo). */
+const ABORT_THREAD_HE = "בסדר, ביטלתי 👍";
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
@@ -209,9 +225,11 @@ async function handleResume(
       // resumeClarify OWNS the resolve so a TRANSIENT re-parse error leaves the thread intact for
       // boot-replay (F2) — resolving up front would drop the held draft on a provider blip.
       return resumeClarify(deps, msg, row);
+    case "cancel":
+      return resumeCancel(deps, msg, row);
     default:
-      // cancel/edit threads can't be opened until #85/#86; consume defensively and ask to rephrase
-      // rather than silently drop an answer to a thread this version doesn't yet know how to resume.
+      // 'edit' threads can't be opened until #86; consume defensively and ask to rephrase rather than
+      // silently drop an answer to a thread this version doesn't yet know how to resume.
       deps.conversations?.resolve(row.id);
       log("resume — unimplemented kind", { from: msg.from, id: row.id, kind: row.kind });
       await deps.sendText(msg.from, REPHRASE_HE);
@@ -304,6 +322,129 @@ async function resumeClarify(
   }
 }
 
+/** 0=Sunday … 6=Saturday — the Israeli week. Matched with or without a "ביום"/"יום" prefix. */
+const HEBREW_WEEKDAYS: Record<string, number> = {
+  ראשון: 0,
+  שני: 1,
+  שלישי: 2,
+  רביעי: 3,
+  חמישי: 4,
+  שישי: 5,
+  שבת: 6,
+};
+// JS `\b` is ASCII-only and does NOT work around Hebrew letters, so word edges use Unicode
+// letter-lookarounds (`\p{L}`) instead. A weekday may carry a "ביום"/"יום" prefix.
+const WEEKDAY_RE = /(?<!\p{L})(?:ב?יום\s+)?(ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)(?!\p{L})/u;
+
+/** `todayIso` (YYYY-MM-DD) + N days via date-only UTC math (no TZ drift for a calendar-day add). */
+function addDaysIso(iso: string, days: number): string {
+  const [y = 0, m = 1, d = 1] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${dt.getUTCFullYear()}-${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}`;
+}
+function weekdayOfIso(iso: string): number {
+  const [y = 0, m = 1, d = 1] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/**
+ * #85 — extract a cancel REFERENCE server-side (NO model call): strip the verb, then pull an explicit
+ * time (HH:MM, hour zero-padded), a relative Hebrew DATE (היום/מחר/מחרתיים or a weekday → its next
+ * occurrence, #125/F2), and treat the remaining content words as a title substring hint. Exported so the
+ * extraction contract is unit-tested. (The 12h/24h expansion — "3:30" also matching 15:30 — stays a #87
+ * refinement; today a low bare hour matches its 24h form.)
+ */
+export function extractCancelRef(
+  text: string,
+  todayIso: string,
+): { dateIso?: string; time?: string; titleHint?: string } {
+  let rest = text.replace(/^(בטל|מחק|הסר)\s+/u, "");
+
+  let time: string | undefined;
+  const tm = TIME_RE.exec(rest);
+  if (tm?.[1] && tm[2]) {
+    time = `${String(Number(tm[1])).padStart(2, "0")}:${tm[2]}`;
+    rest = rest.replace(TIME_RE, " ");
+  }
+
+  // Resolve a relative date so the words don't pollute the title hint AND a date-bearing cancel matches.
+  // מחרתיים is tested BEFORE מחר; a weekday name resolves to its NEXT occurrence (0 = today, never past).
+  let dateIso: string | undefined;
+  if (/(?<!\p{L})היום(?!\p{L})/u.test(rest)) {
+    dateIso = todayIso;
+    rest = rest.replace(/(?<!\p{L})היום(?!\p{L})/u, " ");
+  } else if (/(?<!\p{L})מחרתיים(?!\p{L})/u.test(rest)) {
+    dateIso = addDaysIso(todayIso, 2);
+    rest = rest.replace(/(?<!\p{L})מחרתיים(?!\p{L})/u, " ");
+  } else if (/(?<!\p{L})מחר(?!\p{L})/u.test(rest)) {
+    dateIso = addDaysIso(todayIso, 1);
+    rest = rest.replace(/(?<!\p{L})מחר(?!\p{L})/u, " ");
+  } else {
+    const wd = WEEKDAY_RE.exec(rest);
+    const target = wd?.[1] !== undefined ? HEBREW_WEEKDAYS[wd[1]] : undefined;
+    if (wd && target !== undefined) {
+      dateIso = addDaysIso(todayIso, (target - weekdayOfIso(todayIso) + 7) % 7);
+      rest = rest.replace(wd[0], " ");
+    }
+  }
+
+  const titleHint = rest
+    .replace(/(?<!\p{L})את(?!\p{L})/gu, " ")
+    .replace(/(?<!\p{L})יום(?!\p{L})/gu, " ")
+    .replace(/[-־]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return {
+    ...(dateIso ? { dateIso } : {}),
+    ...(time ? { time } : {}),
+    ...(titleHint ? { titleHint } : {}),
+  };
+}
+
+/**
+ * #85 — delete ONE board row + its best-effort Google mirror, then confirm. Shared by the 1-match and the
+ * resume-index paths. G25: the Google delete never throws (the board is the source of truth).
+ */
+async function cancelOne(deps: HandlerDeps, msg: InboundMessage, eventId: number): Promise<void> {
+  const log = deps.log ?? (() => {});
+  const removed = deps.events.deleteById(eventId, FAMILY_ID);
+  if (removed > 0 && deps.calendar) {
+    await deleteFromCalendar(eventId, deps.calendar, FAMILY_ID, log);
+  }
+  log("cancel-by-ref delete", { from: msg.from, eventId, removed });
+  await deps.sendText(msg.from, cancelReply(removed));
+}
+
+/**
+ * #85 — resume a cancel disambiguation: a numbered reply (^[1-5]$) picks ONE candidate → delete it; any
+ * non-index reply deletes NOTHING (G20 never auto-pick). Single-use: the thread is resolved up front (no
+ * model call here, so nothing to leave pending). The persisted payload is re-validated (F3).
+ */
+async function resumeCancel(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  row: ConversationRow,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  deps.conversations?.resolve(row.id); // single-use (turn cap 1)
+  const parsed = cancelPayloadSchema.safeParse(safeJsonParse(row.payload_json));
+  if (!parsed.success) {
+    log("cancel resume — invalid persisted payload", { from: msg.from, id: row.id });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const m = /^([1-5])$/.exec(msg.text?.trim() ?? "");
+  const id = m?.[1] ? parsed.data.candidateIds[Number(m[1]) - 1] : undefined;
+  if (id === undefined) {
+    // a non-index (or out-of-range) reply → no delete; the user can re-issue the cancel.
+    log("cancel resume — non-index reply, no delete", { from: msg.from });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  await cancelOne(deps, msg, id);
+}
+
 /**
  * #84 — open a clarify thread: pick the SERVER-OWNED template for the model's reason enum, persist the
  * draft on a `kind:'clarify'` thread (#83 store), send ONE question, save NOTHING, no confirm. No
@@ -328,7 +469,6 @@ async function openClarifyThread(
   );
   deps.conversations.create({
     fromPhone: msg.from,
-    kind: "clarify",
     payload: { kind: "clarify", reason: clarify.reason, draft: clarify.draft },
     expiresAt,
   });
@@ -403,7 +543,15 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     deps.conversations.expireStale(nowSqlite);
     const pending = deps.conversations.getPending(msg.from, nowSqlite);
     if (pending) {
-      await handleResume(deps, msg, pending);
+      // Bare "ביטול" is the universal escape hatch: it ABORTS the open thread (resolve, NO undo) — the
+      // open op takes precedence over the last-message undo (§2). Any other message is the answer.
+      if (text === CANCEL_TRIGGER) {
+        deps.conversations.resolve(pending.id);
+        log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
+        await deps.sendText(msg.from, ABORT_THREAD_HE);
+      } else {
+        await handleResume(deps, msg, pending);
+      }
       return;
     }
   }
@@ -458,6 +606,52 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
       events: deps.events,
       calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
     });
+    return;
+  }
+
+  // #85 cancel-BY-REFERENCE: a deterministic route (NO model call) — "בטל/מחק/הסר <ref>". The reference
+  // is extracted SERVER-side; findEventsByRef scopes to the family's board rows (source_provider IS NULL).
+  // 0 → not-found; 1 → delete + best-effort Google delete; N>1 → a numbered disambiguation thread (never
+  // auto-pick — the board is shared, G20). A forward that merely CONTAINS "בטל…" deletes nothing unless a
+  // real board event matches (state-not-content, G22).
+  if (CANCEL_REF_RE.test(text)) {
+    const ref = extractCancelRef(text, today);
+    // #125/F1 — require a SPECIFIC reference before touching the family's board: a bare verb or a
+    // stopword-only "בטל את" (and a coincidental forward that merely starts with בטל) must NOT match
+    // and silently delete. Need a time, a date, or a title hint of ≥2 chars.
+    const specific = Boolean(
+      ref.time || ref.dateIso || (ref.titleHint && ref.titleHint.length >= 2),
+    );
+    if (!specific) {
+      await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+      return;
+    }
+    const candidates = deps.events.findEventsByRef(FAMILY_ID, ref);
+    if (candidates.length === 0) {
+      await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+      return;
+    }
+    if (candidates.length === 1) {
+      await cancelOne(deps, msg, candidates[0]!.id);
+      return;
+    }
+    if (deps.conversations) {
+      const list = candidates
+        .map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`)
+        .join("\n");
+      const expiresAt = sqliteUtc(
+        new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
+      );
+      deps.conversations.create({
+        fromPhone: msg.from,
+        payload: { kind: "cancel", candidateIds: candidates.map((e) => e.id) },
+        expiresAt,
+      });
+      log("cancel-by-ref disambiguation opened", { from: msg.from, count: candidates.length });
+      await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
+    } else {
+      await deps.sendText(msg.from, REPHRASE_HE); // no store wired → can't disambiguate
+    }
     return;
   }
 

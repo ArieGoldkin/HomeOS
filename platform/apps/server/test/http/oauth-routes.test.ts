@@ -37,7 +37,11 @@ const tokens = (over: Record<string, unknown> = {}) => ({
 function harness(over: Partial<GoogleOAuthDeps> = {}) {
   const credentials = createCredentialStore(":memory:", key, fixedNow);
   const client = over.client ?? fakeClient();
-  const events = over.events ?? { deleteByProvider: vi.fn(() => 0) };
+  const events = over.events ?? {
+    deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn(() => []),
+  };
   const deps: GoogleOAuthDeps = {
     client,
     credentials,

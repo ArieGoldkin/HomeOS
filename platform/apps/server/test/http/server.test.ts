@@ -86,6 +86,8 @@ function makeApp(
     deleteLastFromSender: vi.fn(() => 0),
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn(() => []),
   };
   const deps: ServerDeps = {
     verifyToken: "secret",

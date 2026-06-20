@@ -24,7 +24,9 @@ export type ConversationKind = "clarify" | "cancel" | "edit";
  * union with their `cancel`/`edit` arms (candidate ids + patch). `reason` is a free string here; #84
  * narrows it to the `ClarifyReason` enum keying the server-owned question templates.
  */
-export type ConversationPayload = { kind: "clarify"; reason: string; draft: ParsedEvent };
+export type ConversationPayload =
+  | { kind: "clarify"; reason: string; draft: ParsedEvent }
+  | { kind: "cancel"; candidateIds: number[] };
 
 /**
  * #84/F3 — runtime guard for a persisted clarify payload before it drives a write. The DB row is
@@ -39,6 +41,15 @@ export const clarifyPayloadSchema = z.object({
 });
 
 /**
+ * #85/F3 — runtime guard for a persisted `cancel` disambiguation payload. `candidateIds` are the board
+ * rows offered in the numbered list; a corrupt/stale blob degrades to "rephrase" rather than deleting.
+ */
+export const cancelPayloadSchema = z.object({
+  kind: z.literal("cancel"),
+  candidateIds: z.array(z.number().int()).min(1).max(5),
+});
+
+/**
  * The bounded-conversation seam (#83). Sibling to `EventStore`/`InboundStore`/`CredentialStore`: same
  * single family SQLite file, same `createXxxStore(dbPath)` factory + interface, WAL. The TTL is
  * caller-driven — `create` takes a pre-computed `expiresAt` and the read/sweep methods take `nowSqlite`
@@ -46,10 +57,13 @@ export const clarifyPayloadSchema = z.object({
  * is `DELETE … RETURNING` (single-use), mirroring `oauth_state` consumeState.
  */
 export interface ConversationStore {
-  /** Open a thread. INSERT OR REPLACE on the unique `from_phone` index overwrites a prior pending one. */
+  /**
+   * Open a thread. INSERT OR REPLACE on the unique `from_phone` index overwrites a prior pending one.
+   * The row `kind` is DERIVED from `payload.kind` (one discriminant, so a thread can't be opened with a
+   * mismatched kind/payload — the /review-mr 123+124 carry-forward).
+   */
   create(input: {
     fromPhone: string;
-    kind: ConversationKind;
     payload: ConversationPayload;
     expiresAt: string;
   }): ConversationRow;
@@ -87,10 +101,11 @@ export function createConversationStore(dbPath: string): ConversationStore {
   const expireStaleStmt = db.prepare("DELETE FROM conversations WHERE expires_at <= ?;");
 
   return {
-    create({ fromPhone, kind, payload, expiresAt }) {
+    create({ fromPhone, payload, expiresAt }) {
+      // kind is the payload's discriminant — never passed separately, so it can't drift from the blob.
       return insertStmt.get(
         fromPhone,
-        kind,
+        payload.kind,
         JSON.stringify(payload),
         expiresAt,
       ) as unknown as ConversationRow;

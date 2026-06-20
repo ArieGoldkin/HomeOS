@@ -48,6 +48,8 @@ function makeStore() {
     deleteLastFromSender: vi.fn(() => 0),
     countSince: vi.fn(() => 0),
     deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn(() => []),
   } as unknown as EventStore;
 }
 

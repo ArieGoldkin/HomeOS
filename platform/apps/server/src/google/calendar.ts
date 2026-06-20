@@ -79,6 +79,12 @@ export interface CalendarClient {
     key: string,
     value: string,
   ): Promise<string | null>;
+  /**
+   * #85 — delete an event by id. IDEMPOTENT: 404/410 (already gone) is success, so a re-delivered cancel
+   * never errors; a 204 carries no body (so it must not be JSON-parsed). 429/5xx → TransientError, 4xx →
+   * CalendarApiError, like the rest of the client.
+   */
+  deleteEvent(token: string, calendarId: string, eventId: string): Promise<void>;
 }
 
 /** A permanent (4xx) Calendar API failure — e.g. 401 `Invalid Credentials` / 403. Caller degrades. */
@@ -139,6 +145,24 @@ export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarCli
     return (await res.json()) as Record<string, unknown>;
   }
 
+  // #85 — a body-less DELETE: a 204 carries NO body (parsing it would throw), and 404/410 means the
+  // event is already gone → idempotent success (a re-delivered cancel must not error). Same transient/
+  // permanent split as `request`, just no `res.json()` on the happy path.
+  async function deleteRequest(url: string, token: string): Promise<void> {
+    let res: Response;
+    try {
+      res = await fetchImpl(url, { method: "DELETE", headers: authHeaders(token, false) });
+    } catch (err) {
+      throw new TransientError("calendar network error", err);
+    }
+    if (res.ok || res.status === 404 || res.status === 410) return; // 204 / already-gone → done
+    if (res.status === 429 || res.status >= 500) {
+      throw new TransientError(`calendar endpoint ${res.status}`);
+    }
+    const b = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new CalendarApiError(b.error?.message ?? "calendar_error", res.status);
+  }
+
   const eventsUrl = (calendarId: string) =>
     `${CALENDAR_API}/${encodeURIComponent(calendarId)}/events`;
 
@@ -187,6 +211,10 @@ export function httpCalendarClient(fetchImpl: typeof fetch = fetch): CalendarCli
       const json = await request("GET", `${eventsUrl(calendarId)}?${params.toString()}`, token);
       const items = (json.items ?? []) as Array<{ id?: string }>;
       return items[0]?.id ? String(items[0].id) : null;
+    },
+
+    async deleteEvent(token, calendarId, eventId) {
+      await deleteRequest(`${eventsUrl(calendarId)}/${encodeURIComponent(eventId)}`, token);
     },
   };
 }
