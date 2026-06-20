@@ -59,6 +59,8 @@ function makeDeps(
     clarifyResult?: ClarifyResult;
     /** #84: when defined, wires deps.parse (the clarify-resume re-parse seam) to return this. */
     parseReturns?: ParsedEvent[] | null;
+    /** #84/F2: when set, deps.parse throws this (e.g. a TransientError) — proves the thread survives. */
+    parseThrows?: unknown;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -158,9 +160,15 @@ function makeDeps(
     calendar,
     autoPushCalendar: opts.autoPush,
     ...(opts.conversations ? { conversations: opts.conversations } : {}),
-    ...(opts.parseReturns !== undefined
-      ? { parse: vi.fn(async () => opts.parseReturns ?? null) }
-      : {}),
+    ...(opts.parseThrows !== undefined
+      ? {
+          parse: vi.fn(async () => {
+            throw opts.parseThrows;
+          }),
+        }
+      : opts.parseReturns !== undefined
+        ? { parse: vi.fn(async () => opts.parseReturns ?? null) }
+        : {}),
     now: () => new Date("2026-06-20T09:00:00Z"), // → 2026-06-20 in Asia/Jerusalem (IDT)
     ...(opts.maxPerSenderPerDay !== undefined
       ? {
@@ -614,6 +622,56 @@ describe("handleInbound — #84 clarify resume (merge)", () => {
     expect(events.saveEvent).not.toHaveBeenCalled();
     expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
     expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // resolved → a 2nd answer is fresh
+  });
+
+  it("F1: an oversized answer is capped (G2) BEFORE the resume re-parse — thread left open", async () => {
+    const conversations = createConversationStore(":memory:");
+    seedDateThread(conversations);
+    const { deps, sendText, events } = makeDeps({ conversations, parseReturns: [sampleEvent] });
+
+    await handleInbound({ ...textMsg, text: "x".repeat(4001) }, deps); // > MAX_INPUT (4000)
+
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
+    expect(events.saveEvent).not.toHaveBeenCalled(); // never reached the parse/save (no unbounded model call)
+    expect(conversations.getPending(textMsg.from, NOW)?.kind).toBe("clarify"); // resume not reached → thread intact
+  });
+
+  it("F2: a TransientError during the re-parse leaves the thread OPEN for boot-replay (draft not dropped)", async () => {
+    const conversations = createConversationStore(":memory:");
+    seedDateThread(conversations);
+    const { deps, events } = makeDeps({
+      conversations,
+      parseThrows: new TransientError("provider blip"),
+    });
+
+    // the error propagates (→ processInbound leaves the inbound pending) and the thread is NOT consumed.
+    await expect(handleInbound({ ...textMsg, text: "ביום ראשון" }, deps)).rejects.toBeInstanceOf(
+      TransientError,
+    );
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    expect(conversations.getPending(textMsg.from, NOW)?.kind).toBe("clarify"); // still open → replay can retry
+  });
+
+  it("F3: a corrupt persisted payload degrades to REPHRASE (consumed, nothing saved, no crash)", async () => {
+    const conversations = createConversationStore(":memory:");
+    // a draft missing required slots is not a valid ParsedEvent → clarifyPayloadSchema rejects it.
+    conversations.create({
+      fromPhone: textMsg.from,
+      kind: "clarify",
+      payload: {
+        kind: "clarify",
+        reason: "missing_date",
+        draft: { kind: "event" } as unknown as ParsedEvent,
+      },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations, parseReturns: [sampleEvent] });
+
+    await handleInbound({ ...textMsg, text: "ביום ראשון" }, deps);
+
+    expect(events.saveEvent).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // consumed (can't complete a corrupt row)
   });
 });
 

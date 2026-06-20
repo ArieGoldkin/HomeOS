@@ -4,7 +4,7 @@ import {
   parsedEventSchema,
   sanitizeUserText,
 } from "@homeos/shared";
-import type { ConversationStore } from "../db/conversation-store.ts";
+import { type ConversationStore, clarifyPayloadSchema } from "../db/conversation-store.ts";
 import type { EventStore, SavedEvent } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../db/schema.ts";
@@ -204,35 +204,57 @@ async function handleResume(
   row: ConversationRow,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
-  deps.conversations?.resolve(row.id); // single-use: consume the thread up front (G24); turn cap = 1
   switch (row.kind) {
-    case "clarify": {
-      const payload = JSON.parse(row.payload_json) as { reason: ClarifyReason; draft: ParsedEvent };
-      return resumeClarify(deps, msg, payload);
-    }
+    case "clarify":
+      // resumeClarify OWNS the resolve so a TRANSIENT re-parse error leaves the thread intact for
+      // boot-replay (F2) — resolving up front would drop the held draft on a provider blip.
+      return resumeClarify(deps, msg, row);
     default:
-      // cancel/edit threads can't be opened until #85/#86; resolve defensively and ask to rephrase
+      // cancel/edit threads can't be opened until #85/#86; consume defensively and ask to rephrase
       // rather than silently drop an answer to a thread this version doesn't yet know how to resume.
+      deps.conversations?.resolve(row.id);
       log("resume — unimplemented kind", { from: msg.from, id: row.id, kind: row.kind });
       await deps.sendText(msg.from, REPHRASE_HE);
       return;
   }
 }
 
+/** JSON.parse that returns null instead of throwing on a corrupt blob (paired with clarifyPayloadSchema). */
+function safeJsonParse(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * #84 — complete a clarify draft from the sender's answer, then save + confirm. Turn cap = 1: the
- * thread was already resolved (DELETEd) in handleResume, so a second answer finds nothing pending and
+ * thread is resolved (DELETEd) once this turn is consumed, so a second answer finds nothing pending and
  * falls through to a fresh parse. The raw answer NEVER enters an auto agent turn (G17): `ambiguous_title`
  * takes the answer verbatim as the title; `missing_date` re-resolves it through the non-persisting
- * `parse` seam (a single structured call). The merged event is re-validated by `parsedEventSchema`
- * BEFORE the write (G20). Any failure abandons the draft with REPHRASE_HE.
+ * `parse` seam (a single structured call). RESOLVE happens AFTER the (possibly-throwing) re-parse so a
+ * `TransientError` leaves the thread intact for boot-replay (F2); the persisted payload is re-validated
+ * (F3) and the merged event re-validated by `parsedEventSchema` BEFORE the write (G20). Any failure
+ * abandons the draft with REPHRASE_HE.
  */
 async function resumeClarify(
   deps: HandlerDeps,
   msg: InboundMessage,
-  payload: { reason: ClarifyReason; draft: ParsedEvent },
+  row: ConversationRow,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
+
+  // F3: the persisted blob is trusted-but-VERIFY — a corrupt/stale/tampered row degrades to rephrase,
+  // never crashes on access nor saves garbage. Consume the thread (it can't be completed) and bail.
+  const parsed = clarifyPayloadSchema.safeParse(safeJsonParse(row.payload_json));
+  if (!parsed.success) {
+    deps.conversations?.resolve(row.id);
+    log("clarify resume — invalid persisted payload", { from: msg.from, id: row.id });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const payload = parsed.data;
   const answer = msg.text?.trim() ?? "";
   let merged: ParsedEvent | null = null;
 
@@ -244,8 +266,8 @@ async function resumeClarify(
       needs_clarification: undefined,
     };
   } else if (deps.parse) {
-    // missing_date: re-resolve the free-form Hebrew date through the parser (no save), then merge the
-    // resolved date/time into the held draft (which keeps its title).
+    // missing_date: re-resolve the date through the parser FIRST (no save). A TransientError propagates
+    // with the thread STILL OPEN (F2) so boot-replay retries; the answer is already ≤ MAX_INPUT (G2).
     const today = jerusalemToday((deps.now ?? (() => new Date()))());
     const a = (await deps.parse(answer, today, deps.members?.[msg.from]))?.[0];
     if (a) {
@@ -257,6 +279,9 @@ async function resumeClarify(
       };
     }
   }
+
+  // Past any model call without a transient throw → consume the thread now (single-use, turn cap 1).
+  deps.conversations?.resolve(row.id);
 
   const validated = merged ? parsedEventSchema.safeParse(merged) : null;
   if (!validated?.success) {
@@ -359,6 +384,15 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
 
   const today = jerusalemToday((deps.now ?? (() => new Date()))());
 
+  // G2: input-length cap — short-circuit BEFORE any model call, including the clarify-RESUME re-parse
+  // below (an answer to "מתי זה?" is model-bound too). Placed ahead of the resume + exact-match triggers
+  // (ביטול/syncs are short, so capping them is harmless) so no path can send Claude an oversized payload.
+  if (text.length > MAX_INPUT) {
+    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+
   // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): it sits AFTER the allowlist + G16
   // rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open thread,
   // their next message is an ANSWER → route it to the deterministic resume, never re-parse it as a
@@ -424,13 +458,6 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
       events: deps.events,
       calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
     });
-    return;
-  }
-
-  // G2: input-length cap — short-circuit before the model ever sees an oversized payload.
-  if (text.length > MAX_INPUT) {
-    log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
-    await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
 
