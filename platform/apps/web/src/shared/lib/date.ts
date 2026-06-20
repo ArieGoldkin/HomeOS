@@ -1,5 +1,20 @@
 const TZ = "Asia/Jerusalem";
 
+/**
+ * Shape guard for an ISO calendar date `YYYY-MM-DD`. Shape only — it does NOT verify the date is real
+ * (e.g. "2026-13-45" matches). The single source for both `coerceDateIso` and the router's
+ * `validateSearch`, so the accepted `?date=` shape is declared exactly once.
+ */
+export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Coerce an untrusted date (e.g. a `?date=` URL param) to a `YYYY-MM-DD`, falling back to today when
+ * it's missing or the wrong shape. The screens call this so a bad URL never reaches the date math.
+ */
+export function coerceDateIso(raw: string | null | undefined, now: Date = new Date()): string {
+  return typeof raw === "string" && ISO_DATE_RE.test(raw) ? raw : jerusalemTodayIso(now);
+}
+
 /** Today's date in Asia/Jerusalem as `YYYY-MM-DD` (the board's anchor; the bot parses to this TZ). */
 export function jerusalemTodayIso(now: Date = new Date()): string {
   // en-CA renders as YYYY-MM-DD; timeZone does the Asia/Jerusalem shift.
