@@ -196,6 +196,22 @@ describe("integration: webhook → queue → store → confirm → read → undo
     expect(sys.events.listEvents()).toHaveLength(1);
   });
 
+  it("does not duplicate a meeting already on the same (date, time) slot — slot dedup", async () => {
+    const sys = makeSystem();
+
+    // First forward of a timed event (evA: 2026-06-21 18:30) → saved + confirmed.
+    expect((await post(sys.app, webhook("wamid.dup1", "single"))).status).toBe(200);
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(1));
+    expect(sys.events.listEvents()).toHaveLength(1);
+    expect(sys.sent.at(-1)?.body).toContain("הוספתי");
+
+    // A DIFFERENT message describing the SAME slot -> deduped: no second row, "already on the board".
+    expect((await post(sys.app, webhook("wamid.dup2", "single"))).status).toBe(200);
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(2));
+    expect(sys.events.listEvents()).toHaveLength(1);
+    expect(sys.sent.at(-1)?.body).toContain("כבר ביומן");
+  });
+
   it("boot-replays a pending inbound (crash-window recovery)", async () => {
     const sys = makeSystem();
     // Persist an inbound but never process it — the ack-then-crash window.

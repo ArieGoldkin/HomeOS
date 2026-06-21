@@ -81,6 +81,13 @@ export interface ToolContext {
   google?: GmailToolDeps;
   /** Calendar seam for `read_calendar` (#18) — set by the handler ONLY on the `סנכרן יומן` path; absent → no-op. */
   calendar?: CalendarToolDeps;
+  /**
+   * Slot-dedup sink — when the handler provides it, the extract tool does NOT re-add a TIMED event whose
+   * (date, time) slot is already on the board; the existing row is pushed here instead so the handler can
+   * reply "already on the board". A mutable side-channel (like the clarify arm) keeps the agent contract
+   * unchanged. Absent ⇒ dedup is OFF (older callers/tests save every parsed event, exactly as before).
+   */
+  duplicates?: SavedEvent[];
 }
 
 /**
@@ -154,11 +161,31 @@ export function extractEventsTool(parse: ParseMessage): Tool<{ text: string }> {
       if (flagged?.needs_clarification) {
         return { clarify: { draft: flagged, reason: flagged.needs_clarification.reason } };
       }
-      // One message → several events, each under its own seq (idempotent on (wa_message_id, seq)).
-      const saved = (events ?? []).map((event, seq) =>
-        ctx.events.saveEvent(event, { fromPhone: ctx.from, waMessageId: ctx.waMessageId, seq }),
-      );
-      return { saved }; // empty list = "nothing to schedule"
+      // One message → several events, each under its own seq (idempotent on (wa_message_id, seq)). When
+      // the handler wires `ctx.duplicates`, a TIMED event whose (date, time) slot is already on the board
+      // (from a different message) is NOT re-added — the existing row goes to the sink so the handler says
+      // "already on the board" instead of creating a second copy. A null-time item has no slot → saved.
+      const saved: SavedEvent[] = [];
+      let seq = 0;
+      for (const event of events ?? []) {
+        const dup =
+          ctx.duplicates && event.time != null
+            ? ctx.events.findSlotConflict(ctx.familyId, {
+                dateIso: event.date_iso,
+                time: event.time,
+                excludeWaMessageId: ctx.waMessageId,
+              })
+            : null;
+        if (dup) {
+          ctx.duplicates?.push(dup);
+          continue;
+        }
+        saved.push(
+          ctx.events.saveEvent(event, { fromPhone: ctx.from, waMessageId: ctx.waMessageId, seq }),
+        );
+        seq += 1;
+      }
+      return { saved }; // empty list = "nothing to schedule" (or every event was a duplicate)
     },
   };
 }

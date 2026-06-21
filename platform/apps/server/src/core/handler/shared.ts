@@ -51,6 +51,8 @@ export interface ProcessDeps extends HandlerDeps {
 export const REFUSAL_HE = "מצטערים, אין לך הרשאה להשתמש בשירות הזה.";
 export const TEXT_ONLY_HE = "כרגע אני מבין רק הודעות טקסט 🙏 (תמיכה בהודעות קוליות בקרוב).";
 export const REPHRASE_HE = "לא הצלחתי להבין את ההודעה 🤔 אפשר לנסח מחדש?";
+/** Slot dedup — a forward landed on a (date, time) slot already on the board: no second copy is made. */
+export const ALREADY_HE = "כבר ביומן ✓";
 export const TRANSIENT_HE = "אירעה תקלה זמנית 🙏 נסו שוב בעוד רגע.";
 export const CANCEL_NONE_HE = "אין מה לבטל 🤷";
 /** G16: quiet reply when a sender passes the daily message ceiling — no model call is made. */
@@ -155,6 +157,17 @@ export function formatConfirm(events: SavedEvent[]): string {
   }
   const lines = events.map((e) => `• ${e.title_he} · ${formatWhen(e)}`).join("\n");
   return `הוספתי ${events.length} פריטים ליומן ✓\n${lines}`;
+}
+
+/** Slot dedup — the "already on the board" reply, listing the existing slot(s) so the user knows the
+ *  meeting is there and no second copy was made. Mirrors `formatConfirm`'s single-vs-list shape. */
+export function formatAlready(events: SavedEvent[]): string {
+  if (events.length === 1) {
+    const e = events[0]!;
+    return `${ALREADY_HE}\n${e.title_he} · ${formatWhen(e)}`;
+  }
+  const lines = events.map((e) => `• ${e.title_he} · ${formatWhen(e)}`).join("\n");
+  return `${ALREADY_HE}\n${lines}`;
 }
 
 /** JSON.parse that returns null instead of throwing on a corrupt blob (paired with clarifyPayloadSchema). */

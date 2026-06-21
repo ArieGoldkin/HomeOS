@@ -16,6 +16,7 @@ describe("handleInbound (M2)", () => {
       waMessageId: "wamid.1",
       familyId: "default",
       events,
+      duplicates: [], // slot-dedup sink the handler wires into ToolContext
     });
     expect(events.saveEvent).not.toHaveBeenCalled(); // #71: persistence moved into the tool
     const [, body] = sendText.mock.calls[0]!;
@@ -37,6 +38,7 @@ describe("handleInbound (M2)", () => {
       senderName: "אבא",
       familyId: "default",
       events,
+      duplicates: [],
     });
   });
 

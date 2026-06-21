@@ -251,3 +251,55 @@ describe("updateEvent (#86 edit in place)", () => {
     expect(store.updateEvent(999, { time: "09:00" }, FAMILY_ID)).toBeNull();
   });
 });
+
+describe("findSlotConflict (slot dedup)", () => {
+  // event = 2026-06-20 18:30
+  const slot = (excludeWaMessageId: string) => ({
+    dateIso: event.date_iso,
+    time: event.time as string,
+    excludeWaMessageId,
+  });
+
+  it("returns an existing board row occupying the same (date, time) slot", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.first" });
+    // a DIFFERENT message describing the same slot → the existing row is the conflict
+    expect(store.findSlotConflict(FAMILY_ID, slot("wamid.other"))?.id).toBe(saved.id);
+  });
+
+  it("returns null when the slot is free (different time or different date)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.first" });
+    expect(
+      store.findSlotConflict(FAMILY_ID, {
+        dateIso: "2026-06-20",
+        time: "09:00",
+        excludeWaMessageId: "x",
+      }),
+    ).toBeNull();
+    expect(
+      store.findSlotConflict(FAMILY_ID, {
+        dateIso: "2026-06-21",
+        time: "18:30",
+        excludeWaMessageId: "x",
+      }),
+    ).toBeNull();
+  });
+
+  it("excludes the caller's OWN message so a boot-replay never collides with its own rows", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.same" });
+    // same wa_message_id is excluded → not a conflict (that row upserts, never duplicates)
+    expect(store.findSlotConflict(FAMILY_ID, slot("wamid.same"))).toBeNull();
+  });
+
+  it("never matches a provider-derived (synced) row — only board rows are deduped", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(event, {
+      fromPhone: "9725",
+      waMessageId: "gcal:abc",
+      sourceProvider: "google",
+    });
+    expect(store.findSlotConflict(FAMILY_ID, slot("wamid.other"))).toBeNull();
+  });
+});
