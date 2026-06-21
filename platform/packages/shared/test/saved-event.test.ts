@@ -26,6 +26,16 @@ const googleRow: SavedEvent = {
   source_provider: "google", // gcal/gmail-derived row (#61)
 };
 
+// #151/F4 — a fixture that POPULATES the new optional fields, so the `: SavedEvent` annotation has teeth
+// on source/created_at (an omit-everything fixture can't catch drift on optional fields). created_at is
+// ISO-8601 UTC, exactly as the server's rowToSaved emits it (F1).
+const syncedRow: SavedEvent = {
+  ...googleRow,
+  id: 7,
+  source: "gmail",
+  created_at: "2026-06-21T18:03:59Z",
+};
+
 describe("savedEventSchema (the served GET /events row)", () => {
   it("parses a real forwarded row (numeric id, null source_provider)", () => {
     expect(savedEventSchema.parse(forwardedRow)).toMatchObject({ id: 1, source_provider: null });
@@ -48,10 +58,18 @@ describe("savedEventSchema (the served GET /events row)", () => {
     expect(() => savedEventSchema.parse(withoutProvider)).toThrow();
   });
 
-  // #151 — created_at is now PART of the served contract (rowToSaved includes it), retained not stripped.
-  it("retains created_at when present (now part of the contract)", () => {
-    const parsed = savedEventSchema.parse({ ...forwardedRow, created_at: "2026-06-19 10:00:00" });
-    expect(parsed.created_at).toBe("2026-06-19 10:00:00");
+  // #151 — created_at is now PART of the served contract (rowToSaved includes it), as ISO-8601 UTC (F1).
+  it("retains an ISO-8601 UTC created_at (now part of the contract)", () => {
+    const parsed = savedEventSchema.parse({ ...forwardedRow, created_at: "2026-06-21T18:03:59Z" });
+    expect(parsed.created_at).toBe("2026-06-21T18:03:59Z");
+  });
+
+  // #151/F4 — the populated fixture parses, giving the `: SavedEvent` type guard teeth on the new fields.
+  it("parses a fully-populated synced row (source + created_at present)", () => {
+    expect(savedEventSchema.parse(syncedRow)).toMatchObject({
+      source: "gmail",
+      created_at: "2026-06-21T18:03:59Z",
+    });
   });
 
   // #151 — source is optional (server-derived) so older rows stay valid; a present value is validated.

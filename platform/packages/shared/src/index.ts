@@ -141,9 +141,11 @@ export type SavedEventSource = z.infer<typeof savedEventSourceSchema>;
  * is the ONE row contract the server produces and the web app (`useEvents`) consumes — keeping a single
  * definition so the two can't drift. The endpoint wraps rows as `{ events: SavedEvent[] }`.
  *
- * #151: `source` (derived provenance) + `created_at` (the row's SQLite datetime) are now part of the
- * served row. Both are `.optional()` so older payloads/fixtures stay valid — the server always populates
- * them, and the UI degrades gracefully when absent (no badge, no created-at line).
+ * #151: `source` (derived provenance) + `created_at` are now part of the served row. Both are
+ * `.optional()` so older payloads/fixtures stay valid — the server always populates them, and the UI
+ * degrades gracefully when absent (no badge, no created-at line). `created_at` is an ISO-8601 UTC string
+ * (e.g. `2026-06-21T18:03:59Z`) — the server normalizes SQLite's space-separated UTC form so a consumer's
+ * `new Date(...)` reads the right instant (F1); render it in Asia/Jerusalem for display.
  */
 export const savedEventSchema = parsedEventSchema.extend({
   id: z.number().int(),
