@@ -51,7 +51,11 @@ const evC: ParsedEvent = {
 };
 
 // Stub extractor: "multi" → two events, otherwise → one. Keyed on the message text.
-const parse: ParseMessage = async (text: string) => (text.includes("multi") ? [evB, evC] : [evA]);
+const parse: ParseMessage = async (text: string) => {
+  if (text.includes("multi")) return [evB, evC];
+  if (text.includes("twin")) return [evA, { ...evA, title_he: "אותו זמן" }]; // two events at evA's slot
+  return [evA];
+};
 
 /**
  * Stub the agent's model loop: turn 0 emits a tool_use for extract_events with the forwarded text;
@@ -210,6 +214,15 @@ describe("integration: webhook → queue → store → confirm → read → undo
     await vi.waitFor(() => expect(sys.sent).toHaveLength(2));
     expect(sys.events.listEvents()).toHaveLength(1);
     expect(sys.sent.at(-1)?.body).toContain("כבר ביומן");
+  });
+
+  it("collapses two events at the SAME slot within ONE forward to a single row (F1)", async () => {
+    const sys = makeSystem();
+    // one message parsing to two events at evA's slot (2026-06-21 18:30) -> only one row saved.
+    expect((await post(sys.app, webhook("wamid.twin", "twin"))).status).toBe(200);
+    await vi.waitFor(() => expect(sys.sent).toHaveLength(1));
+    expect(sys.events.listEvents()).toHaveLength(1); // intra-message slot collision collapsed
+    expect(sys.sent.at(-1)?.body).toContain("הוספתי"); // confirms the saved one (silent collapse)
   });
 
   it("boot-replays a pending inbound (crash-window recovery)", async () => {

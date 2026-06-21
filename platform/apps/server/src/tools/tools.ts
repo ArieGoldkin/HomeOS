@@ -162,23 +162,29 @@ export function extractEventsTool(parse: ParseMessage): Tool<{ text: string }> {
         return { clarify: { draft: flagged, reason: flagged.needs_clarification.reason } };
       }
       // One message → several events, each under its own seq (idempotent on (wa_message_id, seq)). When
-      // the handler wires `ctx.duplicates`, a TIMED event whose (date, time) slot is already on the board
-      // (from a different message) is NOT re-added — the existing row goes to the sink so the handler says
-      // "already on the board" instead of creating a second copy. A null-time item has no slot → saved.
+      // the handler wires `ctx.duplicates`, a TIMED event is deduped on its (date, time) slot:
+      //  • cross-message — a board row from a DIFFERENT message already holds the slot → push the existing
+      //    row to the sink ("already on the board") and don't re-add it.
+      //  • intra-message (F1) — an earlier event in THIS SAME forward already took the slot → collapse to
+      //    one row silently (the user sent it once; no "already" notice).
+      // A null-time item has no slot → always saved. Absent sink ⇒ dedup off (additive, pre-PR behavior).
       const saved: SavedEvent[] = [];
+      const seenSlots = new Set<string>();
       let seq = 0;
       for (const event of events ?? []) {
-        const dup =
-          ctx.duplicates && event.time != null
-            ? ctx.events.findSlotConflict(ctx.familyId, {
-                dateIso: event.date_iso,
-                time: event.time,
-                excludeWaMessageId: ctx.waMessageId,
-              })
-            : null;
-        if (dup) {
-          ctx.duplicates?.push(dup);
-          continue;
+        if (ctx.duplicates && event.time != null) {
+          const dup = ctx.events.findSlotConflict(ctx.familyId, {
+            dateIso: event.date_iso,
+            time: event.time,
+            excludeWaMessageId: ctx.waMessageId,
+          });
+          if (dup) {
+            ctx.duplicates.push(dup);
+            continue;
+          }
+          const slotKey = `${event.date_iso}|${event.time}`;
+          if (seenSlots.has(slotKey)) continue; // F1: same slot twice in one forward → one row
+          seenSlots.add(slotKey);
         }
         saved.push(
           ctx.events.saveEvent(event, { fromPhone: ctx.from, waMessageId: ctx.waMessageId, seq }),
