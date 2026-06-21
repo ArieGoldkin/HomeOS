@@ -6,6 +6,7 @@ import { sqliteUtc } from "../time.ts";
 import {
   addDaysIso,
   CANCEL_NOT_FOUND_HE,
+  CANCEL_VERB_STRIP_RE,
   CANCEL_WHICH_HE,
   CONVERSATION_TTL_MS,
   cancelReply,
@@ -30,7 +31,7 @@ export function extractCancelRef(
   text: string,
   todayIso: string,
 ): { dateIso?: string; time?: string; titleHint?: string } {
-  let rest = text.replace(/^(בטל|מחק|הסר)\s+/u, "");
+  let rest = text.replace(CANCEL_VERB_STRIP_RE, "");
 
   let time: string | undefined;
   const tm = TIME_RE.exec(rest);

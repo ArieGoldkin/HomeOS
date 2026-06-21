@@ -38,6 +38,7 @@ import {
   SYNC_MAIL_TRIGGER,
   SYNC_NONE_HE,
   savedOf,
+  stripLeadingFiller,
   TEXT_ONLY_HE,
   TRANSIENT_HE,
 } from "./shared.ts";
@@ -182,21 +183,27 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  // #85 cancel-BY-REFERENCE: a deterministic route (NO model call) — "בטל/מחק/הסר <ref>". The reference
-  // is extracted SERVER-side; findEventsByRef scopes to the family's board rows (source_provider IS NULL).
-  // 0 → not-found; 1 → delete + best-effort Google delete; N>1 → a numbered disambiguation thread (never
-  // auto-pick — the board is shared, G20). A forward that merely CONTAINS "בטל…" deletes nothing unless a
-  // real board event matches (state-not-content, G22).
-  if (CANCEL_REF_RE.test(text)) {
-    await routeCancelByRef(deps, msg, text, today);
+  // Strip a leading conversational filler ("טוב"/"אוקיי"…) for the deterministic verb-led commands so
+  // "טוב בטל…" / "אוקיי שנה…" route like the bare form. ONLY the route tests + extraction see this; the
+  // fall-through to agent.run keeps the ORIGINAL text, so a non-command is never mangled (G22 preserved:
+  // the route still needs a verb at the start AND a real board match before anything is deleted/edited).
+  const command = stripLeadingFiller(text);
+
+  // #85 cancel-BY-REFERENCE: a deterministic route (NO model call) — "בטל/מחק/הסר <ref>" (+ inflections).
+  // The reference is extracted SERVER-side; findEventsByRef scopes to the family's board rows
+  // (source_provider IS NULL). 0 → not-found; 1 → delete + best-effort Google delete; N>1 → a numbered
+  // disambiguation thread (never auto-pick — the board is shared, G20). A forward that merely CONTAINS
+  // "בטל…" deletes nothing unless a real board event matches (state-not-content, G22).
+  if (CANCEL_REF_RE.test(command)) {
+    await routeCancelByRef(deps, msg, command, today);
     return;
   }
 
   // #86 EXPLICIT EDIT: "שנה/ערוך/תקן/עדכן <ref> ל-<field>" — deterministic (NO model call). Needs a
   // recognized field delta AND a specific reference; 0 (לא מצאתי) | 1 (apply, refusing a synced row) |
   // N>1 (numbered kind='edit' thread holding the patch). Same family/state-not-content guards as cancel.
-  if (EDIT_REF_RE.test(text)) {
-    await routeEditByRef(deps, msg, text, today);
+  if (EDIT_REF_RE.test(command)) {
+    await routeEditByRef(deps, msg, command, today);
     return;
   }
 

@@ -93,6 +93,32 @@ function rowToSaved(row: EventRow): SavedEvent {
   };
 }
 
+/** Stopwords a cancel/edit title hint carries but a stored title rarely does — dropped so they don't
+ *  over-broaden (or, when alone, accidentally null out) the match. */
+const HINT_STOPWORDS = new Set(["עם", "את", "של", "או", "גם", "יום"]);
+/** Escape LIKE metacharacters so a hint like "50%" matches literally, not as a wildcard (#125/F3). */
+const likeArg = (s: string): string => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
+
+/**
+ * #85 — turn a free-text title hint into per-WORD LIKE variants, AND-ed by the caller. Each word also
+ * yields a ה/ו-stripped variant (OR-ed with the original) so a hint carrying the Hebrew definite article
+ * — "הפגישה" — matches a bare stored title "פגישה" (a live cancel miss), WITHOUT dropping a word that
+ * legitimately starts with ה (e.g. "הורים" still matches via its original form). Stopwords + sub-2-char
+ * tokens are removed. Returns `[]` when nothing usable remains so the caller can fall back to the raw hint
+ * (never broadening a hint-bearing lookup into "match everything").
+ */
+function hintLikeGroups(hint: string): string[][] {
+  const groups: string[][] = [];
+  for (const word of hint.split(/\s+/u)) {
+    if (word.length < 2 || HINT_STOPWORDS.has(word)) continue;
+    const variants = new Set([word]);
+    const stripped = word.replace(/^[הו]/u, "");
+    if (stripped.length >= 2) variants.add(stripped);
+    groups.push([...variants].map(likeArg));
+  }
+  return groups;
+}
+
 /**
  * SQLite-backed EventStore using Node's built-in driver (node:sqlite). "One family = one file."
  * Pass ":memory:" in tests; a real path has its parent directory created.
@@ -143,19 +169,12 @@ export function createEventStore(dbPath: string): EventStore {
      WHERE id = ? AND source_provider IS NULL
      RETURNING *;`,
   );
-  // #85: each ref field is "null OR matches" so one prepared statement handles any subset; the title is
-  // a substring (LIKE %hint%). The caller escapes the hint's LIKE metacharacters (%/_/\) and we declare
-  // ESCAPE '\' so a literal '%' in a title can't broaden a DESTRUCTIVE match (#125/F3). Newest-first,
-  // cap 5, no ranking — the handler disambiguates N>1.
-  const findByRefStmt = db.prepare(
-    `SELECT * FROM events
-     WHERE source_provider IS NULL
-       AND (? IS NULL OR date_iso = ?)
-       AND (? IS NULL OR time = ?)
-       AND (? IS NULL OR title_he LIKE ? ESCAPE '\\')
-     ORDER BY id DESC
-     LIMIT 5;`,
-  );
+  // #85: date/time are "null OR matches" so the base statement handles any subset. The title clause is
+  // built PER-CALL (variable word count, see findEventsByRef) — each word is an AND'd group of OR'd
+  // LIKE variants, all escaped with ESCAPE '\' so a literal '%' can't broaden a DESTRUCTIVE match
+  // (#125/F3). Newest-first, cap 5, no ranking — the handler disambiguates N>1.
+  const findByRefBase =
+    "SELECT * FROM events WHERE source_provider IS NULL AND (? IS NULL OR date_iso = ?) AND (? IS NULL OR time = ?)";
   // Slot dedup: a board row (source_provider IS NULL) already occupying this (date_iso, time) from a
   // DIFFERENT message (wa_message_id !=), so a re-send is caught but a boot-replay of the SAME message
   // (which upserts its own rows) is not. Newest-first; one row is enough to flag the slot as taken.
@@ -202,16 +221,22 @@ export function createEventStore(dbPath: string): EventStore {
       return Number(deleteByIdStmt.run(id).changes);
     },
     findEventsByRef(_familyId, ref) {
-      // Escape LIKE metacharacters so a hint like "50%" matches literally, not as a wildcard (#125/F3).
-      const titleLike = ref.titleHint ? `%${ref.titleHint.replace(/[\\%_]/g, "\\$&")}%` : null;
-      const rows = findByRefStmt.all(
+      const params: (string | null)[] = [
         ref.dateIso ?? null,
         ref.dateIso ?? null,
         ref.time ?? null,
         ref.time ?? null,
-        titleLike,
-        titleLike,
-      ) as unknown as EventRow[];
+      ];
+      // Per-word groups (each = OR'd variants); AND them. A hint that tokenizes to nothing falls back to
+      // one literal LIKE on the raw hint so a hint-bearing lookup never silently widens to every row.
+      let groups = ref.titleHint ? hintLikeGroups(ref.titleHint) : [];
+      if (ref.titleHint && groups.length === 0) groups = [[likeArg(ref.titleHint.trim())]];
+      const titleSql = groups
+        .map((variants) => `(${variants.map(() => "title_he LIKE ? ESCAPE '\\'").join(" OR ")})`)
+        .join(" AND ");
+      for (const variants of groups) params.push(...variants);
+      const sql = `${findByRefBase}${titleSql ? ` AND ${titleSql}` : ""} ORDER BY id DESC LIMIT 5;`;
+      const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
       return rows.map(rowToSaved);
     },
     findSlotConflict(_familyId, slot) {
