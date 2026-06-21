@@ -4,12 +4,11 @@ import type { EventPatch, SavedEvent } from "../../db/event-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
-import { sqliteUtc } from "../time.ts";
 import { extractCancelRef } from "./cancel.ts";
 import {
   CANCEL_NOT_FOUND_HE,
   CANCEL_WHICH_HE,
-  CONVERSATION_TTL_MS,
+  conversationExpiresAt,
   EDIT_DAY_RE,
   EDIT_LOCATION_RE,
   EDIT_SYNCED_HE,
@@ -146,13 +145,10 @@ export async function routeEditByRef(
   }
   if (deps.conversations) {
     const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
-    const expiresAt = sqliteUtc(
-      new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
-    );
     deps.conversations.create({
       fromPhone: msg.from,
       payload: { kind: "edit", candidateIds: candidates.map((e) => e.id), patch: edit.patch },
-      expiresAt,
+      expiresAt: conversationExpiresAt(deps),
     });
     log("edit disambiguation opened", { from: msg.from, count: candidates.length });
     await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);

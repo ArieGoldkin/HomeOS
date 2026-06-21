@@ -6,6 +6,7 @@ import type { ParseMessage } from "../../parsing/parser.ts";
 import type { CalendarToolDeps, ClarifyResult, GmailToolDeps } from "../../tools/tools.ts";
 import type { SendText } from "../../whatsapp/client.ts";
 import type { Agent, AgentResult } from "../agent.ts";
+import { sqliteUtc } from "../time.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
@@ -33,6 +34,13 @@ export interface HandlerDeps {
    * Optional so the branch is fully additive: unset ⇒ the handler behaves exactly as before.
    */
   conversations?: ConversationStore;
+  /**
+   * #87/G24 — open-thread TTL in ms, injected so it's a single configured constant (not a magic number
+   * scattered across the clarify/cancel/edit writers) and so a test can force expiry with `0`. Unset ⇒
+   * `CONVERSATION_TTL_MS` (30 min). The store stays clock-agnostic (it takes a pre-computed `expiresAt`);
+   * this is the one place the duration lives, read at thread-CREATE time by every writer.
+   */
+  conversationTtlMs?: number;
   /**
    * #84 — the non-persisting parse seam, used by a clarify RESUME to re-resolve a free-form Hebrew date
    * answer ("ביום ראשון בשמונה") into the held draft WITHOUT saving (a single structured call, never an
@@ -85,8 +93,28 @@ export const CLARIFY_QUESTIONS: Partial<Record<ClarifyReason, string>> = {
   missing_date: "לא הבנתי מתי זה — לאיזה תאריך לקבוע? 🗓️",
   ambiguous_title: "מה לרשום ככותרת? 🤔",
 };
-/** Open-thread TTL (#84/G24): a clarify question expires after 30 min so a stale "מתי זה?" never resumes. */
+/**
+ * Open-thread TTL (#84/G24): a clarify question expires after 30 min so a stale "מתי זה?" never resumes.
+ * Product call (#87): 30 min, not 10 — a forwarded-message round-trip in a busy family chat can sit
+ * unanswered through a school pickup or a meeting; 10 min would expire mid-conversation and force a
+ * re-forward, while 30 min still bounds the held forwarded-text draft tightly for privacy/retention.
+ * This is the DEFAULT; `HandlerDeps.conversationTtlMs` (env `CONVERSATION_TTL_MIN`) overrides it, and a
+ * test sets `0` to force immediate expiry.
+ */
 export const CONVERSATION_TTL_MS = 30 * 60 * 1000;
+/**
+ * #87 — the SINGLE application site for the open-thread TTL: `now + (injected ?? default)` rendered as a
+ * SQLite-UTC string, ready for `ConversationStore.create`. The clarify/cancel/edit writers all call this,
+ * so a future change to the formula (clamping, per-kind TTL) lives in one place — matching the
+ * `conversationTtlMs` contract ("the one place the duration lives").
+ */
+export function conversationExpiresAt(
+  deps: Pick<HandlerDeps, "now" | "conversationTtlMs">,
+): string {
+  const ms =
+    (deps.now ?? (() => new Date()))().getTime() + (deps.conversationTtlMs ?? CONVERSATION_TTL_MS);
+  return sqliteUtc(new Date(ms));
+}
 /**
  * #85 cancel-BY-REFERENCE (distinct from bare ביטול): a deterministic verb-prefix route — "בטל/מחק/הסר
  * <ref>". The `\S+` requires a referent so a bare "ביטול" still hits the undo branch. The reference is

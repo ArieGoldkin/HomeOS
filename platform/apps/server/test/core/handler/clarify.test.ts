@@ -38,6 +38,31 @@ describe("handleInbound — #84 clarify gate", () => {
     await handleInbound(textMsg, deps);
     expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לנסח"));
   });
+
+  // #87/G24: the TTL is an injectable config (HandlerDeps.conversationTtlMs, env CONVERSATION_TTL_MIN),
+  // read at thread-CREATE time. conversationTtlMs:0 ⇒ expiresAt === now ⇒ the thread is born expired:
+  // getPending hides it (expires_at > now) and expireStale sweeps it (expires_at <= now). This is the
+  // seam a test uses to force expiry without juggling two clocks.
+  it("respects an injected conversationTtlMs:0 — the opened thread is immediately expired", async () => {
+    const NOW = "2026-06-20 09:00:00";
+    const conversations = createConversationStore(":memory:");
+    const { deps } = makeDeps({ conversations, clarifyResult, conversationTtlMs: 0 });
+
+    await handleInbound(textMsg, deps);
+
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // born expired → invisible at read
+    expect(conversations.expireStale(NOW)).toBe(1); // …and swept by the boot/per-inbound sweep
+  });
+
+  it("respects an injected conversationTtlMs — a future TTL keeps the thread answerable", async () => {
+    const NOW = "2026-06-20 09:00:00";
+    const conversations = createConversationStore(":memory:");
+    const { deps } = makeDeps({ conversations, clarifyResult, conversationTtlMs: 5 * 60_000 });
+
+    await handleInbound(textMsg, deps);
+
+    expect(conversations.getPending(textMsg.from, NOW)?.kind).toBe("clarify"); // open for 5 min
+  });
 });
 
 // #84 — the clarify RESUME merge: complete the held draft from the answer, re-validate, save + confirm.

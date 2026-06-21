@@ -1,5 +1,5 @@
 import type { SavedEvent } from "../../db/event-store.ts";
-import { FAMILY_ID } from "../../db/schema.ts";
+import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import type { AgentResult } from "../agent.ts";
@@ -60,18 +60,48 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
+  // Read the clock ONCE for the whole handler (#87/F4): the G16 rate gate, the date anchor, and the
+  // resume lookup all reuse it — no split-brain, no redundant Date() construction.
+  const now = (deps.now ?? (() => new Date()))();
+
+  // #83 sweep + open-thread lookup, computed ONCE here (#87/F4): a single getPending feeds BOTH the G23
+  // rate exemption below AND the resume routing further down (no double read, no expire-between-reads
+  // window). expireStale runs first (G24 boot+per-inbound) so an expired question never counts as open.
+  // Inert unless `conversations` is wired, so the branch is fully additive.
+  let pending: ConversationRow | null = null;
+  if (deps.conversations) {
+    const nowSqlite = sqliteUtc(now);
+    deps.conversations.expireStale(nowSqlite);
+    pending = deps.conversations.getPending(msg.from, nowSqlite);
+  }
+
   // G16: per-sender daily ceiling — the allowlist bounds *who* and the input cap (G2) bounds
   // message *size*; this bounds *rate*, the last unbounded cost axis vs ≤$100/mo. Checked here
   // (after the allowlist so non-family senders are never counted, before any model call). The
   // message is already enqueued (persist-before-ack), so the count includes it; resets at
   // Jerusalem midnight. Off unless both the ceiling and the inbound counter are wired.
   if (deps.maxPerSenderPerDay !== undefined && deps.inbound) {
-    const since = jerusalemDayStartSqlite((deps.now ?? (() => new Date()))());
+    const since = jerusalemDayStartSqlite(now);
     const count = deps.inbound.countFromSenderSince(msg.from, since);
     if (count > deps.maxPerSenderPerDay) {
-      log("per-sender daily ceiling hit", { from: msg.from, count, max: deps.maxPerSenderPerDay });
-      await deps.sendText(msg.from, RATE_LIMIT_HE);
-      return;
+      // G23: a resume-answer is NOT a new intent. If the sender has a LIVE open thread (the `pending`
+      // looked up above), exempt them from the ceiling so their answer still resolves/expires the thread
+      // — otherwise a rate-limited reply would strand it until TTL (clarify #84 / disambiguation #85-86
+      // never closes). An already-expired thread is `null` here (swept above + read-time TTL), so it does
+      // NOT grant the exemption: that sender is sending something genuinely new and stays rate-limited.
+      if (pending == null) {
+        log("per-sender daily ceiling hit", {
+          from: msg.from,
+          count,
+          max: deps.maxPerSenderPerDay,
+        });
+        await deps.sendText(msg.from, RATE_LIMIT_HE);
+        return;
+      }
+      log("ceiling hit but sender has an open thread — exempting the resume (G23)", {
+        from: msg.from,
+        count,
+      });
     }
   }
 
@@ -82,7 +112,7 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  const today = jerusalemToday((deps.now ?? (() => new Date()))());
+  const today = jerusalemToday(now);
 
   // G2: input-length cap — short-circuit BEFORE any model call, including the clarify-RESUME re-parse
   // below (an answer to "מתי זה?" is model-bound too). Placed ahead of the resume + exact-match triggers
@@ -93,40 +123,35 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): it sits AFTER the allowlist + G16
-  // rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open thread,
-  // their next message is an ANSWER → route it to the deterministic resume, never re-parse it as a
-  // fresh forward (G17). Sweep stale rows first (G24 boot+per-inbound) so an expired question never
-  // resumes. Inert unless `conversations` is wired, so the branch is fully additive.
-  if (deps.conversations) {
-    const nowSqlite = sqliteUtc((deps.now ?? (() => new Date()))());
-    deps.conversations.expireStale(nowSqlite);
-    const pending = deps.conversations.getPending(msg.from, nowSqlite);
-    if (pending) {
-      // Bare "ביטול" is the universal escape hatch: it ABORTS the open thread (resolve, NO undo) — the
-      // open op takes precedence over the last-message undo (§2).
-      if (text === CANCEL_TRIGGER) {
-        deps.conversations.resolve(pending.id);
-        log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
-        await deps.sendText(msg.from, ABORT_THREAD_HE);
-        return;
-      }
-      // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
-      if (CORRECTION_RE.test(text)) {
-        await applyCorrection(deps, msg, pending, today);
-        return;
-      }
-      // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
-      // (e.g. "לא נשכח את יום ההולדת ביום שישי") is a NEW forward, not a thread answer — abort the thread
-      // and let it fall through to agent.run. A bare "לא יודע" (no schedule signal) is just a non-answer
-      // → handleResume (→ rephrase / re-parse). Any other message is the thread's answer → handleResume.
-      if (/^לא[\s,]/u.test(text) && hasScheduleSignal(text)) {
-        deps.conversations.resolve(pending.id);
-        log("non-correction 'לא' with a schedule signal → new forward", { from: msg.from });
-      } else {
-        await handleResume(deps, msg, pending);
-        return;
-      }
+  // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): the ROUTING sits AFTER the allowlist
+  // + G16 rate gate + text-only guard and BEFORE ביטול / any agent.run. When the sender has an open
+  // thread (`pending`, swept + looked up once above), their next message is an ANSWER → route it to the
+  // deterministic resume, never re-parse it as a fresh forward (G17). `pending` is non-null ⇒
+  // `deps.conversations` is set, so the `?.` calls below always run.
+  if (pending) {
+    // Bare "ביטול" is the universal escape hatch: it ABORTS the open thread (resolve, NO undo) — the
+    // open op takes precedence over the last-message undo (§2).
+    if (text === CANCEL_TRIGGER) {
+      deps.conversations?.resolve(pending.id);
+      log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
+      await deps.sendText(msg.from, ABORT_THREAD_HE);
+      return;
+    }
+    // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
+    if (CORRECTION_RE.test(text)) {
+      await applyCorrection(deps, msg, pending, today);
+      return;
+    }
+    // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
+    // (e.g. "לא נשכח את יום ההולדת ביום שישי") is a NEW forward, not a thread answer — abort the thread
+    // and let it fall through to agent.run. A bare "לא יודע" (no schedule signal) is just a non-answer
+    // → handleResume (→ rephrase / re-parse). Any other message is the thread's answer → handleResume.
+    if (/^לא[\s,]/u.test(text) && hasScheduleSignal(text)) {
+      deps.conversations?.resolve(pending.id);
+      log("non-correction 'לא' with a schedule signal → new forward", { from: msg.from });
+    } else {
+      await handleResume(deps, msg, pending);
+      return;
     }
   }
 

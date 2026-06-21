@@ -2,14 +2,13 @@ import { cancelPayloadSchema } from "../../db/conversation-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { deleteFromCalendar } from "../../tools/tools.ts";
-import { sqliteUtc } from "../time.ts";
 import {
   addDaysIso,
   CANCEL_NOT_FOUND_HE,
   CANCEL_VERB_STRIP_RE,
   CANCEL_WHICH_HE,
-  CONVERSATION_TTL_MS,
   cancelReply,
+  conversationExpiresAt,
   formatWhen,
   type HandlerDeps,
   HEBREW_WEEKDAYS,
@@ -153,13 +152,10 @@ export async function routeCancelByRef(
   }
   if (deps.conversations) {
     const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
-    const expiresAt = sqliteUtc(
-      new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
-    );
     deps.conversations.create({
       fromPhone: msg.from,
       payload: { kind: "cancel", candidateIds: candidates.map((e) => e.id) },
-      expiresAt,
+      expiresAt: conversationExpiresAt(deps),
     });
     log("cancel-by-ref disambiguation opened", { from: msg.from, count: candidates.length });
     await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);

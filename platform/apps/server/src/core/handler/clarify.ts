@@ -3,10 +3,9 @@ import { clarifyPayloadSchema } from "../../db/conversation-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { type ClarifyResult, pushSavedEventsToCalendar } from "../../tools/tools.ts";
-import { sqliteUtc } from "../time.ts";
 import {
   CLARIFY_QUESTIONS,
-  CONVERSATION_TTL_MS,
+  conversationExpiresAt,
   formatConfirm,
   type HandlerDeps,
   jerusalemToday,
@@ -109,13 +108,10 @@ export async function openClarifyThread(
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
-  const expiresAt = sqliteUtc(
-    new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
-  );
   deps.conversations.create({
     fromPhone: msg.from,
     payload: { kind: "clarify", reason: clarify.reason, draft: clarify.draft },
-    expiresAt,
+    expiresAt: conversationExpiresAt(deps),
   });
   log("clarify thread opened", { from: msg.from, reason: clarify.reason });
   await deps.sendText(msg.from, question);

@@ -67,6 +67,10 @@ const schema = z.object({
   // input cap bounds message *size*; this bounds *rate* — the last unbounded cost axis vs ≤$100/mo.
   // Generous default for a heavy family member; trips only on an abusive/looping device.
   MAX_PER_SENDER_PER_DAY: z.coerce.number().int().positive().default(50),
+  // #87/G24: open-thread TTL in MINUTES — how long a clarify/cancel/edit question stays answerable
+  // before it's swept (so a stale "do you mean A or B?" never resumes after a delay or a redeploy).
+  // Default 30 (see CONVERSATION_TTL_MS for the 30-vs-10 product call); surfaced as ms downstream.
+  CONVERSATION_TTL_MIN: z.coerce.number().int().positive().default(30),
   // Gmail ingestion (#17/#72) — only consulted when the GOOGLE_* bundle is configured. Two cost
   // bounds on the sync command: `MAX_MESSAGES` caps emails fetched+parsed per run, `QUERY_WINDOW`
   // is the server-side recency clamp baked into every query (G2/§6). `ALLOWED_LABELS` is the set the
@@ -126,6 +130,8 @@ export interface Config {
   digestHour: number;
   backupHour: number;
   maxPerSenderPerDay: number;
+  /** #87: open-thread TTL in MS (CONVERSATION_TTL_MIN × 60_000), passed to the handler writers. */
+  conversationTtlMs: number;
   gmailMaxMessages: number;
   gmailQueryWindow: string;
   gmailAllowedLabels: string[];
@@ -199,6 +205,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     digestHour: e.DIGEST_HOUR,
     backupHour: e.BACKUP_HOUR,
     maxPerSenderPerDay: e.MAX_PER_SENDER_PER_DAY,
+    conversationTtlMs: e.CONVERSATION_TTL_MIN * 60_000,
     gmailMaxMessages: e.GMAIL_MAX_MESSAGES,
     gmailQueryWindow: e.GMAIL_QUERY_WINDOW,
     gmailAllowedLabels: e.GMAIL_ALLOWED_LABELS,
