@@ -111,6 +111,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     sendText: wa.sendText,
     inbound,
     conversations,
+    conversationTtlMs: config.conversationTtlMs, // #87/G24: open-thread TTL (env CONVERSATION_TTL_MIN)
     parse, // #84: the non-persisting re-parse seam a clarify RESUME uses to complete a date answer
     members: config.members,
     maxPerSenderPerDay: config.maxPerSenderPerDay,

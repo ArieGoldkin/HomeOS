@@ -16,6 +16,19 @@ POST /webhook → ack 200 → (async) dedupe → allowlist → parse (Claude) �
 
 A successful parse replies, e.g.: `הוספתי ליומן ✓\nאסיפת הורים · 2026-06-21 18:30`
 
+### Data retention — forwarded text & open threads (#87/G24)
+
+Forwarded message text lands in two places, both bounded by design (data-minimization red line):
+
+- **Board events** (`events`) keep a `source_text` for the parsed item — the durable record the user
+  asked us to remember.
+- **Open conversation threads** (`conversations`) briefly hold a *draft* of a forwarded message while a
+  clarify/cancel/edit question is outstanding. These never accumulate: a thread is **`DELETE`d on
+  resolve** (single-use `DELETE … RETURNING`) the moment it's answered, aborted, or redelivered, and an
+  unanswered thread is swept by **`expireStale`** — which runs on boot *and* before every inbound — once
+  it passes its TTL (`CONVERSATION_TTL_MIN`, default 30 min). So no abandoned draft of third-party
+  forwarded text lingers past one short, bounded window. `expireStale` **is** the retention sweep.
+
 ## Routes
 
 | Method | Path       | Purpose                                                                |

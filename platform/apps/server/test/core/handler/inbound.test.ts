@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { TransientError } from "../../../src/core/errors.ts";
 import { handleInbound } from "../../../src/core/handler/index.ts";
+import { createConversationStore } from "../../../src/db/conversation-store.ts";
 import type { SavedEvent } from "../../../src/db/event-store.ts";
 import type { InboundMessage } from "../../../src/http/webhook.ts";
-import { makeDeps, sampleSaved, textMsg } from "./_setup.ts";
+import { makeDeps, sampleEvent, sampleSaved, textMsg } from "./_setup.ts";
 
 describe("handleInbound (M2)", () => {
   it("runs the agent and sends a Hebrew confirmation (the tool persists, not the handler)", async () => {
@@ -287,6 +288,51 @@ describe("handleInbound (M2)", () => {
       await handleInbound({ ...textMsg, from: "972509999999" }, deps);
       expect(countFromSenderSince).not.toHaveBeenCalled(); // refused before the rate check
       expect(agent.run).not.toHaveBeenCalled();
+    });
+
+    // G23: the rate ceiling × an open clarify/disambiguation thread. A resume-answer is not a new
+    // intent, so a rate-limited sender must still be able to CLOSE an open thread — else the thread
+    // strands until TTL. NOW is pinned to 2026-06-20 09:00:00 (sqliteUtc) by makeDeps.
+    it("EXEMPTS a sender over the ceiling when they have a LIVE open thread (no strand)", async () => {
+      const conversations = createConversationStore(":memory:");
+      conversations.create({
+        fromPhone: textMsg.from,
+        payload: { kind: "clarify", reason: "ambiguous_title", draft: sampleEvent },
+        expiresAt: "2026-06-20 12:00:00", // > NOW → open
+      });
+      const { sendText, agent, events, deps } = makeDeps({
+        maxPerSenderPerDay: 50,
+        senderCount: 51, // over the ceiling
+        conversations,
+      });
+
+      await handleInbound(textMsg, deps);
+
+      expect(agent.run).not.toHaveBeenCalled(); // routed to resume, not a fresh parse
+      expect(events.saveEvent).toHaveBeenCalledTimes(1); // ambiguous_title answer → title → saved
+      const bodies = sendText.mock.calls.map((c) => c[1]);
+      expect(bodies.some((b) => /מכסת/.test(b))).toBe(false); // NOT rate-limited
+      expect(bodies.some((b) => b.includes("הוספתי"))).toBe(true); // the thread closed (confirm)
+      expect(conversations.getPending(textMsg.from, "2026-06-20 09:00:00")).toBeNull(); // resolved
+    });
+
+    it("still caps an over-ceiling sender whose thread already EXPIRED (no exemption)", async () => {
+      const conversations = createConversationStore(":memory:");
+      conversations.create({
+        fromPhone: textMsg.from,
+        payload: { kind: "clarify", reason: "ambiguous_title", draft: sampleEvent },
+        expiresAt: "2026-06-20 08:00:00", // < NOW → expired, invisible to getPending
+      });
+      const { sendText, agent, deps } = makeDeps({
+        maxPerSenderPerDay: 50,
+        senderCount: 51,
+        conversations,
+      });
+
+      await handleInbound(textMsg, deps);
+
+      expect(agent.run).not.toHaveBeenCalled(); // rate-limited before any model call
+      expect(sendText.mock.calls[0]![1]).toMatch(/מכסת|מחר/); // RATE_LIMIT_HE
     });
   });
 });

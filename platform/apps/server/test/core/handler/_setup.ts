@@ -55,6 +55,8 @@ export function makeDeps(
     parseReturns?: ParsedEvent[] | null;
     /** #84/F2: when set, deps.parse throws this (e.g. a TransientError) — proves the thread survives. */
     parseThrows?: unknown;
+    /** #87/G24: override the open-thread TTL (ms). `0` makes a thread expire immediately at open. */
+    conversationTtlMs?: number;
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -158,6 +160,7 @@ export function makeDeps(
     calendar,
     autoPushCalendar: opts.autoPush,
     ...(opts.conversations ? { conversations: opts.conversations } : {}),
+    ...(opts.conversationTtlMs !== undefined ? { conversationTtlMs: opts.conversationTtlMs } : {}),
     ...(opts.parseThrows !== undefined
       ? {
           parse: vi.fn(async () => {

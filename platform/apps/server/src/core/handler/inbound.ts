@@ -66,12 +66,29 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   // message is already enqueued (persist-before-ack), so the count includes it; resets at
   // Jerusalem midnight. Off unless both the ceiling and the inbound counter are wired.
   if (deps.maxPerSenderPerDay !== undefined && deps.inbound) {
-    const since = jerusalemDayStartSqlite((deps.now ?? (() => new Date()))());
+    const now = (deps.now ?? (() => new Date()))();
+    const since = jerusalemDayStartSqlite(now);
     const count = deps.inbound.countFromSenderSince(msg.from, since);
     if (count > deps.maxPerSenderPerDay) {
-      log("per-sender daily ceiling hit", { from: msg.from, count, max: deps.maxPerSenderPerDay });
-      await deps.sendText(msg.from, RATE_LIMIT_HE);
-      return;
+      // G23: a resume-answer is NOT a new intent. If the sender has a LIVE open thread, exempt them
+      // from the ceiling so their answer still resolves/expires the thread — otherwise a rate-limited
+      // reply would strand the thread until TTL (the #84 clarify / #85-86 disambiguation never closes).
+      // getPending excludes EXPIRED rows at read time, so an already-expired thread does NOT grant the
+      // exemption: that sender is sending something genuinely new and stays rate-limited.
+      const hasOpenThread = deps.conversations?.getPending(msg.from, sqliteUtc(now)) != null;
+      if (!hasOpenThread) {
+        log("per-sender daily ceiling hit", {
+          from: msg.from,
+          count,
+          max: deps.maxPerSenderPerDay,
+        });
+        await deps.sendText(msg.from, RATE_LIMIT_HE);
+        return;
+      }
+      log("ceiling hit but sender has an open thread — exempting the resume (G23)", {
+        from: msg.from,
+        count,
+      });
     }
   }
 

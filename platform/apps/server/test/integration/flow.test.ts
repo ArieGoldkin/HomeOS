@@ -3,12 +3,22 @@ import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type CallModel, createAgent } from "../../src/core/agent.ts";
 import { processInbound } from "../../src/core/handler/index.ts";
+import { CLARIFY_QUESTIONS, REPHRASE_HE } from "../../src/core/handler/shared.ts";
+import {
+  type ConversationStore,
+  createConversationStore,
+} from "../../src/db/conversation-store.ts";
 import { createEventStore } from "../../src/db/event-store.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ParseMessage } from "../../src/parsing/parser.ts";
-import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../../src/tools/tools.ts";
+import {
+  type CalendarToolDeps,
+  extractEventsTool,
+  type GmailToolDeps,
+  readGmailTool,
+} from "../../src/tools/tools.ts";
 
 // Webhook HMAC is mandatory; integration posts are signed with this test key (named "key" to avoid
 // the repo's secret scanner). The same key is wired into createServer below.
@@ -87,10 +97,67 @@ const callModel: CallModel = async (req) => {
   };
 };
 
+/**
+ * A recording Google Calendar fake (the #87 integration stubs ONLY callModel/parse + the calendar
+ * client; the stores + handler are real). `existingGcalId` is what findEventIdByPrivateProp resolves to:
+ * `null` ⇒ a brand-new mirror (auto-push INSERTs), a string ⇒ an existing mirror (edit PATCHes, cancel
+ * DELETEs). Every write is recorded so a test can assert the best-effort mirror op (G25).
+ */
+function recordingCalendar(existingGcalId: string | null = null) {
+  const calls = {
+    insert: [] as unknown[],
+    patch: [] as Array<{ id: string; body: unknown }>,
+    delete: [] as string[],
+  };
+  const calendar = {
+    client: {
+      list: async () => [],
+      findEventIdByPrivateProp: async () => existingGcalId,
+      insertEvent: async (_t: string, _c: string, body: unknown) => {
+        calls.insert.push(body);
+        return { id: "gcal-new" };
+      },
+      patchEvent: async (_t: string, _c: string, id: string, body: unknown) => {
+        calls.patch.push({ id, body });
+        return { id };
+      },
+      deleteEvent: async (_t: string, _c: string, id: string) => {
+        calls.delete.push(id);
+      },
+    },
+    oauthClient: {
+      exchangeCode: async () => ({}),
+      refresh: async () => ({}),
+      revoke: async () => {},
+    },
+    credentials: {
+      get: () => ({
+        accessToken: "acc",
+        refreshToken: "ref",
+        expiry: "2099-01-01 00:00:00",
+        scopes: [],
+      }),
+      updateTokens: () => {},
+      delete: () => {},
+    },
+    calendarId: "primary",
+    windowDays: 30,
+    maxEvents: 20,
+  } as unknown as CalendarToolDeps;
+  return { calendar, calls };
+}
+
 function makeSystem(
   parseImpl: ParseMessage = parse,
   members: Record<string, string> = {},
   google?: GmailToolDeps,
+  // #87: opt-in conversational lifecycle wiring (open-thread store, calendar mirror, TTL, auto-push).
+  extra: {
+    conversations?: ConversationStore;
+    calendar?: CalendarToolDeps;
+    conversationTtlMs?: number;
+    autoPush?: boolean;
+  } = {},
 ) {
   const events = createEventStore(":memory:");
   const inbound = createInboundStore(":memory:");
@@ -113,6 +180,13 @@ function makeSystem(
       inbound,
       members,
       google,
+      parse: parseImpl, // #84: the non-persisting re-parse seam a clarify RESUME uses (harmless otherwise)
+      ...(extra.conversations ? { conversations: extra.conversations } : {}),
+      ...(extra.calendar ? { calendar: extra.calendar } : {}),
+      ...(extra.conversationTtlMs !== undefined
+        ? { conversationTtlMs: extra.conversationTtlMs }
+        : {}),
+      autoPushCalendar: extra.autoPush,
       now: () => new Date("2026-06-20T09:00:00Z"),
     });
   const app = createServer({
@@ -324,5 +398,153 @@ describe("integration: webhook → queue → store → confirm → read → undo
     // Disconnect purge — the #61 seam, now activated by the google tag.
     expect(sys.events.deleteByProvider("google")).toBe(2);
     expect(sys.events.listEvents()).toHaveLength(0);
+  });
+});
+
+// #87 — the conversational lifecycle end-to-end, against REAL stores + handler + agent (only callModel,
+// parse, and the calendar client are stubbed). Locks the clarify/cancel/edit chains incl. the Google
+// mirror, the boot sweep-before-replay ordering (G24), and the single-purpose guardrails.
+describe("integration: conversational lifecycle (#87)", () => {
+  const sender = "972501234567";
+  const NOW_SQLITE = "2026-06-20 09:00:00";
+
+  it("clarify → resume → save + Calendar auto-push (#84/#87)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { calendar, calls } = recordingCalendar(null); // new event → the mirror is INSERTed
+    // The forward lacks a date (opens a templated thread); the answer re-parses to a dated event.
+    const clarifyParse: ParseMessage = async (text) =>
+      text.includes("בלי תאריך")
+        ? [{ ...evA, needs_clarification: { reason: "missing_date" } }]
+        : [{ ...evA, date_iso: "2026-06-25", time: "17:00" }];
+    const sys = makeSystem(clarifyParse, {}, undefined, {
+      conversations,
+      calendar,
+      autoPush: true,
+    });
+
+    // 1) Date-less forward → ONE server template, nothing saved, a clarify thread now holds the draft.
+    await sys.runInbound({
+      id: "wamid.cl1",
+      from: sender,
+      type: "text",
+      text: "אסיפת הורים בלי תאריך",
+    });
+    expect(sys.events.listEvents()).toHaveLength(0);
+    expect(sys.sent.at(-1)?.body).toBe(CLARIFY_QUESTIONS.missing_date);
+    expect(conversations.getPending(sender, NOW_SQLITE)?.kind).toBe("clarify");
+
+    // 2) The answer resumes (no fresh agent loop) → saves, confirms, and best-effort pushes the mirror.
+    await sys.runInbound({ id: "wamid.cl2", from: sender, type: "text", text: "ביום חמישי בחמש" });
+    expect(sys.events.listEvents()).toHaveLength(1);
+    expect(sys.sent.at(-1)?.body).toContain("הוספתי");
+    expect(calls.insert).toHaveLength(1); // Google mirror created
+    expect(conversations.getPending(sender, NOW_SQLITE)).toBeNull(); // single-use, thread closed
+  });
+
+  it("cancel-by-ref → board delete + Google delete, idempotent on re-cancel (#85/#87/G25)", async () => {
+    const { calendar, calls } = recordingCalendar("gcal-1"); // an existing mirror → it gets DELETEd
+    const sys = makeSystem(parse, {}, undefined, { calendar });
+
+    // Seed a board row (evA "אסיפת הורים") via a normal forward.
+    await sys.runInbound({ id: "wamid.seed", from: sender, type: "text", text: "single" });
+    expect(sys.events.listEvents()).toHaveLength(1);
+
+    // Cancel by reference → the board row + its Google mirror are removed.
+    await sys.runInbound({ id: "wamid.can1", from: sender, type: "text", text: "בטל אסיפת הורים" });
+    expect(sys.events.listEvents()).toHaveLength(0);
+    expect(calls.delete).toEqual(["gcal-1"]);
+    expect(sys.sent.at(-1)?.body).toMatch(/בוטל/);
+
+    // Re-cancel the same reference → idempotent: not-found, and NO second mirror delete.
+    await sys.runInbound({ id: "wamid.can2", from: sender, type: "text", text: "בטל אסיפת הורים" });
+    expect(sys.sent.at(-1)?.body).toContain("לא מצאתי");
+    expect(calls.delete).toHaveLength(1);
+  });
+
+  it("edit-by-ref → board update + Google patch (#86/#87/G25)", async () => {
+    const { calendar, calls } = recordingCalendar("gcal-1"); // an existing mirror → it gets PATCHed
+    const sys = makeSystem(parse, {}, undefined, { calendar });
+
+    await sys.runInbound({ id: "wamid.seed", from: sender, type: "text", text: "single" });
+    expect(sys.events.listEvents()[0]?.time).toBe("18:30");
+
+    // Edit the time by reference → the board row is patched in place and the mirror follows.
+    await sys.runInbound({
+      id: "wamid.ed1",
+      from: sender,
+      type: "text",
+      text: "שנה אסיפת הורים לשעה 19:45",
+    });
+    expect(sys.events.listEvents()[0]?.time).toBe("19:45");
+    expect(calls.patch).toHaveLength(1);
+    expect(calls.patch[0]?.id).toBe("gcal-1");
+  });
+
+  it("boot sweep runs BEFORE replay — a LIVE open thread is not re-asked (G24)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const sys = makeSystem(parse, {}, undefined, { conversations });
+
+    // Crash-after-question-before-markDone: an open clarify thread + a still-pending inbound.
+    conversations.create({
+      fromPhone: sender,
+      payload: { kind: "clarify", reason: "ambiguous_title", draft: evA },
+      expiresAt: "2026-06-20 12:00:00", // live at NOW
+    });
+    sys.inbound.enqueue({ id: "wamid.boot", from: sender, type: "text", text: "אירוע כלשהו" });
+
+    // Exactly index.ts's boot order: sweep stale threads FIRST, then replay pending inbound.
+    conversations.expireStale(NOW_SQLITE); // the live thread survives the sweep
+    for (const msg of sys.inbound.pending()) await sys.runInbound(msg);
+
+    // The replayed forward hit the OPEN thread → resumed; the question is NEVER re-sent.
+    expect(sys.sent.some((s) => s.body === CLARIFY_QUESTIONS.ambiguous_title)).toBe(false);
+    expect(conversations.getPending(sender, NOW_SQLITE)).toBeNull(); // resolved single-use
+    expect(sys.inbound.pending()).toHaveLength(0); // settled
+  });
+
+  it("boot sweep removes an EXPIRED thread before replay — message is re-asked freshly (ordering)", async () => {
+    const conversations = createConversationStore(":memory:");
+    // The replayed forward parses as needing a date → a FRESH clarify opens after the stale one is swept.
+    const clarifyParse: ParseMessage = async () => [
+      { ...evA, needs_clarification: { reason: "missing_date" } },
+    ];
+    const sys = makeSystem(clarifyParse, {}, undefined, { conversations });
+
+    conversations.create({
+      fromPhone: sender,
+      payload: { kind: "clarify", reason: "ambiguous_title", draft: evA },
+      expiresAt: "2026-06-20 08:00:00", // EXPIRED at NOW
+    });
+    sys.inbound.enqueue({ id: "wamid.boot2", from: sender, type: "text", text: "אסיפה בלי תאריך" });
+
+    conversations.expireStale(NOW_SQLITE); // sweeps the expired thread FIRST
+    for (const msg of sys.inbound.pending()) await sys.runInbound(msg);
+
+    // Swept → the replay did NOT resume into the stale thread; it parsed fresh and asked the question.
+    expect(sys.sent.at(-1)?.body).toBe(CLARIFY_QUESTIONS.missing_date);
+    expect(sys.events.listEvents()).toHaveLength(0);
+  });
+
+  it("guardrails unchanged: replies are SERVER-owned templates, never model prose (single-purpose, G1–G16)", async () => {
+    const conversations = createConversationStore(":memory:");
+    // null → unparseable (no chat answer); a date-less forward → the server clarify template.
+    const guardParse: ParseMessage = async (text) =>
+      text.includes("בלי תאריך")
+        ? [{ ...evA, needs_clarification: { reason: "missing_date" } }]
+        : null;
+    const sys = makeSystem(guardParse, {}, undefined, { conversations });
+
+    // An open-domain message gets the REPHRASE template — the bot never free-form chats (#30/G3/G5).
+    await sys.runInbound({ id: "wamid.g1", from: sender, type: "text", text: "מה שלומך היום?" });
+    expect(sys.sent.at(-1)?.body).toBe(REPHRASE_HE);
+
+    // A clarify question is the EXACT server template for the reason — the model only emits the enum.
+    await sys.runInbound({
+      id: "wamid.g2",
+      from: sender,
+      type: "text",
+      text: "אסיפת הורים בלי תאריך",
+    });
+    expect(sys.sent.at(-1)?.body).toBe(CLARIFY_QUESTIONS.missing_date);
   });
 });

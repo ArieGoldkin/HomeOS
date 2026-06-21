@@ -147,7 +147,10 @@ export async function routeEditByRef(
   if (deps.conversations) {
     const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
     const expiresAt = sqliteUtc(
-      new Date((deps.now ?? (() => new Date()))().getTime() + CONVERSATION_TTL_MS),
+      new Date(
+        (deps.now ?? (() => new Date()))().getTime() +
+          (deps.conversationTtlMs ?? CONVERSATION_TTL_MS),
+      ),
     );
     deps.conversations.create({
       fromPhone: msg.from,

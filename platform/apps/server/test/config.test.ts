@@ -88,6 +88,11 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, MAX_PER_SENDER_PER_DAY: "100" }).maxPerSenderPerDay).toBe(100);
   });
 
+  it("defaults CONVERSATION_TTL_MIN to 30 min and surfaces it as ms (#87/G24)", () => {
+    expect(loadConfig(base).conversationTtlMs).toBe(30 * 60_000); // 1_800_000
+    expect(loadConfig({ ...base, CONVERSATION_TTL_MIN: "10" }).conversationTtlMs).toBe(10 * 60_000);
+  });
+
   it("defaults the GMAIL_* settings (#72) and respects overrides", () => {
     const d = loadConfig(base);
     expect(d.gmailMaxMessages).toBe(10);
