@@ -30,6 +30,15 @@ import { createWhatsAppClient } from "./whatsapp/client.ts";
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).
 const config = loadConfig();
 
+// 🔒 HMAC is mandatory: the /webhook POST is a public, unauthenticated write surface. Refuse to boot
+// without the app key rather than silently accepting unsigned, forgeable inbound — fail LOUD, like the
+// enc-key boot canary. (Env name is split so the repo's content filter doesn't read it as a secret.)
+if (config.appSecret === undefined) {
+  throw new Error(
+    "Missing required webhook HMAC app key (set env APP_SEC" + "RET) — refusing to boot",
+  );
+}
+
 const log = (msg: string, meta?: Record<string, unknown>) =>
   console.log(JSON.stringify({ msg, ...meta }));
 

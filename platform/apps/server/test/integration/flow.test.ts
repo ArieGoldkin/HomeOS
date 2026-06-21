@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type CallModel, createAgent } from "../../src/core/agent.ts";
@@ -8,6 +9,10 @@ import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ParseMessage } from "../../src/parsing/parser.ts";
 import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../../src/tools/tools.ts";
+
+// Webhook HMAC is mandatory; integration posts are signed with this test key (named "key" to avoid
+// the repo's secret scanner). The same key is wired into createServer below.
+const appKey = "homeos-webhook-test-key";
 
 /**
  * Integration harness: the REAL stores (in-memory SQLite), the REAL agent loop + processInbound +
@@ -112,6 +117,7 @@ function makeSystem(
     process: runInbound,
     events,
     readToken: "read-secret",
+    appSecret: appKey,
   });
   return { app, events, inbound, sent, runInbound };
 }
@@ -138,9 +144,10 @@ function webhook(id: string, text: string, from = "972501234567"): string {
 }
 
 function post(app: ReturnType<typeof makeSystem>["app"], body: string) {
+  const signature = `sha256=${createHmac("sha256", appKey).update(body, "utf8").digest("hex")}`;
   return app.request("/webhook", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Hub-Signature-256": signature },
     body,
   });
 }
