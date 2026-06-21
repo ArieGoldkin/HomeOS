@@ -1,5 +1,8 @@
 // Load .env when present (local dev); no-op in hosted envs where vars are injected (e.g. Railway).
 import "dotenv/config";
+import { existsSync } from "node:fs";
+import { relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
@@ -129,6 +132,15 @@ const serverDeps: ServerDeps = {
 };
 // Assigned (not a `:` pair) to sidestep the secret-scanner on the *Token key.
 serverDeps.writeToken = config.writeToken;
+
+// #150 — same-origin web app: serve the built SPA when a build is present. Resolve the dist ABSOLUTELY
+// from this module (stable regardless of the process cwd), then hand serve-static a cwd-RELATIVE root
+// (the node driver rejects absolute roots). No build (app-only / dev) ⇒ webDist stays unset ⇒ no static.
+const absWebDist = fileURLToPath(new URL("../../web/dist", import.meta.url));
+if (existsSync(absWebDist)) {
+  serverDeps.webDist = relative(process.cwd(), absWebDist) || ".";
+  log("serving web app", { webDist: serverDeps.webDist });
+}
 const app = createServer(serverDeps);
 
 // 💬 Boot sweep (#83/G24): drop conversation threads that expired while the process was down, so a

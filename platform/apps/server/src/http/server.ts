@@ -1,5 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { parsedEventSchema } from "@homeos/shared";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
@@ -28,6 +29,10 @@ export interface ServerDeps {
   /** Bearer token gating POST /events (the web/phone write seam). Undefined ⇒ disabled (503). A
    *  DISTINCT credential from the read token — never falls back to it (a read-only deploy can't mutate). */
   writeToken?: string;
+  /** #150 — directory of the built web SPA (`apps/web/dist`), RELATIVE to the process cwd (the node
+   *  serve-static driver rejects absolute roots). Undefined ⇒ no static serving (app-only / dev without a
+   *  build / tests). When set, the SPA is served same-origin so the dashboard shares the API's origin. */
+  webDist?: string;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
 
@@ -139,6 +144,17 @@ export function createServer(deps: ServerDeps): Hono {
 
     return c.text("OK", 200);
   });
+
+  // #150 — same-origin web app: serve the built SPA from `apps/web/dist`. Registered LAST so every API
+  // route above wins (Hono runs handlers in registration order; the API routes respond without calling
+  // next, so this middleware never shadows them). First mount serves real files (assets, /index.html);
+  // serve-static calls next() on a miss, so the GET fallback then serves index.html for client-side
+  // routes (/web/today, /phone/*, …) — standard SPA deep-link handling. Inert when `webDist` is unset.
+  if (deps.webDist !== undefined) {
+    const root = deps.webDist;
+    app.use("/*", serveStatic({ root }));
+    app.get("/*", serveStatic({ root, rewriteRequestPath: () => "/index.html" }));
+  }
 
   return app;
 }
