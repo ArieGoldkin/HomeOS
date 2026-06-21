@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HomeOS · Multi-User App Architecture (Phase 8)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#11161d; --bd:#30363d; --tx:#c9d1d9; --mut:#8b949e;
+    --teal:#2dd4bf; --amber:#d29922; --red:#f85149; --purple:#a371f7; --blue:#388bfd; --green:#3fb950;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--tx);font-family:var(--sans);line-height:1.55;font-size:15px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{display:grid;grid-template-columns:232px 1fr;max-width:1280px;margin:0 auto;gap:0}
+  /* sticky nav */
+  nav{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 14px;border-right:1px solid var(--bd);background:var(--panel2)}
+  nav .brand{font-weight:700;font-size:13px;letter-spacing:.04em;color:var(--teal);text-transform:uppercase;margin-bottom:4px}
+  nav .sub{font-size:11px;color:var(--mut);margin-bottom:18px}
+  nav a{display:block;color:var(--mut);font-size:13px;padding:6px 10px;border-radius:6px;border-left:2px solid transparent;margin:1px 0}
+  nav a:hover{color:var(--tx);background:#1c2230;text-decoration:none}
+  nav a.active{color:var(--tx);background:#1c2530;border-left-color:var(--teal);font-weight:600}
+  main{padding:34px 40px 120px;min-width:0}
+  /* header */
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .pill{font-size:11px;padding:4px 10px;border-radius:999px;background:#1c2230;border:1px solid var(--bd);color:var(--mut)}
+  .pill b{color:var(--tx);font-weight:600}
+  h1{font-size:30px;line-height:1.15;margin:.1em 0 .25em;
+     background:linear-gradient(92deg,#7ee7d7,#388bfd 60%,#a371f7);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{font-size:16px;color:var(--mut);max-width:64ch;margin:0 0 22px}
+  .callout{border-left:3px solid var(--teal);background:#0f1c1a;padding:14px 16px;border-radius:0 8px 8px 0;margin:18px 0;font-size:14.5px}
+  .callout.warn{border-color:var(--amber);background:#1c180e}
+  .callout.red{border-color:var(--red);background:#1e1011}
+  .callout b{color:var(--tx)}
+  /* kpi */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:22px 0 8px}
+  .k{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:12px 12px}
+  .k .v{font-size:23px;font-weight:700;font-family:var(--mono)}
+  .k .l{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em;margin-top:3px}
+  .k.teal .v{color:var(--teal)} .k.amber .v{color:var(--amber)} .k.red .v{color:var(--red)}
+  .k.blue .v{color:var(--blue)} .k.purple .v{color:var(--purple)} .k.green .v{color:var(--green)}
+  /* sections */
+  section{padding-top:30px;margin-top:14px;border-top:1px solid #20262e}
+  section:first-of-type{border-top:none}
+  h2{font-size:20px;display:flex;align-items:center;gap:10px;margin:0 0 6px}
+  h2 .n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:#1c2530;color:var(--teal);font-size:13px;font-family:var(--mono);font-weight:700}
+  .sec-note{color:var(--mut);font-size:13.5px;margin:0 0 16px}
+  /* vs split */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+  .vs .col{border-radius:10px;padding:13px 15px;border:1px solid var(--bd)}
+  .vs .before{background:#1a1012;border-color:#5a2a2c}
+  .vs .after{background:#0f1c1a;border-color:#1f5b53}
+  .vs h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .vs .before h4{color:var(--red)} .vs .after h4{color:var(--teal)}
+  .vs ul{margin:0;padding-left:18px;font-size:13.5px} .vs li{margin:4px 0}
+  /* diagrams */
+  .diagram{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:12px 0;overflow-x:auto}
+  .legend{font-size:12px;color:var(--mut);margin:6px 2px 0;display:flex;flex-wrap:wrap;gap:14px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .swnew{background:#2dd4bf}.swedit{background:#d29922}.swreuse{background:#388bfd}.swgate{background:#a371f7}
+  /* cards */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+  .card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:13px 15px}
+  .card h4{margin:0 0 6px;font-size:14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .card p{margin:5px 0 0;font-size:13px;color:var(--mut)}
+  .card code{font-family:var(--mono);font-size:12px;color:#e6c07b;background:#0d1117;padding:1px 5px;border-radius:4px}
+  .tag{font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap}
+  .t-now{background:#0f2a27;color:var(--teal);border:1px solid #1f5b53}
+  .t-fixed{background:#0f2a18;color:var(--green);border:1px solid #1f5b34}
+  .t-open{background:#2a230f;color:var(--amber);border:1px solid #5b4a1f}
+  .t-crit{background:#2a1012;color:var(--red);border:1px solid #5b2a2c}
+  .t-defer{background:#1a1420;color:var(--purple);border:1px solid #432f5b}
+  .t-known{background:#11203a;color:var(--blue);border:1px solid #1f3f6b}
+  /* table */
+  .matrix{margin:12px 0}
+  .chips{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+  .chip{font-size:12px;padding:5px 12px;border-radius:999px;background:#1c2230;border:1px solid var(--bd);color:var(--mut);cursor:pointer;user-select:none}
+  .chip.on{background:#1c2530;color:var(--tx);border-color:var(--teal)}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #20262e}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);cursor:pointer;user-select:none;white-space:nowrap}
+  th:hover{color:var(--tx)} th.sorted{color:var(--teal)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#1a2029}
+  td.opt{font-weight:600;color:var(--tx)}
+  td .meta{display:block;color:var(--mut);font-size:11.5px;font-weight:400;margin-top:2px}
+  .vb{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:700}
+  .v-use{background:#0f2a18;color:var(--green);border:1px solid #1f5b34}
+  .v-consider{background:#2a230f;color:var(--amber);border:1px solid #5b4a1f}
+  .v-avoid{background:#2a1012;color:var(--red);border:1px solid #5b2a2c}
+  .kind{font-family:var(--mono);font-size:11px;color:var(--mut)}
+  /* ceremony steps */
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0}
+  ol.steps li{position:relative;padding:10px 12px 10px 46px;margin:8px 0;background:var(--panel);border:1px solid var(--bd);border-radius:9px;font-size:13.5px}
+  ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:12px;top:10px;width:22px;height:22px;border-radius:50%;background:#1c2530;color:var(--teal);display:grid;place-items:center;font-family:var(--mono);font-size:12px;font-weight:700}
+  ol.steps b{color:var(--tx)} ol.steps code{font-family:var(--mono);font-size:12px;color:#e6c07b}
+  /* decision form */
+  .qf{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:13px 15px;margin:10px 0}
+  .qf h4{margin:0 0 9px;font-size:14px}
+  .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .opt{position:relative;font-size:13px;padding:7px 13px;border-radius:8px;background:#1c2230;border:1px solid var(--bd);color:var(--mut);cursor:pointer;user-select:none}
+  .opt:hover{color:var(--tx)}
+  .opt.sel{background:#0f1c1a;border-color:var(--teal);color:#aef5ec}
+  .opt .rec{font-size:9px;background:var(--teal);color:#03201c;padding:1px 6px;border-radius:999px;margin-right:7px;font-weight:700;text-transform:uppercase}
+  textarea{width:100%;min-height:62px;background:#0d1117;border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-family:var(--sans);font-size:13px;padding:9px;resize:vertical}
+  .reply{margin-top:14px;border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+  .reply .bar{display:flex;justify-content:space-between;align-items:center;background:#1c2230;padding:8px 13px;font-size:12px;color:var(--mut)}
+  .reply pre{margin:0;padding:13px;font-family:var(--mono);font-size:12.5px;color:var(--tx);white-space:pre-wrap;background:var(--panel2)}
+  button.copy{background:var(--teal);color:#03201c;border:none;border-radius:6px;padding:5px 12px;font-weight:700;font-size:12px;cursor:pointer}
+  button.copy:hover{filter:brightness(1.1)}
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--bd);font-size:12.5px;color:var(--mut)}
+  footer b{color:var(--tx)}
+  .mono{font-family:var(--mono)}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}nav{display:none}.kpis{grid-template-columns:repeat(3,1fr)}.vs,.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <div class="brand">HomeOS · Phase 8</div>
+  <div class="sub">Multi-user app architecture</div>
+  <a href="#thesis">Thesis</a>
+  <a href="#reframe">1 · The reframe</a>
+  <a href="#flow">2 · Architecture flow</a>
+  <a href="#ceremony">3 · OTP binding ceremony</a>
+  <a href="#data">4 · Data model</a>
+  <a href="#roadmap">5 · Build roadmap</a>
+  <a href="#decisions">6 · Decision matrix</a>
+  <a href="#risks">7 · Risk register</a>
+  <a href="#questions">8 · Open decisions</a>
+</nav>
+<main>
+  <div class="pills">
+    <span class="pill">Brief · <b>2026-06-21</b></span>
+    <span class="pill">Trigger · <b>R2 #130 → reframe</b></span>
+    <span class="pill">Owners · <b>Arie</b> · Hodaya</span>
+    <span class="pill">Source · <b>multi-user-app-architecture.md</b></span>
+    <span class="pill">Confidence · <b style="color:var(--amber)">MEDIUM</b></span>
+  </div>
+  <h1>One bot number, many families.</h1>
+  <p class="lede">"Multi-tenant" reframed: <b>not</b> a WhatsApp number per family — one HomeOS-owned bot number, and a multi-<b>user</b> web app where a <b>family is the tenant</b>. Each member chats 1:1 with the bot (routed by phone) and logs into the UI with Google. This brief is the architecture, the build order, and the decisions to ratify.</p>
+
+  <div class="callout warn" id="thesis">
+    <b>Recommendation.</b> Keep the single shared bot number. Adopt <b>Better-Auth</b> (Google OIDC), bind a member's phone with the <b>user-sends-a-code-to-the-bot</b> ceremony (free + most secure), and make the <code class="mono">from_phone → family_id</code> resolver at <code class="mono">inbound.ts:54</code> the one security chokepoint. Ship D1/D2 now on single-tenancy; the D3→D4→D5 spine is the multi-user core. Own-number onboarding (D9) stays <b>deferred</b> per R2.
+  </div>
+
+  <div class="kpis">
+    <div class="k teal"><div class="v">1</div><div class="l">Shared bot number</div></div>
+    <div class="k blue"><div class="v">5</div><div class="l">Net-new tables</div></div>
+    <div class="k amber"><div class="v">3</div><div class="l">family_id migrations</div></div>
+    <div class="k purple"><div class="v">~16</div><div class="l">Resolver call sites</div></div>
+    <div class="k green"><div class="v">9</div><div class="l">Build phases D1–D9</div></div>
+    <div class="k red"><div class="v">1</div><div class="l">Security chokepoint</div></div>
+  </div>
+
+  <!-- 1 -->
+  <section id="reframe">
+    <h2><span class="n">1</span> The reframe</h2>
+    <p class="sec-note">What "multi-tenant" meant before R2 vs. what it means now.</p>
+    <div class="vs">
+      <div class="col before">
+        <h4>✗ Before — own-number per family</h4>
+        <ul>
+          <li>Each family connects <b>their own</b> WhatsApp number (Coexistence QR).</li>
+          <li>Blocked: +972 Coexistence unconfirmed; group chats never reach the webhook; Business-App migration kills consumer onboarding.</li>
+          <li>Identity = the phone number itself, per family.</li>
+        </ul>
+      </div>
+      <div class="col after">
+        <h4>✓ After — multi-USER over one number</h4>
+        <ul>
+          <li><b>One</b> HomeOS bot number; families route by <code>from_phone</code>.</li>
+          <li>Family = tenant; many members; each 1:1 with the bot.</li>
+          <li>Identity = Google login (app) <b>+</b> verified phone (bot), bound into one user.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout red">
+      <b>Carried-over constraint (whole product).</b> The 2026 WhatsApp Business Solution Terms restrict <b>primary</b> AI/LLM with an <b>EEA + Brazil-only exception that excludes +972</b>. HomeOS's structured "forward → event" parser most plausibly reads as <i>ancillary</i> (permitted) — but it's at Meta's sole discretion. Tracked in <b>#30</b>.
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="flow">
+    <h2><span class="n">2</span> Architecture flow</h2>
+    <p class="sec-note">Two paths converge on one <code class="mono">family_id</code>. The resolver is where trust is enforced — it has no backstop (service_role bypasses RLS; SQLite has none).</p>
+    <div class="diagram"><pre class="mermaid">
+flowchart TB
+  subgraph BR["Browser path"]
+    direction TB
+    M1["Member"] --> G["Sign in with Google<br/>Better-Auth OIDC · session.user.id"]
+    G --> F["Create / join family<br/>family_members"]
+    F --> P["Enter phone<br/>pending_bindings (code, TTL)"]
+  end
+  subgraph BT["Bot path · ONE shared number"]
+    direction TB
+    S["Member sends CODE<br/>from personal WhatsApp"] --> WH["webhook · HMAC verified ✓<br/>(PR #144)"]
+    WH --> R{{"RESOLVER · inbound.ts:54<br/>from_phone → family_phones → family_id"}}
+    R --> AL["allowlist / forward gate"]
+    AL --> IN["inbound_messages(family_id)"]
+    IN --> EV["parse → events(family_id)"]
+  end
+  P -. "code shown to member" .-> S
+  R == "match writes" ==> FP[("family_phones<br/>TRUST established")]
+  EV --> BD["Board read in browser<br/>scoped by family_id · JWT + RLS"]
+  F --> BD
+  class G,F,P,S,FP nw
+  class R gt
+  class WH,AL ed
+  class IN,EV,BD ru
+  classDef nw fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:1.5px
+  classDef ed fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:1.5px
+  classDef ru fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:1.5px
+  classDef gt fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-width:2px,stroke-dasharray:5 3
+    </pre></div>
+    <div class="legend">
+      <span><i class="swnew"></i>net-new build</span>
+      <span><i class="swedit"></i>modify existing seam</span>
+      <span><i class="swreuse"></i>reuse as-is</span>
+      <span><i class="swgate"></i>security chokepoint</span>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="ceremony">
+    <h2><span class="n">3</span> OTP binding ceremony</h2>
+    <p class="sec-note">Direction B: the code travels <i>from</i> the member's WhatsApp → it proves control of the exact <code class="mono">from_phone</code> we route on. Free (user-initiated 24h window, no template).</p>
+    <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant M as Member (web)
+  participant A as App / Server
+  participant W as WhatsApp (personal)
+  participant B as Bot · Cloud API
+  M->>A: Google login + enter phone
+  A->>A: pending_bindings(code_hash, TTL ~5m)
+  A-->>M: show one-time CODE
+  M->>W: type the CODE
+  W->>B: send CODE (1:1 message)
+  B->>A: inbound webhook (HMAC verified)
+  A->>A: match from_phone + code → write family_phones
+  A-->>B: bound ✓ (free service reply)
+  B-->>M: confirmation in WhatsApp
+    </pre></div>
+    <ol class="steps">
+      <li>Member signs in with Google and enters their phone. Server writes a <code>pending_bindings</code> row with a <b>high-entropy, single-use</b> code (hashed), short TTL, attempt counter.</li>
+      <li>App displays the code; member sends it to the bot <b>from their own WhatsApp</b>.</li>
+      <li>Inbound arrives on the webhook (<b>HMAC mandatory</b>); the resolver matches <code>from_phone</code> + code against the pending claim.</li>
+      <li>On match → write <code>family_phones(family_id, from_phone, verified_at)</code>. <b>Trust established.</b> Bot replies "bound ✓".</li>
+      <li>From now on, every 1:1 inbound from that phone resolves to that family; the board is read in the browser scoped by <code>family_id</code>.</li>
+    </ol>
+  </section>
+
+  <!-- 4 -->
+  <section id="data">
+    <h2><span class="n">4</span> Data model</h2>
+    <p class="sec-note">Five net-new identity tables + three <code class="mono">family_id</code> migrations. <code class="mono">credentials</code>/<code class="mono">oauth_state</code> are already family-keyed — the template to copy.</p>
+    <div class="grid3">
+      <div class="card"><h4>users <span class="tag t-now">new</span></h4><p><code>id</code>, <code>oidc_sub</code> UNIQUE, <code>email</code>. Anchor on the stable OIDC subject.</p></div>
+      <div class="card"><h4>families <span class="tag t-now">new</span></h4><p><code>id</code>. The tenant.</p></div>
+      <div class="card"><h4>family_members <span class="tag t-now">new</span></h4><p><code>user_id</code>, <code>family_id</code>, <code>role</code>. UNIQUE(user_id, family_id). Browser-path resolver source.</p></div>
+      <div class="card"><h4>family_phones <span class="tag t-now">new</span></h4><p><code>family_id</code>, <code>from_phone</code>, <code>verified_at</code>. UNIQUE(from_phone). Written only after OTP. Bot-path resolver source.</p></div>
+      <div class="card"><h4>pending_bindings <span class="tag t-now">new</span></h4><p><code>family_id</code>, <code>phone</code>, <code>code_hash</code>, <code>attempts</code>, <code>expires_at</code>. Short-TTL claim, consumed once.</p></div>
+      <div class="card"><h4>events <span class="tag t-crit">migrate</span></h4><p>No <code>family_id</code> today (decision A). Add column + index. Destructive <code>deleteLastFromSender</code>/<code>findEventsByRef</code> <b>leak cross-tenant</b> if unscoped.</p></div>
+      <div class="card"><h4>conversations <span class="tag t-crit">migrate</span></h4><p><code>UNIQUE(from_phone)</code> + INSERT OR REPLACE → cross-tenant takeover. → <code>UNIQUE(family_id, from_phone)</code> <b>before family #2</b>.</p></div>
+      <div class="card"><h4>inbound_messages <span class="tag t-open">migrate</span></h4><p>Add <code>family_id</code>; scope <code>countFromSenderSince</code> (G16) + <code>statsSince</code>. PK stays <code>wa_message_id</code>.</p></div>
+      <div class="card"><h4>credentials · oauth_state <span class="tag t-known">ready</span></h4><p>Already <code>family_id</code>-keyed. Only the id source changes from the <code>FAMILY_ID</code> constant.</p></div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="roadmap">
+    <h2><span class="n">5</span> Build roadmap</h2>
+    <p class="sec-note">D1/D2 ship now on single-tenancy. The <span style="color:var(--red)">critical-path spine</span> is D3 → D4 → D5. D9 is gated behind R2.</p>
+    <div class="diagram"><pre class="mermaid">
+gantt
+  dateFormat X
+  axisFormat %s
+  title Phase 8 build order (relative units)
+  section Ship now
+  D1 Durability uploader            :active, d1, 0, 2
+  D2 Messages display (tenant-ready):active, d2, 0, 2
+  section Multi-user spine
+  D3 Tenant columns + scoping       :crit, d3, 2, 2
+  D4 Identity + binding + resolver + HMAC :crit, d4, after d3, 3
+  D5 Supabase migration             :crit, d5, after d4, 2
+  section After D4 / D5
+  D6 Per-user connections           :d6, after d4, 2
+  D7 Billing                        :d7, after d4, 2
+  D8 Realtime board                 :d8, after d5, 2
+  section Deferred (R2 gate)
+  D9 Own-number onboarding          :d9, 11, 2
+    </pre></div>
+    <div class="grid3">
+      <div class="card"><h4>D1 · #134 <span class="tag t-now">now</span></h4><p>Offsite uploader (one Litestream prefix per family file). Engine-independent.</p></div>
+      <div class="card"><h4>D2 · #135 <span class="tag t-now">now</span></h4><p>Messages display — build the <code>family_id</code> seam tenant-ready (defaults <code>"default"</code>).</p></div>
+      <div class="card"><h4>D3 · #136 <span class="tag t-crit">spine</span></h4><p>Tenant columns + store scoping; <code>FamilyScopedStore</code>; cross-tenant tests. Dep: R3.</p></div>
+      <div class="card"><h4>D4 · #137 <span class="tag t-crit">spine</span></h4><p>Better-Auth + binding ceremony + the resolver at ~16 sites + <b>mandatory HMAC</b>. Dep: R3, D3.</p></div>
+      <div class="card"><h4>D5 · #138 <span class="tag t-crit">spine</span></h4><p>Supabase driver swap; RLS for browser reads. Dep: D3, D4.</p></div>
+      <div class="card"><h4>D6 · #139 <span class="tag t-open">after D4</span></h4><p>Per-user Google connections; removes the trip-wire → <b>gates #29/#30</b>. Dep: R4, R5, D4.</p></div>
+      <div class="card"><h4>D7 · #140 <span class="tag t-open">after D4</span></h4><p>Stripe billing → <code>subscriptions(family_id)</code>. Dep: R5(#29), D4.</p></div>
+      <div class="card"><h4>D8 · #141 <span class="tag t-open">after D5</span></h4><p>Realtime board (Postgres Changes), replaces the 30s poll. Dep: D5.</p></div>
+      <div class="card"><h4>D9 · #142 <span class="tag t-defer">deferred</span></h4><p>Own-number Coexistence — only if +972 confirmed first-party AND group dependency cleared. Dep: R2 (hard).</p></div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="decisions">
+    <h2><span class="n">6</span> Decision matrix</h2>
+    <p class="sec-note">Sort by any column; filter by verdict or kind. Auth = end-user login provider; OTP = the phone-binding delivery direction.</p>
+    <div class="matrix">
+      <div class="chips" id="chips">
+        <span class="chip on" data-f="all">All</span>
+        <span class="chip" data-f="use">✓ Use</span>
+        <span class="chip" data-f="consider">~ Consider</span>
+        <span class="chip" data-f="avoid">✗ Avoid</span>
+        <span class="chip" data-f="auth" data-kind="1">Auth</span>
+        <span class="chip" data-f="otp" data-kind="1">OTP</span>
+      </div>
+      <table id="mx">
+        <thead><tr>
+          <th data-k="name">Option</th>
+          <th data-k="kind">Kind</th>
+          <th data-k="cost">Cost</th>
+          <th data-k="eu">EU / residency</th>
+          <th data-k="note">Note</th>
+          <th data-k="verdict" class="sorted">Verdict</th>
+        </tr></thead>
+        <tbody id="mxb"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="risks">
+    <h2><span class="n">7</span> Risk register</h2>
+    <p class="sec-note">Ordered by blast radius. Two are hard prerequisites before family #2.</p>
+    <div class="grid2">
+      <div class="card"><h4>AI-ToS · +972 excluded <span class="tag t-open">monitor</span></h4><p>Primary-AI restriction, EEA/Brazil-only exception. Platform-existential, Meta's sole discretion. Posture: single-purpose hard requirement; verify Anthropic ZDR. <code>#30</code></p></div>
+      <div class="card"><h4>Webhook HMAC was optional <span class="tag t-fixed">fixed · PR #144</span></h4><p>Unsigned/forged POST was accepted when key unset → could bind a victim's phone to an attacker's family. Now fail-closed + boot canary.</p></div>
+      <div class="card"><h4>conversations cross-tenant takeover <span class="tag t-crit">before #2</span></h4><p><code>UNIQUE(from_phone)</code> collides across families. → <code>UNIQUE(family_id, from_phone)</code>. <code>#136</code></p></div>
+      <div class="card"><h4>events destructive methods leak <span class="tag t-open">D3</span></h4><p><code>deleteLastFromSender</code>/<code>findEventsByRef</code> unscoped delete/read across tenants until <code>family_id</code> lands. <code>#136</code></p></div>
+      <div class="card"><h4>Phone reuse / transfer hijack <span class="tag t-open">design</span></h4><p>Bound phone must refuse silent re-point to family B. The transfer/release authz flow is <b>undesigned</b> — specify before D4. <code>#137</code></p></div>
+      <div class="card"><h4>Group-chat ingestion <span class="tag t-known">constraint</span></h4><p>Cloud API group support gated to 100k+ businesses → bot reads 1:1 only. Shapes the product, not a blocker.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="questions">
+    <h2><span class="n">8</span> Open decisions <span style="font-size:12px;color:var(--mut);font-weight:400">→ for Arie</span></h2>
+    <p class="sec-note">The settled calls (shared-number, Better-Auth, Direction-B, mandatory HMAC) are not re-litigated here. These are the genuinely open ones.</p>
+
+    <div class="qf" data-q="Phone transfer/release authz">
+      <h4>Q1 · Who authorizes releasing a phone bound to family A so it can move to B?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="Family owner unbinds + fresh OTP re-bind"><span class="rec">recommended</span>Owner unbind + fresh OTP</span>
+        <span class="opt" data-v="Self-service fresh OTP invalidates prior binding">Self-service fresh OTP</span>
+        <span class="opt" data-v="Support-only manual transfer">Support-only manual</span>
+      </div>
+    </div>
+
+    <div class="qf" data-q="SQLite→Supabase trigger">
+      <h4>Q2 · When do we flip SQLite → Supabase (D5)?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="At D4 (need real auth+RLS for 2nd family)"><span class="rec">recommended</span>At D4 (2nd family)</span>
+        <span class="opt" data-v="Defer — stay on SQLite + app-layer guard as long as possible">Defer, stay on SQLite</span>
+        <span class="opt" data-v="At the Realtime/dashboard milestone">At Realtime (D8)</span>
+      </div>
+    </div>
+
+    <div class="qf" data-q="Anthropic training-data compliance">
+      <h4>Q3 · Anthropic ZDR / no-training to satisfy the BST training clause?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="Verify + enable zero-retention before 2nd family"><span class="rec">recommended</span>Verify + enable ZDR</span>
+        <span class="opt" data-v="Accept default retention, log the risk">Accept default, log risk</span>
+      </div>
+    </div>
+
+    <div class="qf" data-q="Get a compliance read on primary-vs-ancillary AI?">
+      <h4>Q4 · Formal compliance read on the +972 AI-ToS question?</h4>
+      <div class="opts">
+        <span class="opt sel" data-v="Yes — counsel/BSP read before any paid family"><span class="rec">recommended</span>Yes, before paid</span>
+        <span class="opt" data-v="Self-assess from the verbatim terms for now">Self-assess for now</span>
+      </div>
+    </div>
+
+    <div class="qf" data-q="Notes"><h4>Anything else</h4><textarea id="notes" placeholder="Free-text for Claude…"></textarea></div>
+
+    <div class="reply">
+      <div class="bar"><span>Decision reply — paste back to Claude</span><button class="copy" id="copyBtn">Copy</button></div>
+      <pre id="reply"></pre>
+    </div>
+  </section>
+
+  <footer>
+    <p><b>Provenance.</b> Synthesized from an 11-agent research workflow (5 web legs + internal code-recon + 3 adversarial verifiers → critic → synthesizer), grounded in Meta/vendor first-party sources and real <span class="mono">file:line</span> anchors. Companion docs: <b>multi-user-app-architecture.md</b> · <b>R2-coexistence-findings.md</b> (PR #143). Webhook HMAC hardening: PR #144. Issues reconciled: #136, #137, #142, #30, #32.</p>
+    <p style="margin-top:6px;color:#6e7681">Confidence MEDIUM — the +972 AI-ToS permissibility has no first-party adjudication; the phone-transfer authz flow is undesigned. Both flagged above.</p>
+  </footer>
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+// ---- mermaid + offline fallback ----
+if (window.mermaid) {
+  mermaid.initialize({startOnLoad:true, theme:"dark", securityLevel:"loose",
+    themeVariables:{fontSize:"13px", fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif",
+      primaryColor:"#161b22", lineColor:"#8b949e", textColor:"#c9d1d9"},
+    gantt:{barHeight:22, barGap:6, topPadding:46, leftPadding:160},
+    sequence:{actorMargin:60, mirrorActors:false}});
+} else {
+  document.querySelectorAll(".mermaid").forEach(d=>{
+    d.style.whiteSpace="pre"; d.style.fontFamily="monospace"; d.style.color="#c9d1d9";
+    d.insertAdjacentHTML("afterbegin",
+      "<div style='color:#d29922;font-size:12px;margin-bottom:6px'>⚠ offline — showing diagram source</div>");
+  });
+}
+
+// ---- scroll-spy nav ----
+const navLinks=[...document.querySelectorAll("nav a")];
+const secs=navLinks.map(a=>document.querySelector(a.getAttribute("href")));
+function spy(){ let i=secs.length-1;
+  for(let j=0;j<secs.length;j++){ if(secs[j] && secs[j].getBoundingClientRect().top>120){i=j-1;break;} }
+  navLinks.forEach(a=>a.classList.remove("active")); if(i>=0) navLinks[i].classList.add("active"); }
+document.addEventListener("scroll",spy,{passive:true}); window.addEventListener("load",spy); spy();
+
+// ---- decision matrix ----
+const DATA=[
+  {name:"Better-Auth", kind:"auth", cost:"Free", eu:"Self-host", note:"MIT, Hono-native, identity in your DB; OTP augments your own session.", verdict:"use"},
+  {name:"Supabase Auth", kind:"auth", cost:"Free / Pro", eu:"Frankfurt", note:"auth.uid() drops into RLS; couples identity to a US-parent SaaS.", verdict:"consider"},
+  {name:"Raw Google OIDC", kind:"auth", cost:"Free", eu:"Self-host", note:"Zero-dep fallback; you build sessions/CSRF/storage yourself.", verdict:"consider"},
+  {name:"Clerk", kind:"auth", cost:"Per-MAU", eu:"None", note:"No EU residency, no self-host.", verdict:"avoid"},
+  {name:"B · user → bot code", kind:"otp", cost:"Free", eu:"n/a", note:"User-initiated 24h window; proves control of the exact from_phone.", verdict:"use"},
+  {name:"A · bot → template OTP", kind:"otp", cost:"$0.0053/+972", eu:"n/a", note:"Template approval + opt-in; no security gain over B. Fallback.", verdict:"consider"},
+  {name:"SMS OTP (Twilio)", kind:"otp", cost:"$0.2575/+972", eu:"n/a", note:"~48× the WhatsApp rate; last-resort only.", verdict:"avoid"},
+];
+const VB={use:"v-use",consider:"v-consider",avoid:"v-avoid"};
+const VORD={use:0,consider:1,avoid:2};
+let sortKey="verdict", sortDir=1, filter="all";
+const mxb=document.getElementById("mxb");
+function render(){
+  let rows=DATA.filter(d=> filter==="all" || d.verdict===filter || d.kind===filter);
+  rows.sort((a,b)=>{
+    let x=a[sortKey], y=b[sortKey];
+    if(sortKey==="verdict"){x=VORD[x];y=VORD[y];}
+    if(typeof x==="string") return sortDir*x.localeCompare(y);
+    return sortDir*(x-y);
+  });
+  mxb.innerHTML=rows.map(d=>`<tr>
+    <td class="opt">${d.name}</td>
+    <td><span class="kind">${d.kind}</span></td>
+    <td>${d.cost}</td>
+    <td>${d.eu}</td>
+    <td><span class="meta" style="font-size:12.5px;color:var(--mut)">${d.note}</span></td>
+    <td><span class="vb ${VB[d.verdict]}">${d.verdict}</span></td>
+  </tr>`).join("");
+  document.querySelectorAll("#mx th").forEach(th=>th.classList.toggle("sorted", th.dataset.k===sortKey));
+}
+document.querySelectorAll("#mx th").forEach(th=>th.addEventListener("click",()=>{
+  const k=th.dataset.k;
+  if(k===sortKey) sortDir=-sortDir; else {sortKey=k; sortDir=1;}
+  render();
+}));
+document.querySelectorAll("#chips .chip").forEach(c=>c.addEventListener("click",()=>{
+  document.querySelectorAll("#chips .chip").forEach(x=>x.classList.remove("on"));
+  c.classList.add("on"); filter=c.dataset.f; render();
+}));
+render();
+
+// ---- decision form ----
+document.querySelectorAll(".qf .opts").forEach(opts=>{
+  opts.addEventListener("click",e=>{
+    const opt=e.target.closest(".opt"); if(!opt) return;
+    opts.querySelectorAll(".opt").forEach(o=>o.classList.remove("sel"));
+    opt.classList.add("sel"); updateReply();
+  });
+});
+function updateReply(){
+  const lines=["Decisions on the multi-user app architecture (Phase 8):"];
+  document.querySelectorAll(".qf[data-q]").forEach(qf=>{
+    if(qf.dataset.q==="Notes") return;
+    const sel=qf.querySelector(".opt.sel");
+    if(sel) lines.push(`- ${qf.dataset.q} → ${sel.dataset.v}`);
+  });
+  const notes=document.getElementById("notes").value.trim();
+  if(notes) lines.push(`- Notes: ${notes}`);
+  document.getElementById("reply").textContent=lines.join("\n");
+}
+document.getElementById("notes").addEventListener("input",updateReply);
+document.getElementById("copyBtn").addEventListener("click",()=>{
+  navigator.clipboard.writeText(document.getElementById("reply").textContent).then(()=>{
+    const b=document.getElementById("copyBtn"); const t=b.textContent; b.textContent="Copied!";
+    setTimeout(()=>b.textContent=t,1200);
+  });
+});
+updateReply();
+</script>
+</body>
+</html>
