@@ -28,6 +28,9 @@ one SQLite file per family).
 2. **Service → Settings:**
    - **Root Directory:** `platform`
    - **Install Command:** `pnpm install`
+   - **Build Command:** `pnpm --filter @homeos/web build` *(#150 — builds the web SPA into
+     `apps/web/dist`; the server serves it **same-origin**. Without this step the server still runs,
+     API-only. The `VITE_HOMEOS_*` vars below are read at BUILD time, so they must be set before the build.)*
    - **Start Command:** `pnpm --filter @homeos/server start`
    - **Node version:** add env var `NIXPACKS_NODE_VERSION = 24` *(required — the app uses
      `node:sqlite`, flag-free only on Node 24)*.
@@ -42,6 +45,10 @@ one SQLite file per family).
    - `ANTHROPIC_MODEL` = `claude-haiku-4-5` *(optional)*
    - `READ_TOKEN` = `<optional — long random string; enables GET /events>`
    - `APP_SECRET` = `<optional now — the Meta app secret; enables webhook HMAC verification>`
+   - **Web build vars (#150, read at BUILD time — set before the build):**
+     - `VITE_HOMEOS_READ_TOKEN` = `<same value as READ_TOKEN — baked into the SPA so it reads GET /events same-origin>`
+     - `VITE_HOMEOS_WRITE_TOKEN` = `<same value as WRITE_TOKEN — for the add-event POST /events seam>`
+     - **Leave `VITE_HOMEOS_API_BASE` UNSET** — empty = same-origin (the whole point of #150; no CORS).
    - **Do NOT set `PORT`** — Railway provides it; the server reads it automatically.
 5. **Deploy.** Copy the public URL, e.g. `https://homeos-production.up.railway.app`.
    The **webhook URL** is that + `/webhook`.

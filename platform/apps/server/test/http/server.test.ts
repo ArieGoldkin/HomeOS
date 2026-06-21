@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
@@ -63,7 +66,7 @@ const sampleEvents = [
 const appKey = "homeos-webhook-test-key";
 
 function makeApp(
-  opts: { readToken?: string; appSecret?: string; writeToken?: string } = {
+  opts: { readToken?: string; appSecret?: string; writeToken?: string; webDist?: string } = {
     readToken: "read-secret",
     appSecret: appKey,
   },
@@ -105,6 +108,7 @@ function makeApp(
     appSecret: opts.appSecret,
   };
   deps.writeToken = opts.writeToken;
+  deps.webDist = opts.webDist;
   return { app: createServer(deps), process, inbound, events };
 }
 
@@ -338,5 +342,55 @@ describe("GET /health", () => {
     const res = await app.request("/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
+  });
+});
+
+// #150 — same-origin web app. serve-static reads the real filesystem (root is cwd-relative), so we
+// stand up a tiny fixture dist with an index.html + an asset and point webDist at it.
+describe("static web app serving (#150)", () => {
+  let webDist: string;
+  let tmp: string;
+  beforeAll(() => {
+    tmp = mkdtempSync(join(tmpdir(), "homeos-web-"));
+    mkdirSync(join(tmp, "assets"), { recursive: true });
+    writeFileSync(
+      join(tmp, "index.html"),
+      "<!doctype html><title>HomeOS</title><div id=root></div>",
+    );
+    writeFileSync(join(tmp, "assets", "app.js"), "console.log('homeos')");
+    webDist = relative(process.cwd(), tmp); // serve-static rejects absolute roots → pass cwd-relative
+  });
+  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it("serves index.html at /", async () => {
+    const { app } = makeApp({ appSecret: appKey, webDist });
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("HomeOS");
+  });
+
+  it("serves a built asset", async () => {
+    const { app } = makeApp({ appSecret: appKey, webDist });
+    const res = await app.request("/assets/app.js");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("homeos");
+  });
+
+  it("falls back to index.html for an unknown client route (SPA deep-link)", async () => {
+    const { app } = makeApp({ appSecret: appKey, webDist });
+    const res = await app.request("/web/today");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("HomeOS"); // not a 404 — the SPA handles the route client-side
+  });
+
+  it("API routes still win over the static catch-all", async () => {
+    const { app } = makeApp({ readToken: "read-secret", appSecret: appKey, webDist });
+    expect((await app.request("/health")).status).toBe(200);
+    expect((await app.request("/events")).status).toBe(401); // API handler (no auth), NOT the SPA fallback
+  });
+
+  it("no static serving when webDist is unset (app-only / dev)", async () => {
+    const { app } = makeApp({ appSecret: appKey });
+    expect((await app.request("/web/today")).status).toBe(404); // nothing serves it
   });
 });
