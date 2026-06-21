@@ -346,3 +346,57 @@ describe("findSlotConflict (slot dedup)", () => {
     expect(store.findSlotConflict(FAMILY_ID, slot("wamid.other"))).toBeNull();
   });
 });
+
+describe("rowToSaved provenance (#151) — derived source + created_at", () => {
+  it("derives source from the wa_message_id prefix (gmail/gcal/web/whatsapp)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent({ ...event, title_he: "fwd" }, { fromPhone: "9725", waMessageId: "wamid.fwd" });
+    store.saveEvent(
+      { ...event, title_he: "webadd" },
+      { fromPhone: "9725", waMessageId: "web:abc" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "mail" },
+      { fromPhone: "9725", waMessageId: "gmail:m1", sourceProvider: "google" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "cal" },
+      { fromPhone: "9725", waMessageId: "gcal:c1", sourceProvider: "google" },
+    );
+    const all = store.listEvents();
+    const src = (t: string) => all.find((e) => e.title_he === t)?.source;
+    expect(src("fwd")).toBe("whatsapp");
+    expect(src("webadd")).toBe("web");
+    expect(src("mail")).toBe("gmail");
+    expect(src("cal")).toBe("gcal");
+  });
+
+  // F2/F8 — pin the producer-prefix → source map and the startsWith-anchoring (not substring), so a
+  // producer changing an idempotency-key prefix breaks a test rather than silently mis-deriving a badge.
+  it("falls back to whatsapp for an unknown prefix and matches by startsWith, not substring", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent({ ...event, title_he: "unknown" }, { fromPhone: "9725", waMessageId: "sms:x" });
+    // contains "gmail:" but does NOT start with it → still a forward, not gmail
+    store.saveEvent(
+      { ...event, title_he: "contains" },
+      { fromPhone: "9725", waMessageId: "wamid.gmail:x" },
+    );
+    const all = store.listEvents();
+    const src = (t: string) => all.find((e) => e.title_he === t)?.source;
+    expect(src("unknown")).toBe("whatsapp");
+    expect(src("contains")).toBe("whatsapp");
+  });
+
+  // F1/F5 — created_at is served as ISO-8601 UTC (not the bare SQLite "YYYY-MM-DD HH:MM:SS"), so a
+  // consumer's new Date() reads the right instant. Lock the format AND the round-trip.
+  it("serves created_at as ISO-8601 UTC that round-trips through new Date()", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "w1" });
+    expect(saved.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    const t = new Date(saved.created_at as string).getTime();
+    expect(Number.isNaN(t)).toBe(false);
+    // within a minute of "now" — proves it parsed as UTC, not shifted by the local offset
+    expect(Math.abs(Date.now() - t)).toBeLessThan(60_000);
+    expect(saved.source).toBe("whatsapp");
+  });
+});
