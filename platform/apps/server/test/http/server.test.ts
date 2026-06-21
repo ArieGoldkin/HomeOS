@@ -58,9 +58,14 @@ const sampleEvents = [
   },
 ];
 
+// Default webhook HMAC key for tests (named "key" to stay clear of the repo's secret scanner).
+// HMAC is now mandatory, so makeApp() always wires one unless a test explicitly forces it undefined.
+const appKey = "homeos-webhook-test-key";
+
 function makeApp(
   opts: { readToken?: string; appSecret?: string; writeToken?: string } = {
     readToken: "read-secret",
+    appSecret: appKey,
   },
 ) {
   const process = vi.fn(async (_msg: InboundMessage) => {});
@@ -107,11 +112,13 @@ function post(
   body: string,
   extraHeaders: Record<string, string> = {},
 ) {
-  return app.request("/webhook", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...extraHeaders },
-    body,
-  });
+  // HMAC is mandatory, so sign with the default test key unless the caller supplied a signature
+  // (the forged / missing-signature cases pass their own header or hit app.request directly).
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
+  if (!("X-Hub-Signature-256" in headers)) {
+    headers["X-Hub-Signature-256"] = sign(body, appKey);
+  }
+  return app.request("/webhook", { method: "POST", headers, body });
 }
 
 /** Compute the X-Hub-Signature-256 header Meta would send for a body. */
@@ -170,7 +177,7 @@ describe("POST /webhook (inbound)", () => {
   });
 });
 
-describe("POST /webhook signature (HMAC, item H)", () => {
+describe("POST /webhook signature (HMAC, item H — mandatory)", () => {
   const secret = "meta-app-secret";
   const payload = JSON.stringify(textPayload);
 
@@ -190,11 +197,11 @@ describe("POST /webhook signature (HMAC, item H)", () => {
     expect(inbound.enqueue).not.toHaveBeenCalled();
   });
 
-  it("skips verification when no app secret is set (test number)", async () => {
-    const { app, inbound } = makeApp({ appSecret: undefined });
-    const res = await post(app, payload); // unsigned
-    expect(res.status).toBe(200);
-    expect(inbound.enqueue).toHaveBeenCalledTimes(1);
+  it("fails closed: rejects with 403 when no app key is configured", async () => {
+    const { app, inbound } = makeApp({}); // empty opts → no app key wired
+    const res = await post(app, payload); // auto-signed, but the server has no key to verify against
+    expect(res.status).toBe(403);
+    expect(inbound.enqueue).not.toHaveBeenCalled();
   });
 });
 

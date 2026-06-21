@@ -105,13 +105,16 @@ export function createServer(deps: ServerDeps): Hono {
     // and to parse from the same string. c.req.json() would consume the body and re-serialize.
     const raw = await c.req.text();
 
-    // 🔒 When an app secret is configured, reject forged payloads (an unauthenticated write
-    // surface otherwise). Unset on the test number → skipped; enforced at the production cutover.
-    if (deps.appSecret !== undefined) {
-      if (!verifySignature(raw, c.req.header("x-hub-signature-256"), deps.appSecret)) {
-        log("rejected webhook with bad signature", {});
-        return c.text("Forbidden", 403);
-      }
+    // 🔒 HMAC is MANDATORY: /webhook is a public, unauthenticated write surface, so a missing app key
+    // OR a missing/forged X-Hub-Signature-256 is refused (403) BEFORE any persistence or processing —
+    // fail closed, never silently accept unsigned (forgeable) inbound. Boot also refuses to start
+    // without the key (see index.ts), so `appSecret === undefined` here is defence-in-depth.
+    if (
+      deps.appSecret === undefined ||
+      !verifySignature(raw, c.req.header("x-hub-signature-256"), deps.appSecret)
+    ) {
+      log("rejected webhook: missing app key or invalid signature", {});
+      return c.text("Forbidden", 403);
     }
 
     let body: unknown = null;
