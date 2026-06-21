@@ -10,6 +10,8 @@ import {
 } from "../../src/db/conversation-store.ts";
 import { createEventStore } from "../../src/db/event-store.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
+import type { CalendarClient } from "../../src/google/calendar.ts";
+import type { GoogleOAuthClient } from "../../src/google/oauth.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
 import type { ParseMessage } from "../../src/parsing/parser.ts";
@@ -109,27 +111,34 @@ function recordingCalendar(existingGcalId: string | null = null) {
     patch: [] as Array<{ id: string; body: unknown }>,
     delete: [] as string[],
   };
-  const calendar = {
-    client: {
-      list: async () => [],
-      findEventIdByPrivateProp: async () => existingGcalId,
-      insertEvent: async (_t: string, _c: string, body: unknown) => {
-        calls.insert.push(body);
-        return { id: "gcal-new" };
-      },
-      patchEvent: async (_t: string, _c: string, id: string, body: unknown) => {
-        calls.patch.push({ id, body });
-        return { id };
-      },
-      deleteEvent: async (_t: string, _c: string, id: string) => {
-        calls.delete.push(id);
-      },
+  // `satisfies CalendarClient` keeps the methods the handler reads (find/insert/patch/delete) honestly
+  // type-checked — a signature drift in the real interface now fails this fake instead of passing silently.
+  const client = {
+    list: async () => [],
+    findEventIdByPrivateProp: async () => existingGcalId,
+    insertEvent: async (_t: string, _c: string, body: unknown) => {
+      calls.insert.push(body);
+      return { id: "gcal-new" };
     },
+    patchEvent: async (_t: string, _c: string, id: string, body: unknown) => {
+      calls.patch.push({ id, body });
+      return { id };
+    },
+    deleteEvent: async (_t: string, _c: string, id: string) => {
+      calls.delete.push(id);
+    },
+  } satisfies CalendarClient;
+  const calendar: CalendarToolDeps = {
+    client,
+    // OAuth plumbing getValidAccessToken needs: only `credentials.get` is read here (the token is
+    // non-expired so `oauthClient.refresh` is never called). The OAuth methods return rich GoogleTokens
+    // we don't model, so this sub-object is the ONE place type-checking is relaxed (`as unknown as`) —
+    // and ONLY on the dead-but-required OAuth plumbing, NOT the calendar/credential surface under test.
     oauthClient: {
       exchangeCode: async () => ({}),
       refresh: async () => ({}),
       revoke: async () => {},
-    },
+    } as unknown as GoogleOAuthClient,
     credentials: {
       get: () => ({
         accessToken: "acc",
@@ -138,12 +147,12 @@ function recordingCalendar(existingGcalId: string | null = null) {
         scopes: [],
       }),
       updateTokens: () => {},
-      delete: () => {},
+      delete: () => 0, // CredentialStore.delete returns the rows-removed count, not void
     },
     calendarId: "primary",
     windowDays: 30,
     maxEvents: 20,
-  } as unknown as CalendarToolDeps;
+  };
   return { calendar, calls };
 }
 

@@ -47,6 +47,23 @@ describe("handleInbound — #86 edit in place + correction", () => {
     const pending = conversations.getPending(textMsg.from, NOW);
     expect(pending?.kind).toBe("edit");
     expect(JSON.parse(pending?.payload_json ?? "{}").patch).toMatchObject({ time: "18:00" });
+    // #87/G24 default arm: the edit route applies the 30-min default (NOW 09:00 → 09:30) via
+    // conversationExpiresAt(deps) — proves the edit writer's TTL computation.
+    expect(pending?.expires_at).toBe("2026-06-20 09:30:00");
+  });
+
+  it("#87/G24: the edit disambiguation thread respects an injected conversationTtlMs:0 (born expired)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, events } = makeDeps({ conversations, conversationTtlMs: 0 });
+    events.findEventsByRef.mockReturnValue([
+      board(1, { title_he: "פגישה" }),
+      board(2, { title_he: "פגישה" }),
+    ]);
+
+    await handleInbound({ ...textMsg, text: "שנה פגישה ל-18:00" }, deps);
+
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // expiresAt === now → hidden at read
+    expect(conversations.expireStale(NOW)).toBe(1); // …and swept (the edit route read the injected TTL)
   });
 
   it("edit resume: a numbered reply applies the held patch to that candidate", async () => {

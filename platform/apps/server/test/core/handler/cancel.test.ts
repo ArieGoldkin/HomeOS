@@ -43,6 +43,22 @@ describe("handleInbound — #85 cancel by reference", () => {
     const pending = conversations.getPending(textMsg.from, NOW);
     expect(pending?.kind).toBe("cancel");
     expect(JSON.parse(pending?.payload_json ?? "{}").candidateIds).toEqual([1, 2]);
+    // #87/G24 default arm: with no conversationTtlMs wired, the route applies the 30-min default
+    // (NOW 09:00 → 09:30) via conversationExpiresAt(deps) — proves the cancel writer's TTL computation.
+    expect(pending?.expires_at).toBe("2026-06-20 09:30:00");
+  });
+
+  it("#87/G24: the disambiguation thread respects an injected conversationTtlMs:0 (born expired)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, events } = makeDeps({ conversations, conversationTtlMs: 0 });
+    events.findEventsByRef.mockReturnValue([cand(1, "פגישה", "15:30"), cand(2, "פגישה", "15:30")]);
+
+    await handleInbound({ ...textMsg, text: "בטל פגישה" }, deps);
+
+    // expiresAt === now ⇒ getPending hides it immediately and expireStale sweeps it (the cancel route
+    // reads the injected TTL, not the hardcoded default).
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull();
+    expect(conversations.expireStale(NOW)).toBe(1);
   });
 
   it("resume: a numbered reply deletes exactly that candidate (single-use)", async () => {

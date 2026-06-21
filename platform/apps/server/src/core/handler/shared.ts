@@ -6,6 +6,7 @@ import type { ParseMessage } from "../../parsing/parser.ts";
 import type { CalendarToolDeps, ClarifyResult, GmailToolDeps } from "../../tools/tools.ts";
 import type { SendText } from "../../whatsapp/client.ts";
 import type { Agent, AgentResult } from "../agent.ts";
+import { sqliteUtc } from "../time.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];
@@ -101,6 +102,19 @@ export const CLARIFY_QUESTIONS: Partial<Record<ClarifyReason, string>> = {
  * test sets `0` to force immediate expiry.
  */
 export const CONVERSATION_TTL_MS = 30 * 60 * 1000;
+/**
+ * #87 — the SINGLE application site for the open-thread TTL: `now + (injected ?? default)` rendered as a
+ * SQLite-UTC string, ready for `ConversationStore.create`. The clarify/cancel/edit writers all call this,
+ * so a future change to the formula (clamping, per-kind TTL) lives in one place — matching the
+ * `conversationTtlMs` contract ("the one place the duration lives").
+ */
+export function conversationExpiresAt(
+  deps: Pick<HandlerDeps, "now" | "conversationTtlMs">,
+): string {
+  const ms =
+    (deps.now ?? (() => new Date()))().getTime() + (deps.conversationTtlMs ?? CONVERSATION_TTL_MS);
+  return sqliteUtc(new Date(ms));
+}
 /**
  * #85 cancel-BY-REFERENCE (distinct from bare ביטול): a deterministic verb-prefix route — "בטל/מחק/הסר
  * <ref>". The `\S+` requires a referent so a bare "ביטול" still hits the undo branch. The reference is
