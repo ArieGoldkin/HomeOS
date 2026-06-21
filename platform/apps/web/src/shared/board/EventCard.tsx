@@ -3,6 +3,7 @@ import { assigneeColor, cn } from "@shared/lib";
 import { cva } from "class-variance-authority";
 import type { HTMLAttributes } from "react";
 import { PersonAvatar } from "./PersonAvatar";
+import { ProviderBadge } from "./ProviderBadge";
 
 const HE_DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
 
@@ -102,6 +103,7 @@ export function EventCard({
         {event.recurrence && (
           <span className="text-muted-foreground">↻ {HE_DAYS[event.recurrence.weekday]}</span>
         )}
+        <ProviderBadge source={event.source} />
       </div>
     </div>
   );

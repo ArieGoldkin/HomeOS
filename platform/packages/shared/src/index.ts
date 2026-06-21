@@ -125,16 +125,31 @@ export const parsedMessageSchema = z.object({
 export type ParsedMessage = z.infer<typeof parsedMessageSchema>;
 
 /**
+ * #151 — where a served row originated, for the UI's provenance badge + detail view. DERIVED
+ * server-side in `rowToSaved` from the `wa_message_id` prefix (`gmail:`/`gcal:`/`web:` → that source;
+ * otherwise a forwarded WhatsApp message) — NOT a stored column. `source_provider` only distinguishes
+ * google-derived from local rows; this enum is finer (web-added vs forwarded both have a null provider).
+ */
+export const SAVED_EVENT_SOURCES = ["whatsapp", "web", "gmail", "gcal"] as const;
+export const savedEventSourceSchema = z.enum(SAVED_EVENT_SOURCES);
+export type SavedEventSource = z.infer<typeof savedEventSourceSchema>;
+
+/**
  * The shape the server SERVES from `GET /events` (one row): a {@link ParsedEvent} plus the DB-assigned
  * `id` and the `source_provider` that `event-store.ts`'s `rowToSaved` attaches (`source_provider` is
  * null for forwarded WhatsApp events, a provider name like `"google"` for gcal/gmail-derived rows). This
  * is the ONE row contract the server produces and the web app (`useEvents`) consumes — keeping a single
- * definition so the two can't drift. NOTE: `created_at` is deliberately absent — `rowToSaved` drops it,
- * so it is never in the payload. The endpoint wraps rows as `{ events: SavedEvent[] }`.
+ * definition so the two can't drift. The endpoint wraps rows as `{ events: SavedEvent[] }`.
+ *
+ * #151: `source` (derived provenance) + `created_at` (the row's SQLite datetime) are now part of the
+ * served row. Both are `.optional()` so older payloads/fixtures stay valid — the server always populates
+ * them, and the UI degrades gracefully when absent (no badge, no created-at line).
  */
 export const savedEventSchema = parsedEventSchema.extend({
   id: z.number().int(),
   source_provider: z.string().nullable(),
+  source: savedEventSourceSchema.optional(),
+  created_at: z.string().optional(),
 });
 export type SavedEvent = z.infer<typeof savedEventSchema>;
 

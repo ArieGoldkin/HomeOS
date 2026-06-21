@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { type ParsedEvent, parsedEventSchema } from "@homeos/shared";
+import { type ParsedEvent, parsedEventSchema, type SavedEventSource } from "@homeos/shared";
 import { ADD_EVENTS_SOURCE_PROVIDER, CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
 
 /** #86 — the fields a `שנה <ref>` / correction may change in place. A subset of ParsedEvent; merged
@@ -29,6 +29,10 @@ export interface SavedEvent extends ParsedEvent {
   id: number;
   /** null for forwarded events; the provider name for derived rows (#61). */
   source_provider: string | null;
+  /** #151 — derived provenance for the UI (gmail/gcal/web/whatsapp), from the wa_message_id prefix. */
+  source?: SavedEventSource;
+  /** #151 — the row's SQLite datetime, now part of the served contract (for the event-detail view). */
+  created_at?: string;
 }
 
 /** Persistence seam — handlers depend on this, not on the driver. */
@@ -75,6 +79,15 @@ export interface EventStore {
   ): SavedEvent | null;
 }
 
+/** #151 — derive the served `source` from the row's idempotency key prefix (the most precise signal:
+ *  it distinguishes a web-added row from a forwarded one, which `source_provider` alone cannot). */
+function deriveSource(waMessageId: string): SavedEventSource {
+  if (waMessageId.startsWith("gmail:")) return "gmail";
+  if (waMessageId.startsWith("gcal:")) return "gcal";
+  if (waMessageId.startsWith("web:")) return "web";
+  return "whatsapp";
+}
+
 function rowToSaved(row: EventRow): SavedEvent {
   return {
     id: row.id,
@@ -90,6 +103,10 @@ function rowToSaved(row: EventRow): SavedEvent {
         : null,
     source_text: row.source_text,
     source_provider: row.source_provider,
+    // #151 — provenance for the UI badge/detail view. Derived (no stored column); created_at is the
+    // row's SQLite datetime, now part of the served contract.
+    source: deriveSource(row.wa_message_id),
+    created_at: row.created_at,
   };
 }
 

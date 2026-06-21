@@ -346,3 +346,36 @@ describe("findSlotConflict (slot dedup)", () => {
     expect(store.findSlotConflict(FAMILY_ID, slot("wamid.other"))).toBeNull();
   });
 });
+
+describe("rowToSaved provenance (#151) — derived source + created_at", () => {
+  it("derives source from the wa_message_id prefix (gmail/gcal/web/whatsapp)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent({ ...event, title_he: "fwd" }, { fromPhone: "9725", waMessageId: "wamid.fwd" });
+    store.saveEvent(
+      { ...event, title_he: "webadd" },
+      { fromPhone: "9725", waMessageId: "web:abc" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "mail" },
+      { fromPhone: "9725", waMessageId: "gmail:m1", sourceProvider: "google" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "cal" },
+      { fromPhone: "9725", waMessageId: "gcal:c1", sourceProvider: "google" },
+    );
+    const all = store.listEvents();
+    const src = (t: string) => all.find((e) => e.title_he === t)?.source;
+    expect(src("fwd")).toBe("whatsapp");
+    expect(src("webadd")).toBe("web");
+    expect(src("mail")).toBe("gmail");
+    expect(src("cal")).toBe("gcal");
+  });
+
+  it("includes created_at (the row's SQLite datetime) on the served row", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "w1" });
+    expect(typeof saved.created_at).toBe("string");
+    expect(saved.created_at).toBeTruthy();
+    expect(saved.source).toBe("whatsapp");
+  });
+});

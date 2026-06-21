@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { type SavedEvent, savedEventSchema, savedEventsResponseSchema } from "../src/index.ts";
 
-// Fixtures mirror the server's rowToSaved() output (apps/server/src/db/event-store.ts:40):
-// a SavedEvent is a ParsedEvent + a numeric `id` + a nullable `source_provider`. `created_at`
-// is intentionally DROPPED by rowToSaved, so it is absent from the served row (and from here).
-// The `: SavedEvent` annotations are the compile-time half of the contract — they fail typecheck
-// if the schema/type drift from the server shape (id number, source_provider string|null).
+// Fixtures mirror the server's rowToSaved() output (apps/server/src/db/event-store.ts):
+// a SavedEvent is a ParsedEvent + a numeric `id` + a nullable `source_provider`. #151 adds an optional
+// derived `source` + `created_at`; the base fixtures omit them (optional → still valid) to prove
+// backward-compat. The `: SavedEvent` annotations are the compile-time half of the contract — they fail
+// typecheck if the schema/type drift from the server shape.
 const forwardedRow: SavedEvent = {
   id: 1,
   kind: "event",
@@ -48,9 +48,24 @@ describe("savedEventSchema (the served GET /events row)", () => {
     expect(() => savedEventSchema.parse(withoutProvider)).toThrow();
   });
 
-  it("strips a created_at if present — it is NOT part of the served contract", () => {
-    const parsed = savedEventSchema.parse({ ...forwardedRow, created_at: "2026-06-19T10:00:00Z" });
-    expect(parsed).not.toHaveProperty("created_at");
+  // #151 — created_at is now PART of the served contract (rowToSaved includes it), retained not stripped.
+  it("retains created_at when present (now part of the contract)", () => {
+    const parsed = savedEventSchema.parse({ ...forwardedRow, created_at: "2026-06-19 10:00:00" });
+    expect(parsed.created_at).toBe("2026-06-19 10:00:00");
+  });
+
+  // #151 — source is optional (server-derived) so older rows stay valid; a present value is validated.
+  it("is valid without source/created_at (optional → backward-compatible)", () => {
+    const parsed = savedEventSchema.parse(forwardedRow);
+    expect(parsed.source).toBeUndefined();
+    expect(parsed.created_at).toBeUndefined();
+  });
+
+  it("parses each valid source and rejects an unknown one", () => {
+    for (const source of ["whatsapp", "web", "gmail", "gcal"] as const) {
+      expect(savedEventSchema.parse({ ...forwardedRow, source }).source).toBe(source);
+    }
+    expect(() => savedEventSchema.parse({ ...forwardedRow, source: "sms" })).toThrow();
   });
 });
 

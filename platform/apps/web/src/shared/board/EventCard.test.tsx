@@ -98,4 +98,12 @@ describe("EventCard (canonical anti-slop spec)", () => {
     expect(screen.queryByText(/תזכורת/)).toBeNull();
     expect(screen.queryByText(/משימה/)).toBeNull();
   });
+
+  // #151 — provenance badge shows on synced rows only; forwards/web stay clean.
+  it("shows a provenance badge for a synced (gmail) row, none for a forward", () => {
+    const { rerender } = render(<EventCard event={make({ source: "gmail" })} />);
+    expect(screen.getByTestId("provider-badge")).not.toBeNull();
+    rerender(<EventCard event={make({ source: "whatsapp" })} />);
+    expect(screen.queryByTestId("provider-badge")).toBeNull();
+  });
 });
