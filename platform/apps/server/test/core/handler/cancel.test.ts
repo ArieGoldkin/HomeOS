@@ -88,6 +88,55 @@ describe("handleInbound — #85 cancel by reference", () => {
   });
 });
 
+// Regression (live bug 2026-06-21): "טוב בטל את הפגישה מחר עם יונתן" CREATED a new "ביטול …" event
+// instead of cancelling — a leading conversational filler ("טוב") defeated the ^-anchored cancel route,
+// so the message fell through to agent.run and was parsed as a fresh event. A cancel command must route
+// regardless of a leading filler word or an inflected verb, and must NEVER reach the model.
+describe("handleInbound — #85 cancel routing robustness (regression)", () => {
+  const cand = (id: number, title: string, time: string): SavedEvent => ({
+    ...sampleEvent,
+    id,
+    title_he: title,
+    time,
+    source_provider: null,
+  });
+
+  it("a leading filler ('טוב …') still routes to cancel, never the model", async () => {
+    const { deps, agent, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([cand(42, "פגישה עם יונתן המסטר של AI", "12:00")]);
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "טוב בטל את הפגישה מחר עם יונתן" }, deps);
+    expect(agent.run).not.toHaveBeenCalled(); // not parsed as a NEW event
+    expect(events.findEventsByRef).toHaveBeenCalled();
+    expect(events.deleteById).toHaveBeenCalledWith(42, "default");
+  });
+
+  it("an inflected verb ('תבטל …') routes to cancel", async () => {
+    const { deps, agent, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([cand(7, "פגישה", "12:00")]);
+    await handleInbound({ ...textMsg, text: "תבטל את הפגישה מחר" }, deps);
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(events.findEventsByRef).toHaveBeenCalled();
+  });
+
+  it("a leading filler passes the CLEANED reference (resolved date) to findEventsByRef", async () => {
+    const { deps, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([]);
+    await handleInbound({ ...textMsg, text: "אוקיי בטל את הפגישה מחר" }, deps);
+    expect(events.findEventsByRef).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({ dateIso: "2026-06-21" }), // מחר from 2026-06-20
+    );
+  });
+
+  it("a leading filler also routes the edit command (never the model)", async () => {
+    const { deps, agent, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([]); // not found → still routed, not modeled
+    await handleInbound({ ...textMsg, text: "טוב שנה את הפגישה ל-13:00" }, deps);
+    expect(agent.run).not.toHaveBeenCalled();
+  });
+});
+
 describe("extractCancelRef + cancel specificity (#125/F1+F2)", () => {
   const TODAY = "2026-06-20"; // a Saturday
 
@@ -108,6 +157,12 @@ describe("extractCancelRef + cancel specificity (#125/F1+F2)", () => {
 
   it("yields nothing matchable for a bare/stopword-only reference", () => {
     expect(extractCancelRef("בטל את", TODAY)).toEqual({});
+  });
+
+  it("strips an inflected/prefixed verb form from the hint (תבטל/לבטל/תמחק)", () => {
+    expect(extractCancelRef("תבטל את הפגישה", TODAY).titleHint).toBe("הפגישה");
+    expect(extractCancelRef("לבטל את הפגישה", TODAY).titleHint).toBe("הפגישה");
+    expect(extractCancelRef("תמחק את הפגישה", TODAY).titleHint).toBe("הפגישה");
   });
 
   it("F1: a stopword-only 'בטל את' matches NOTHING — no findEventsByRef, no delete", async () => {

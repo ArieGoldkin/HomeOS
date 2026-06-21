@@ -179,6 +179,49 @@ describe("EventStore (in-memory SQLite)", () => {
       expect(store.findEventsByRef(FAMILY_ID, {})).toHaveLength(1);
     });
 
+    // Regression (live bug 2026-06-21): a hint carrying the Hebrew definite article ("הפגישה") missed a
+    // bare stored title ("פגישה …") because the single-substring LIKE required the ה to be present. Match
+    // per-word with a ה/ו-stripped variant so the prefix no longer breaks the lookup.
+    it("matches a definite-article hint against a bare stored title (הפגישה → פגישה)", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(
+        { ...event, title_he: "פגישה עם יונתן המסטר של AI", date_iso: "2026-06-22", time: "12:00" },
+        { fromPhone: "9725", waMessageId: "a" },
+      );
+      const found = store.findEventsByRef(FAMILY_ID, {
+        titleHint: "הפגישה עם יונתן",
+        dateIso: "2026-06-22",
+      });
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title_he).toBe("פגישה עם יונתן המסטר של AI");
+    });
+
+    it("still matches a content word that legitimately starts with ה (הורים)", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(
+        { ...event, title_he: "אסיפת הורים", date_iso: "2026-06-21" },
+        { fromPhone: "9725", waMessageId: "a" },
+      );
+      const found = store.findEventsByRef(FAMILY_ID, { titleHint: "הורים", dateIso: "2026-06-21" });
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title_he).toBe("אסיפת הורים");
+    });
+
+    it("ANDs multi-word hints — all words must appear (no false positive)", () => {
+      const store = createEventStore(":memory:");
+      store.saveEvent(
+        { ...event, title_he: "פגישה עם יונתן", date_iso: "2026-06-22" },
+        { fromPhone: "9725", waMessageId: "a" },
+      );
+      store.saveEvent(
+        { ...event, title_he: "פגישה עם דנה", date_iso: "2026-06-22" },
+        { fromPhone: "9725", waMessageId: "b" },
+      );
+      const found = store.findEventsByRef(FAMILY_ID, { titleHint: "הפגישה עם יונתן" });
+      expect(found).toHaveLength(1);
+      expect(found[0]?.title_he).toBe("פגישה עם יונתן");
+    });
+
     it("deleteById removes a board row (returns 1), never a 'google' row (returns 0)", () => {
       const store = createEventStore(":memory:");
       const board = store.saveEvent(event, { fromPhone: "9725", waMessageId: "b1" });

@@ -91,8 +91,30 @@ export const CONVERSATION_TTL_MS = 30 * 60 * 1000;
  * #85 cancel-BY-REFERENCE (distinct from bare ביטול): a deterministic verb-prefix route — "בטל/מחק/הסר
  * <ref>". The `\S+` requires a referent so a bare "ביטול" still hits the undo branch. The reference is
  * extracted SERVER-side (no model call); the family lookup decides 0/1/N, never the message content.
+ *
+ * The verb set covers the common Hebrew inflections a real user types — bare imperative (בטל/מחק/הסר),
+ * the ת-imperative (תבטל/תמחק/תסיר) and the infinitive (לבטל/למחוק/להסיר) — because a live miss
+ * ("טוב בטל…") got parsed as a NEW event instead of a cancel. `CANCEL_VERB_STRIP_RE` removes whichever
+ * form led the command so `extractCancelRef` doesn't leak the verb into the title hint. Leading filler
+ * ("טוב"/"אוקיי"…) is stripped first by `stripLeadingFiller` (the route still requires a verb at the
+ * start AND a real board match, so a forward that merely contains these words deletes nothing — G22).
  */
-export const CANCEL_REF_RE = /^(בטל|מחק|הסר)\s+\S+/u;
+const CANCEL_VERBS = "בטל|תבטל|לבטל|מחק|תמחק|למחוק|הסר|תסיר|להסיר";
+export const CANCEL_REF_RE = new RegExp(`^(?:${CANCEL_VERBS})\\s+\\S+`, "u");
+export const CANCEL_VERB_STRIP_RE = new RegExp(`^(?:${CANCEL_VERBS})\\s+`, "u");
+/**
+ * Leading conversational filler a user puts before a command ("טוב בטל…", "אוקיי שנה…"). Stripped only
+ * to TEST + drive the deterministic verb-led routes (cancel/edit); the ORIGINAL text is what reaches the
+ * model on fall-through, so over-stripping can never corrupt a real forward — at worst a command isn't
+ * recognized. Applied repeatedly (capped) so "טוב, אז בטל…" also resolves.
+ */
+const LEADING_FILLER_RE = /^(?:טוב|אוקיי?|או\.?קיי?|בבקשה|נא|כן|אז|היי|אהלן|יאללה|סבבה)[\s,]+/u;
+export function stripLeadingFiller(text: string): string {
+  let out = text;
+  for (let i = 0; i < 3 && LEADING_FILLER_RE.test(out); i++)
+    out = out.replace(LEADING_FILLER_RE, "");
+  return out;
+}
 export const TIME_RE = /(\d{1,2}):(\d{2})/u;
 export const CANCEL_NOT_FOUND_HE = "לא מצאתי אירוע כזה 🤷 נסו עם תאריך/שעה מדויקים";
 export const CANCEL_WHICH_HE = "איזה מהם לבטל? השב/י במספר:";
