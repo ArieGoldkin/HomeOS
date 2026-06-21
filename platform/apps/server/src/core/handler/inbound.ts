@@ -1,3 +1,4 @@
+import type { SavedEvent } from "../../db/event-store.ts";
 import { FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
@@ -19,6 +20,7 @@ import {
   cancelReply,
   clarifyOf,
   EDIT_REF_RE,
+  formatAlready,
   formatConfirm,
   type HandlerDeps,
   hasScheduleSignal,
@@ -198,6 +200,9 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
+  // Slot-dedup sink (opt-in): the extract tool pushes an existing board row here instead of re-adding a
+  // forward whose (date, time) slot is already taken, so a re-send isn't duplicated on the board.
+  const duplicates: SavedEvent[] = [];
   let result: AgentResult;
   try {
     // The agent decides parse-vs-act, runs a tool, and the TOOL persists its own rows (#71) — the
@@ -210,6 +215,7 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
       senderName: deps.members?.[msg.from],
       familyId: FAMILY_ID,
       events: deps.events,
+      duplicates,
     });
   } catch (err) {
     if (err instanceof TransientError) {
@@ -229,17 +235,29 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     return;
   }
 
-  const saved = savedOf(result);
-  if (!saved || saved.length === 0) {
+  const saved = savedOf(result) ?? [];
+  if (saved.length === 0 && duplicates.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
 
-  // The tool already persisted each event (idempotent on (wa_message_id, seq)); the handler is now
-  // thin — just send one Hebrew confirm covering all of them.
-  log("saved events", { id: msg.id, count: saved.length });
-  await deps.sendText(msg.from, formatConfirm(saved));
+  // Slot dedup: a forward that ONLY duplicated existing slot(s) — nothing new saved — gets "already on
+  // the board" (not a rephrase), so the user knows it's there and no second copy was made.
+  if (saved.length === 0) {
+    log("duplicate slot", { id: msg.id, count: duplicates.length });
+    await deps.sendText(msg.from, formatAlready(duplicates));
+    return;
+  }
+
+  // The tool already persisted each NEW event (idempotent on (wa_message_id, seq)); the handler is now
+  // thin — confirm the new rows, and note any duplicates in the same message so nothing seems lost.
+  log("saved events", { id: msg.id, count: saved.length, duplicates: duplicates.length });
+  const confirm = formatConfirm(saved);
+  await deps.sendText(
+    msg.from,
+    duplicates.length > 0 ? `${confirm}\n\n${formatAlready(duplicates)}` : confirm,
+  );
 
   // #18 chunk 2: auto-push the new board events to Google Calendar — best-effort, AFTER the confirm.
   // The board is the source of truth; a push failure is logged, never fails the confirm or replays the

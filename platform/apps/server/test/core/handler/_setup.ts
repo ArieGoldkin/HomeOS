@@ -77,6 +77,7 @@ export function makeDeps(
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn((): SavedEvent[] => []),
     updateEvent: vi.fn((): SavedEvent | null => null),
+    findSlotConflict: vi.fn((): SavedEvent | null => null),
   };
   // The handler depends on the agent; run() returns persisted SavedEvent[], a {clarify} arm (#84), or
   // null. The sync path is distinguished by opts.forceTool === "read_gmail" (3rd arg), so it can branch.

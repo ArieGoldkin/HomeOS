@@ -62,6 +62,17 @@ export interface EventStore {
    * null if the target isn't a board row or the merge is invalid (no write happens).
    */
   updateEvent(id: number, patch: EventPatch, familyId: string): SavedEvent | null;
+  /**
+   * Slot dedup — an existing BOARD row (`source_provider IS NULL`) at the same `(date_iso, time)`,
+   * excluding the caller's own `excludeWaMessageId` so a boot-replay of a message never collides with
+   * the rows it already saved (those upsert on `(wa_message_id, seq)`). Returns the existing row or
+   * null. `familyId` is the reserved Phase-8 contract; the caller passes a NON-NULL time (a null-time
+   * item has no "slot" and is never deduped).
+   */
+  findSlotConflict(
+    familyId: string,
+    slot: { dateIso: string; time: string; excludeWaMessageId: string },
+  ): SavedEvent | null;
 }
 
 function rowToSaved(row: EventRow): SavedEvent {
@@ -145,6 +156,15 @@ export function createEventStore(dbPath: string): EventStore {
      ORDER BY id DESC
      LIMIT 5;`,
   );
+  // Slot dedup: a board row (source_provider IS NULL) already occupying this (date_iso, time) from a
+  // DIFFERENT message (wa_message_id !=), so a re-send is caught but a boot-replay of the SAME message
+  // (which upserts its own rows) is not. Newest-first; one row is enough to flag the slot as taken.
+  const findSlotStmt = db.prepare(
+    `SELECT * FROM events
+     WHERE source_provider IS NULL AND date_iso = ? AND time = ? AND wa_message_id != ?
+     ORDER BY id DESC
+     LIMIT 1;`,
+  );
 
   return {
     saveEvent(event, meta) {
@@ -193,6 +213,12 @@ export function createEventStore(dbPath: string): EventStore {
         titleLike,
       ) as unknown as EventRow[];
       return rows.map(rowToSaved);
+    },
+    findSlotConflict(_familyId, slot) {
+      const row = findSlotStmt.get(slot.dateIso, slot.time, slot.excludeWaMessageId) as unknown as
+        | EventRow
+        | undefined;
+      return row ? rowToSaved(row) : null;
     },
     updateEvent(id, patch, _familyId) {
       const row = selectBoardByIdStmt.get(id) as unknown as EventRow | undefined;
