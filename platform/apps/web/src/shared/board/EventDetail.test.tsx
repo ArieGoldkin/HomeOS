@@ -47,7 +47,12 @@ describe("EventDetail (#153)", () => {
 
   it("degrades gracefully when source_text is empty (web/manual add)", () => {
     render(<EventDetail event={make({ source_text: "", source: "web" })} />);
-    expect(screen.getByText(/אין טקסט מקורי/)).toBeInTheDocument();
+    expect(screen.getByText("אין טקסט מקורי")).toBeInTheDocument();
+  });
+
+  it("treats a whitespace-only source_text as empty (F6)", () => {
+    render(<EventDetail event={make({ source_text: "   \n\t" })} />);
+    expect(screen.getByText("אין טקסט מקורי")).toBeInTheDocument();
   });
 
   it("omits the created line when created_at is absent", () => {

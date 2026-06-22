@@ -34,7 +34,9 @@ export interface EventDetailProps {
 }
 
 export function EventDetail({ event }: EventDetailProps) {
-  const text = event.source_text?.trim();
+  // source_text is a required field in the contract → no optional-chain; .trim() still catches a
+  // whitespace-only body (web/manual adds) and falls back to the placeholder.
+  const text = event.source_text.trim();
   const created = event.created_at ? CREATED_FMT.format(new Date(event.created_at)) : null;
 
   return (
@@ -44,7 +46,7 @@ export function EventDetail({ event }: EventDetailProps) {
         {text ? (
           <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">{text}</p>
         ) : (
-          <p className="text-[15px] text-muted-foreground">— אין טקסט מקורי</p>
+          <p className="text-[15px] text-muted-foreground">אין טקסט מקורי</p>
         )}
       </section>
 

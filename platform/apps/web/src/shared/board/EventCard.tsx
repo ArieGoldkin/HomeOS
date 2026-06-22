@@ -112,7 +112,9 @@ export function EventCard({
         )}
         {event.location && <span className="text-muted-foreground">{event.location}</span>}
         {event.recurrence && (
-          <span className="text-muted-foreground">↻ {HE_DAYS[event.recurrence.weekday]}</span>
+          <span className="text-muted-foreground">
+            <span aria-hidden="true">↻</span> {HE_DAYS[event.recurrence.weekday]}
+          </span>
         )}
         <ProviderBadge source={event.source} />
       </div>
