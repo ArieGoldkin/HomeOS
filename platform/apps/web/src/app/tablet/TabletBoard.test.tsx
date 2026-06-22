@@ -34,4 +34,17 @@ describe("TabletBoard (live /events, fixed clock)", () => {
     render(wrap(<TabletBoard />));
     await waitFor(() => expect(screen.getByText(/שגיאה/)).toBeInTheDocument());
   });
+
+  // #153 SECURITY LINE (load-bearing): the no-auth kiosk must NEVER expose source_text. TabletBoard
+  // renders DayView WITHOUT onOpenDetail, so its event cards stay inert — no button, no way to open the
+  // detail drawer that reveals other people's words.
+  it("event cards have NO detail affordance — the card is not a button (kiosk exclusion)", async () => {
+    render(wrap(<TabletBoard />));
+    const card = await screen.findByText("אסיפת הורים בגן");
+    // Name-agnostic (F3): the card's text is NOT inside any <button> — independent of accessible-name
+    // matching, so it can't false-pass if the label ever changes.
+    expect(card.closest("button")).toBeNull();
+    // and the original message text is never even in the kiosk DOM.
+    expect(screen.queryByText("תזכורת: אסיפת הורים")).toBeNull();
+  });
 });

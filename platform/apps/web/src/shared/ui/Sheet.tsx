@@ -36,8 +36,10 @@ export function Sheet({ open, onOpenChange, title, children, className }: SheetP
           style={{ animation: "fadeIn var(--dur) ease" }}
         />
 
-        {/* Sheet panel — slides up from the bottom of the viewport */}
+        {/* Sheet panel — slides up from the bottom of the viewport. The dialog is labelled by its Title;
+            it intentionally has no separate Description, so opt out of Radix's dev warning explicitly. */}
         <Dialog.Content
+          aria-describedby={undefined}
           className={cn(
             "fixed inset-x-0 bottom-0 mx-auto max-w-md",
             "bg-card",

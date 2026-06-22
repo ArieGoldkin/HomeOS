@@ -52,4 +52,23 @@ describe("DayColumn", () => {
     );
     expect(screen.getByText("ראשון")).toHaveClass("text-primary");
   });
+
+  // #153 — onOpenDetail makes the day's EventCards open the drawer (the header button is always present;
+  // the CARD becomes a button only when the handler is passed).
+  it("threads onOpenDetail so an event card opens the drawer", async () => {
+    const onOpenDetail = vi.fn();
+    const user = userEvent.setup();
+    const event = ev(5, "אסיפת הורים");
+    render(
+      <DayColumn
+        dateIso="2026-06-21"
+        weekdayLabel="ראשון"
+        dayLabel="21"
+        events={[event]}
+        onOpenDetail={onOpenDetail}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /אסיפת הורים/ }));
+    expect(onOpenDetail).toHaveBeenCalledWith(event);
+  });
 });

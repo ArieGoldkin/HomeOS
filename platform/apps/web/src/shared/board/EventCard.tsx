@@ -32,7 +32,9 @@ const title = cva("min-w-0 font-display font-medium leading-[1.24]", {
   defaultVariants: { variant: "event", density: "comfortable" },
 });
 
-export interface EventCardProps extends HTMLAttributes<HTMLDivElement> {
+// HTMLElement (not HTMLDivElement) so the same props spread cleanly onto the inert <div> AND the
+// interactive <button> branch — mirroring PersonChip's polymorphic display→button shape (#153/F1).
+export interface EventCardProps extends HTMLAttributes<HTMLElement> {
   event: SavedEvent;
   /** Surface hint — sets the default density (phone → compact, else comfortable). */
   surface?: "tablet" | "phone" | "web";
@@ -42,6 +44,13 @@ export interface EventCardProps extends HTMLAttributes<HTMLDivElement> {
   showTime?: boolean;
   /** Night-optimized assignee color (the always-on tablet runs night). */
   night?: boolean;
+  /**
+   * #153 — when provided, the card becomes an interactive `<button>` that opens the event-detail drawer
+   * (mirrors PersonChip's display→button polymorphism). Omitted ⇒ the card stays a pure, inert `<div>`.
+   * This is the KIOSK-EXCLUSION mechanism: `TabletBoard` never passes it, so the no-auth tablet has no
+   * way to open the drawer (which reveals `source_text` = other people's words) — the #153 security line.
+   */
+  onOpenDetail?: (event: SavedEvent) => void;
 }
 
 /**
@@ -56,6 +65,7 @@ export function EventCard({
   density,
   showTime = true,
   night = false,
+  onOpenDetail,
   className,
   ...props
 }: EventCardProps) {
@@ -65,8 +75,9 @@ export function EventCard({
     ? assigneeColor(event.assignee)[night ? "night" : "light"]
     : undefined;
 
-  return (
-    <div className={cn("@container/card min-w-0", className)} {...props}>
+  // The card body is identical whether inert or interactive — only the wrapping element changes.
+  const body = (
+    <>
       <div className="flex items-baseline gap-2">
         {variant === "reminder" && (
           <span
@@ -101,10 +112,39 @@ export function EventCard({
         )}
         {event.location && <span className="text-muted-foreground">{event.location}</span>}
         {event.recurrence && (
-          <span className="text-muted-foreground">↻ {HE_DAYS[event.recurrence.weekday]}</span>
+          <span className="text-muted-foreground">
+            <span aria-hidden="true">↻</span> {HE_DAYS[event.recurrence.weekday]}
+          </span>
         )}
         <ProviderBadge source={event.source} />
       </div>
+    </>
+  );
+
+  // #153 — interactive only when given onOpenDetail: a real <button> (free keyboard/Enter/Space + role),
+  // following PersonChip's display→button precedent. The kiosk omits the prop, so its cards stay inert.
+  if (onOpenDetail) {
+    return (
+      <button
+        {...props}
+        type="button"
+        onClick={() => onOpenDetail(event)}
+        // It opens the detail drawer (a dialog) → announce that; min-h-[44px] keeps a bare title-only
+        // card above the phone touch-target floor even though the row padding lives on the parent (F2).
+        aria-haspopup="dialog"
+        className={cn(
+          "@container/card block min-h-[44px] w-full min-w-0 cursor-pointer rounded-[var(--radius)] text-start transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <div {...props} className={cn("@container/card min-w-0", className)}>
+      {body}
     </div>
   );
 }

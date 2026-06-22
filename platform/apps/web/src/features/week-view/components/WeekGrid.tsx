@@ -1,3 +1,4 @@
+import type { SavedEvent } from "@homeos/shared";
 import type { WeekDay } from "@shared/hooks";
 import { cn } from "@shared/lib";
 import { DayColumn } from "./DayColumn";
@@ -7,6 +8,8 @@ export interface WeekGridProps {
   days: WeekDay[];
   /** Called with a day's ISO date when its header is tapped. */
   onSelectDate?: (dateIso: string) => void;
+  /** #153 — pass-through to each day's EventCards (opens the detail drawer). */
+  onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
 }
 
@@ -18,7 +21,7 @@ export interface WeekGridProps {
  * layout engine, so it's verified at the Playwright milestone; the unit test asserts the DOM order
  * [Sun..Sat] that drives it.
  */
-export function WeekGrid({ days, onSelectDate, className }: WeekGridProps) {
+export function WeekGrid({ days, onSelectDate, onOpenDetail, className }: WeekGridProps) {
   return (
     <div
       className={cn(
@@ -35,6 +38,7 @@ export function WeekGrid({ days, onSelectDate, className }: WeekGridProps) {
           events={d.events}
           isToday={d.isToday}
           onSelect={onSelectDate}
+          onOpenDetail={onOpenDetail}
         />
       ))}
     </div>

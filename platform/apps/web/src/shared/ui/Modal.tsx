@@ -30,7 +30,9 @@ export function Modal({ open, onOpenChange, title, children, className }: ModalP
           style={{ animation: "fadeIn var(--dur) ease" }}
         />
 
+        {/* Labelled by Title; no separate Description by design → opt out of Radix's dev warning. */}
         <Dialog.Content
+          aria-describedby={undefined}
           className={cn(
             "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
             "w-[calc(100%-2rem)] max-w-md",

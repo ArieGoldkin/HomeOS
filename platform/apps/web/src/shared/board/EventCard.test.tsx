@@ -1,6 +1,6 @@
 import type { SavedEvent } from "@homeos/shared";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { EventCard } from "./EventCard";
 
 const make = (over: Partial<SavedEvent>): SavedEvent => ({
@@ -105,5 +105,25 @@ describe("EventCard (canonical anti-slop spec)", () => {
     expect(screen.getByTestId("provider-badge")).not.toBeNull();
     rerender(<EventCard event={make({ source: "whatsapp" })} />);
     expect(screen.queryByTestId("provider-badge")).toBeNull();
+  });
+
+  // #153 — interactive ONLY when given onOpenDetail (the kiosk-exclusion mechanism).
+  describe("#153 onOpenDetail", () => {
+    it("is INERT (no button) when onOpenDetail is omitted — the kiosk default", () => {
+      render(<EventCard event={make({ title_he: "ישיבה" })} />);
+      expect(screen.queryByRole("button")).toBeNull();
+    });
+
+    it("becomes a <button> that calls onOpenDetail with the event when provided", () => {
+      const onOpenDetail = vi.fn();
+      const event = make({ title_he: "אסיפת הורים" });
+      render(<EventCard event={event} onOpenDetail={onOpenDetail} data-testid="card-btn" />);
+      const btn = screen.getByRole("button");
+      expect(btn).toHaveTextContent("אסיפת הורים"); // accessible name from content (kind/title preserved)
+      expect(btn).toHaveAttribute("aria-haspopup", "dialog"); // announces it opens the detail drawer
+      expect(btn).toHaveAttribute("data-testid", "card-btn"); // F1: props forward to the button branch too
+      fireEvent.click(btn);
+      expect(onOpenDetail).toHaveBeenCalledWith(event);
+    });
   });
 });
