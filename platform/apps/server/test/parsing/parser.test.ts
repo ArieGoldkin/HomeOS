@@ -35,6 +35,17 @@ describe("buildSystemPrompt", () => {
     expect(buildSystemPrompt("2026-06-20")).not.toContain("רוני"); // absent by default
   });
 
+  it("instructs stripping imperative/meta framing out of title_he + classifying it as a reminder (#162)", () => {
+    // Lock the prompt contract for the dogfood bug where the whole sentence ("תעשה לי תזכורת … לקנות X")
+    // leaked verbatim into title_he. (Real-model extraction quality is the golden eval's job — eval/golden.json
+    // cases reminder-imperative-*; here we only assert the instruction is present.)
+    const p = buildSystemPrompt("2026-06-20");
+    expect(p).toMatch(/STRIP/); // title_he must drop the imperative/meta framing + date/time words
+    expect(p).toMatch(/NEVER copy the whole sentence/i);
+    expect(p).toContain("תזכיר לי"); // the reminder trigger phrasing is named
+    expect(p).toMatch(/"reminder"/); // and imperative framing maps to kind reminder
+  });
+
   it("instructs a CONSERVATIVE needs_clarification on required-slot guesses only (#84)", () => {
     // Lock the prompt contract: it names the field, both required-slot reasons, and the OMIT default.
     // (Real-model conservativeness is the #87 eval's job; here we only assert the instruction is present.)

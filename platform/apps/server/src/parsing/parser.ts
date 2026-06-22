@@ -42,8 +42,14 @@ export function buildSystemPrompt(todayIso: string, senderName?: string): string
     'Other relative terms: "מחר"=tomorrow (+1 day), "מחרתיים"=day after tomorrow (+2 days), ' +
       '"בעוד שבוע"=+7 days, "יום ראשון הבא"=Sunday of next week.',
     'Return an object: { "events": [ ... ] }. Each event has:',
-    '- kind: "event" (happens at a time/place), "task" (something to do), or "reminder".',
-    "- title_he: a short, clear Hebrew title.",
+    '- kind: one of "event" (happens at a set time/place — a meeting, appointment, class), "task" ' +
+      '(something to do, with no fixed time), or "reminder" (the SENDER asking to be reminded to do ' +
+      'something). Imperative/meta framing — "תזכיר לי…", "להזכיר לי…", "תעשה לי תזכורת…", "תוסיף תזכורת…", ' +
+      '"אל תשכח…" — is a "reminder" even when it carries a time (the time goes in `time`, not the title).',
+    "- title_he: a short, clear Hebrew title naming WHAT the item is — the core action or subject ONLY " +
+      '(e.g. "לקנות מגן למסך"). STRIP the imperative/meta framing ("תעשה לי תזכורת ש…", "תזכיר לי…", ' +
+      '"תוסיף…", "אל תשכח…") and any date/time words ("היום", "מחר", "בשעה 18:00") out of the title — ' +
+      "those belong in date_iso/time, not title_he. NEVER copy the whole sentence into title_he.",
     "- date_iso: the resolved date as YYYY-MM-DD.",
     '- time: "HH:MM" (24h) if a specific time is given, otherwise null.',
     "- location: the place if mentioned, otherwise null.",
