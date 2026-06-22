@@ -153,6 +153,117 @@ describe("handleInbound — #85 cancel routing robustness (regression)", () => {
   });
 });
 
+// #147 — the agentic fallback: on a deterministic 0-match, the resolve agent resolves over
+// title+location+assignee, then we CONFIRM before destroying (fail-closed כן/לא).
+describe("handleInbound — #147 agentic cancel fallback + confirm-before-destroy", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const cand = (id: number, over: Partial<SavedEvent> = {}): SavedEvent => ({
+    ...sampleEvent,
+    id,
+    source_provider: null,
+    ...over,
+  });
+
+  it("verbatim live bug ('…עם יונתן'): deterministic 0-match → agentic resolve → confirm, deletes nothing yet", async () => {
+    const conversations = createConversationStore(":memory:");
+    const resolved = [cand(42, { title_he: "פגישה", assignee: "יונתן" })];
+    const { deps, sendText, events, agent, resolveRun } = makeDeps({ conversations, resolved });
+    events.findEventsByRef.mockReturnValue([]); // title-only strict match misses the assignee
+
+    await handleInbound({ ...textMsg, text: "טוב בטל את הפגישה מחר עם יונתן" }, deps);
+
+    expect(agent.run).not.toHaveBeenCalled(); // never the extract path → no junk event (AC#3)
+    expect(resolveRun).toHaveBeenCalled(); // the resolve agent ran
+    expect(events.deleteById).not.toHaveBeenCalled(); // confirm first — nothing destroyed yet
+    expect(sendText.mock.calls[0]?.[1]).toContain("לבטל"); // "לבטל את …? השב/י כן"
+    const pending = conversations.getPending(textMsg.from, NOW);
+    expect(pending?.kind).toBe("cancel");
+    expect(JSON.parse(pending?.payload_json ?? "{}").candidateIds).toEqual([42]); // single-candidate confirm
+  });
+
+  it("confirm כן → deletes exactly that candidate (single-use)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [42] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+
+    await handleInbound({ ...textMsg, text: "כן" }, deps);
+
+    expect(events.deleteById).toHaveBeenCalledWith(42, "default");
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("בוטל ✓"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("confirm לא → NO delete (fail-closed)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [42] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "לא" }, deps);
+
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("השארתי"); // CONFIRM_ABORT_HE
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // consumed (single-use)
+  });
+
+  it("confirm with a non-affirmative ('אולי') → NO delete (fail-closed default)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [42] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "אולי" }, deps);
+    expect(events.deleteById).not.toHaveBeenCalled();
+  });
+
+  it("agentic 0-resolve → 'not found', no delete, no event created (forwarded 'בטל…' with no match, AC#3/#4)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, sendText, events, agent, resolveRun } = makeDeps({ conversations, resolved: [] });
+    events.findEventsByRef.mockReturnValue([]);
+
+    await handleInbound({ ...textMsg, text: "בטל את המנוי שלי" }, deps);
+
+    expect(resolveRun).toHaveBeenCalled();
+    expect(agent.run).not.toHaveBeenCalled(); // no extract → no event ever created
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
+  });
+
+  it("agentic N>1 resolve → numbered disambiguation thread (never auto-pick)", async () => {
+    const conversations = createConversationStore(":memory:");
+    const resolved = [cand(1, { assignee: "יונתן" }), cand(2, { assignee: "יונתן" })];
+    const { deps, sendText, events } = makeDeps({ conversations, resolved });
+    events.findEventsByRef.mockReturnValue([]);
+
+    await handleInbound({ ...textMsg, text: "בטל את הפגישה עם יונתן" }, deps);
+
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("איזה מהם");
+    expect(
+      JSON.parse(conversations.getPending(textMsg.from, NOW)?.payload_json ?? "{}").candidateIds,
+    ).toEqual([1, 2]);
+  });
+
+  it("without a resolve agent wired, a deterministic 0-match still replies not-found (additive)", async () => {
+    const { deps, sendText, events } = makeDeps(); // no resolved ⇒ no resolveAgent
+    events.findEventsByRef.mockReturnValue([]);
+    await handleInbound({ ...textMsg, text: "בטל את הפגישה עם יונתן" }, deps);
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
+  });
+});
+
 describe("extractCancelRef + cancel specificity (#125/F1+F2)", () => {
   const TODAY = "2026-06-20"; // a Saturday
 

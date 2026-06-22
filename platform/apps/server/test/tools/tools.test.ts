@@ -15,6 +15,7 @@ import {
   pushSavedEventsToCalendar,
   readCalendarTool,
   readGmailTool,
+  searchEventsTool,
   type ToolContext,
 } from "../../src/tools/tools.ts";
 
@@ -39,6 +40,7 @@ function makeStore() {
       ...e,
     }),
   );
+  const searchEvents = vi.fn((): SavedEvent[] => []);
   const store = {
     saveEvent,
     listEvents: vi.fn(() => []),
@@ -47,13 +49,14 @@ function makeStore() {
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
+    searchEvents,
     updateEvent: vi.fn(() => null),
   } as unknown as EventStore;
-  return { store, saveEvent };
+  return { store, saveEvent, searchEvents };
 }
 
 function makeCtx(over: Partial<ToolContext> = {}) {
-  const { store, saveEvent } = makeStore();
+  const { store, saveEvent, searchEvents } = makeStore();
   const ctx: ToolContext = {
     todayIso: "2026-06-20",
     from: "972501234567",
@@ -62,13 +65,15 @@ function makeCtx(over: Partial<ToolContext> = {}) {
     events: store,
     ...over,
   };
-  return { ctx, saveEvent };
+  return { ctx, saveEvent, searchEvents };
 }
 
 // #84: tool.run now returns a {saved}|{clarify} union. read_gmail/read_calendar (and the happy
 // extract_events path) always save — narrow for the assertions; a {clarify} here is a test failure.
-function savedRows(out: { saved: SavedEvent[] } | { clarify: unknown }): SavedEvent[] {
-  if (!("saved" in out)) throw new Error("expected a {saved} result, got {clarify}");
+function savedRows(
+  out: { saved: SavedEvent[] } | { clarify: unknown } | { resolved: unknown },
+): SavedEvent[] {
+  if (!("saved" in out)) throw new Error("expected a {saved} result, got a non-saved arm");
   return out.saved;
 }
 
@@ -207,6 +212,38 @@ function makeGoogle(over: Record<string, unknown> = {}): GmailToolDeps {
     ...over,
   } as unknown as GmailToolDeps;
 }
+
+// #147 — the read-only resolve tool: delegates to events.searchEvents, merges the SERVER date/time from
+// ctx.resolveRef (never model-supplied), and returns the {resolved} arm. Read-only — never saves.
+describe("searchEventsTool (#147)", () => {
+  it("has the resolve tool shape (name, description, titleHint schema)", () => {
+    const tool = searchEventsTool();
+    expect(tool.name).toBe("search_events");
+    expect(tool.inputSchema.safeParse({ titleHint: "פגישה" }).success).toBe(true);
+    expect(tool.inputSchema.safeParse({}).success).toBe(false); // titleHint required
+  });
+
+  it("searches events with the model titleHint + server resolveRef, returns {resolved}", async () => {
+    const cand: SavedEvent = { id: 9, source_provider: null, ...sampleEvent };
+    const { ctx, searchEvents, saveEvent } = makeCtx({ resolveRef: { dateIso: "2026-06-22" } });
+    searchEvents.mockReturnValue([cand]);
+
+    const out = await searchEventsTool().run({ titleHint: "פגישה יונתן" }, ctx);
+
+    expect(searchEvents).toHaveBeenCalledWith("default", {
+      titleHint: "פגישה יונתן",
+      dateIso: "2026-06-22", // merged from ctx.resolveRef, NOT from the model
+    });
+    expect("resolved" in out && out.resolved).toEqual([cand]);
+    expect(saveEvent).not.toHaveBeenCalled(); // read-only
+  });
+
+  it("omits date/time when no resolveRef is set (pure title-term search)", async () => {
+    const { ctx, searchEvents } = makeCtx();
+    await searchEventsTool().run({ titleHint: "כדורגל" }, ctx);
+    expect(searchEvents).toHaveBeenCalledWith("default", { titleHint: "כדורגל" });
+  });
+});
 
 describe("buildGmailQuery (server-clamped, G8)", () => {
   it("always applies the recency window", () => {

@@ -60,6 +60,18 @@ export interface EventStore {
     ref: { dateIso?: string; time?: string; titleHint?: string },
   ): SavedEvent[];
   /**
+   * #147 — BROADER-field resolve for the agentic fallback (the live bug: the disambiguating word lives in
+   * **location** or **assignee**, not the title). Same board-only (`source_provider IS NULL`), family-scoped,
+   * date/time-exact, newest-first, cap-5 base as `findEventsByRef`, but each `titleHint` word matches
+   * `title_he OR location OR assignee`. Read-only; used ONLY behind the model fallback + confirm gate.
+   * `findEventsByRef` stays the STRICT title-only matcher guarding the deterministic destructive path
+   * (#125/G22) — this is a deliberately separate seam, so broadening here can't widen the fast path.
+   */
+  searchEvents(
+    familyId: string,
+    query: { dateIso?: string; time?: string; titleHint?: string },
+  ): SavedEvent[];
+  /**
    * #86 — edit a board row in place. FAMILY-scoped (`source_provider IS NULL` only: a synced gcal/gmail
    * row is NEVER written, preventing a read→write loop). Merges `patch` onto the row, re-validates the
    * MERGED row via `parsedEventSchema` BEFORE the write (G20), and returns the updated `SavedEvent` — or
@@ -261,6 +273,30 @@ export function createEventStore(dbPath: string): EventStore {
         .map((variants) => `(${variants.map(() => "title_he LIKE ? ESCAPE '\\'").join(" OR ")})`)
         .join(" AND ");
       for (const variants of groups) params.push(...variants);
+      const sql = `${findByRefBase}${titleSql ? ` AND ${titleSql}` : ""} ORDER BY id DESC LIMIT 5;`;
+      const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
+      return rows.map(rowToSaved);
+    },
+    searchEvents(_familyId, query) {
+      // Same date/time base as findEventsByRef, but each title-hint word-variant matches ANY of the three
+      // text columns (title/location/assignee) — so a reference whose disambiguator is the location or the
+      // assignee resolves. Variants OR within a word; words AND across (a multi-word ref must match every
+      // word in SOME column). All LIKEs are ESCAPE '\' so a literal %/_ can't broaden a destructive match.
+      const params: (string | null)[] = [
+        query.dateIso ?? null,
+        query.dateIso ?? null,
+        query.time ?? null,
+        query.time ?? null,
+      ];
+      let groups = query.titleHint ? hintLikeGroups(query.titleHint) : [];
+      if (query.titleHint && groups.length === 0) groups = [[likeArg(query.titleHint.trim())]];
+      const variantClause =
+        "(title_he LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR assignee LIKE ? ESCAPE '\\')";
+      const titleSql = groups
+        .map((variants) => `(${variants.map(() => variantClause).join(" OR ")})`)
+        .join(" AND ");
+      // Three columns per variant ⇒ push each variant value three times, in clause order.
+      for (const variants of groups) for (const v of variants) params.push(v, v, v);
       const sql = `${findByRefBase}${titleSql ? ` AND ${titleSql}` : ""} ORDER BY id DESC LIMIT 5;`;
       const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
       return rows.map(rowToSaved);

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
-import { anthropicCallModel, createAgent } from "./core/agent.ts";
+import { anthropicCallModel, createAgent, RESOLVE_SYSTEM } from "./core/agent.ts";
 import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
@@ -26,6 +26,7 @@ import {
   type GmailToolDeps,
   readCalendarTool,
   readGmailTool,
+  searchEventsTool,
   type Tool,
 } from "./tools/tools.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
@@ -101,12 +102,24 @@ const agent = createAgent({
   log,
 });
 
+// #147 — the RESOLVE agent for the agentic cancel/edit fallback. Registered with ONLY `search_events`
+// (deliberately NOT extract_events), so a cancel/edit routed to the model on a deterministic 0-match can
+// never create a junk event (AC#3); it resolves the reference over title+location+assignee, and the
+// handler confirms before destroying. Same callModel seam, so it shares the transient/retry discipline.
+const resolveAgent = createAgent({
+  callModel: anthropicCallModel(anthropic, config.anthropicModel),
+  tools: [searchEventsTool()],
+  system: RESOLVE_SYSTEM,
+  log,
+});
+
 // One place that turns a queued inbound into a board event + Hebrew confirm, then settles its
 // queue row. Shared by the live webhook and boot-replay so both go through identical handling.
 const runInbound = (msg: InboundMessage): Promise<void> =>
   processInbound(msg, {
     allowlist: config.allowlist,
     agent,
+    resolveAgent, // #147: agentic cancel/edit fallback (search_events only)
     events,
     sendText: wa.sendText,
     inbound,

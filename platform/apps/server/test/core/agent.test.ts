@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { anthropicCallModel, createAgent, type ModelResponse } from "../../src/core/agent.ts";
 import { TransientError } from "../../src/core/errors.ts";
 import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
-import { extractEventsTool, type ToolContext } from "../../src/tools/tools.ts";
+import { extractEventsTool, searchEventsTool, type ToolContext } from "../../src/tools/tools.ts";
 
 const sampleEvent: ParsedEvent = {
   kind: "event",
@@ -50,6 +50,7 @@ function makeStore() {
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
+    searchEvents: vi.fn(() => []),
     updateEvent: vi.fn(() => null),
   } as unknown as EventStore;
 }
@@ -227,6 +228,69 @@ describe("createAgent (bounded tool-use loop)", () => {
     expect(callModel.mock.calls[0]![0].messages[0].content).toBe(
       "Sync the family's recent matching emails.",
     );
+  });
+});
+
+// #147 — the resolve agent: forced `search_events` on turn 0 → returns the matched rows via the {resolved}
+// arm, NEVER saves an event (it has no extract_events), and never echoes candidate text into the model.
+describe("createAgent — #147 resolve arm", () => {
+  const CAND: SavedEvent = {
+    id: 42,
+    source_provider: null,
+    kind: "event",
+    title_he: "פגישה עם יונתן",
+    date_iso: "2026-06-22",
+    time: "12:00",
+    location: null,
+    assignee: "יונתן",
+    recurrence: null,
+    source_text: "RAW_SOURCE_TEXT_MARKER",
+  };
+
+  function makeResolveAgent(callModel: ReturnType<typeof vi.fn>, found: SavedEvent[]) {
+    const events = makeStore();
+    (events.searchEvents as ReturnType<typeof vi.fn>).mockReturnValue(found);
+    const ctx: ToolContext = {
+      todayIso: "2026-06-20",
+      from: "972501234567",
+      waMessageId: "wamid.1",
+      familyId: "default",
+      events,
+      resolveRef: { dateIso: "2026-06-22" },
+    };
+    const agent = createAgent({ callModel, tools: [searchEventsTool()], sleep: async () => {} });
+    return { agent, ctx, events };
+  }
+
+  it("forced search_events → {resolved} candidates; saveEvent NEVER called (AC#3)", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce(toolUse({ titleHint: "פגישה יונתן" }, "search_events", "tu_s"));
+    const { agent, ctx, events } = makeResolveAgent(callModel, [CAND]);
+
+    const out = await agent.run("בטל את הפגישה עם יונתן", ctx, { forceTool: "search_events" });
+
+    expect(out && "resolved" in out).toBe(true);
+    if (out && "resolved" in out) expect(out.resolved.map((e) => e.id)).toEqual([42]);
+    expect(callModel.mock.calls[0]![0].tool_choice).toMatchObject({
+      type: "tool",
+      name: "search_events",
+    });
+    expect(events.saveEvent).not.toHaveBeenCalled(); // a cancel resolve can never create an event
+    expect(callModel).toHaveBeenCalledTimes(1); // the resolved arm ends the loop (no 2nd turn)
+    // G7: the candidate's raw source_text never re-entered any model-bound message.
+    expect(JSON.stringify(callModel.mock.calls)).not.toContain("RAW_SOURCE_TEXT_MARKER");
+  });
+
+  it("0 matches → {resolved: []} (the handler will reply not-found)", async () => {
+    const callModel = vi
+      .fn()
+      .mockResolvedValueOnce(toolUse({ titleHint: "לא קיים" }, "search_events", "tu_s"));
+    const { agent, ctx } = makeResolveAgent(callModel, []);
+
+    const out = await agent.run("בטל משהו", ctx, { forceTool: "search_events" });
+    expect(out && "resolved" in out).toBe(true);
+    if (out && "resolved" in out) expect(out.resolved).toEqual([]);
   });
 });
 

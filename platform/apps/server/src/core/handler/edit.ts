@@ -6,16 +6,20 @@ import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import { extractCancelRef } from "./cancel.ts";
 import {
+  AFFIRM_RE,
   CANCEL_NOT_FOUND_HE,
   CANCEL_WHICH_HE,
+  CONFIRM_ABORT_HE,
   conversationExpiresAt,
   EDIT_DAY_RE,
   EDIT_LOCATION_RE,
   EDIT_SYNCED_HE,
   EDIT_TIME_RE,
+  editConfirmPrompt,
   formatWhen,
   type HandlerDeps,
   REPHRASE_HE,
+  resolveCandidates,
   safeJsonParse,
 } from "./shared.ts";
 
@@ -104,8 +108,22 @@ export async function resumeEdit(
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
-  const m = /^([1-5])$/.exec(msg.text?.trim() ?? "");
-  const id = m?.[1] ? parsed.data.candidateIds[Number(m[1]) - 1] : undefined;
+  const ids = parsed.data.candidateIds;
+  const reply = msg.text?.trim() ?? "";
+  // #147 — a SINGLE-candidate thread is a confirm-before-edit (the agentic 1-match): FAIL-CLOSED, only an
+  // anchored כן applies the held patch; לא / a non-answer aborts with no write (applyPatchToId is also
+  // board-only, so a synced id could never be written even if it slipped in).
+  if (ids.length === 1) {
+    if (AFFIRM_RE.test(reply)) {
+      await applyPatchToId(deps, msg, ids[0]!, parsed.data.patch);
+    } else {
+      log("edit confirm declined / non-affirmative — no write (fail-closed)", { from: msg.from });
+      await deps.sendText(msg.from, CONFIRM_ABORT_HE);
+    }
+    return;
+  }
+  const m = /^([1-5])$/.exec(reply);
+  const id = m?.[1] ? ids[Number(m[1]) - 1] : undefined;
   if (id === undefined) {
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
@@ -124,7 +142,6 @@ export async function routeEditByRef(
   text: string,
   today: string,
 ): Promise<void> {
-  const log = deps.log ?? (() => {});
   const edit = extractEditDelta(text, today);
   const ref = edit?.ref;
   const specific = Boolean(
@@ -135,24 +152,72 @@ export async function routeEditByRef(
     return;
   }
   const candidates = deps.events.findEventsByRef(FAMILY_ID, edit.ref);
-  if (candidates.length === 0) {
-    await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
-    return;
-  }
+  // Deterministic exact-match path (Option B — UNCHANGED): 1 → apply immediately; N>1 → numbered thread.
   if (candidates.length === 1) {
     await applyEdit(deps, msg, candidates[0]!, edit.patch);
     return;
   }
-  if (deps.conversations) {
-    const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
-    deps.conversations.create({
-      fromPhone: msg.from,
-      payload: { kind: "edit", candidateIds: candidates.map((e) => e.id), patch: edit.patch },
-      expiresAt: conversationExpiresAt(deps),
-    });
-    log("edit disambiguation opened", { from: msg.from, count: candidates.length });
-    await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
-  } else {
-    await deps.sendText(msg.from, REPHRASE_HE);
+  if (candidates.length > 1) {
+    await openEditDisambiguation(deps, msg, candidates, edit.patch);
+    return;
   }
+  // 0 deterministic matches → AGENTIC fallback (#147): resolve over title+location+assignee, CONFIRM before
+  // editing. resolveAgent unwired ⇒ null ⇒ behave exactly as before (not-found). TransientError propagates.
+  const resolved = await resolveCandidates(deps, msg, text, edit.ref, today);
+  if (resolved === null || resolved.length === 0) {
+    await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+    return;
+  }
+  if (resolved.length === 1) {
+    await openEditConfirm(deps, msg, resolved[0]!, edit.patch);
+    return;
+  }
+  await openEditDisambiguation(deps, msg, resolved, edit.patch);
+}
+
+/**
+ * #147 — open a CONFIRM-before-edit thread for an agentic 1-match: a single-candidate `edit` thread holding
+ * the patch (reuses the existing kind — no migration) + a `כן/לא` prompt. Resolved by `resumeEdit`'s
+ * fail-closed `AFFIRM_RE`. No conversations store ⇒ we can't confirm, so we DON'T write (rephrase).
+ */
+async function openEditConfirm(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidate: SavedEvent,
+  patch: EventPatch,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  if (!deps.conversations) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  deps.conversations.create({
+    fromPhone: msg.from,
+    payload: { kind: "edit", candidateIds: [candidate.id], patch },
+    expiresAt: conversationExpiresAt(deps),
+  });
+  log("edit confirm opened (agentic 1-match)", { from: msg.from, id: candidate.id });
+  await deps.sendText(msg.from, editConfirmPrompt(candidate));
+}
+
+/** #86/#147 — open a numbered edit-disambiguation thread (N>1) holding the patch, shared by both paths. */
+async function openEditDisambiguation(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidates: SavedEvent[],
+  patch: EventPatch,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  if (!deps.conversations) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
+  deps.conversations.create({
+    fromPhone: msg.from,
+    payload: { kind: "edit", candidateIds: candidates.map((e) => e.id), patch },
+    expiresAt: conversationExpiresAt(deps),
+  });
+  log("edit disambiguation opened", { from: msg.from, count: candidates.length });
+  await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
 }

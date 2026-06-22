@@ -20,6 +20,7 @@ import {
   extractEventsTool,
   type GmailToolDeps,
   readGmailTool,
+  searchEventsTool,
 } from "../../src/tools/tools.ts";
 
 // Webhook HMAC is mandatory; integration posts are signed with this test key (named "key" to avoid
@@ -87,6 +88,16 @@ const callModel: CallModel = async (req) => {
     return {
       stop_reason: "tool_use",
       content: [{ type: "tool_use", id: "tu_gmail", name: "read_gmail", input: {} }],
+    };
+  }
+  // #147 resolve path: the message is passed plainly (no <forwarded> wrap). The model emits the key
+  // reference term — here a simple last-word heuristic stands in for the real extraction.
+  if (forced === "search_events") {
+    const t = typeof req.messages[0]?.content === "string" ? req.messages[0].content : "";
+    const titleHint = t.trim().split(/\s+/).pop() ?? t;
+    return {
+      stop_reason: "tool_use",
+      content: [{ type: "tool_use", id: "tu_se", name: "search_events", input: { titleHint } }],
     };
   }
   const wrapped = typeof req.messages[0]?.content === "string" ? req.messages[0].content : "";
@@ -180,10 +191,13 @@ function makeSystem(
       ? [extractEventsTool(parseImpl), readGmailTool(parseImpl)]
       : [extractEventsTool(parseImpl)],
   });
+  // #147 — the resolve agent (search_events only), wired exactly like index.ts.
+  const resolveAgent = createAgent({ callModel, tools: [searchEventsTool()] });
   const runInbound = (msg: InboundMessage): Promise<void> =>
     processInbound(msg, {
       allowlist,
       agent,
+      resolveAgent,
       events,
       sendText,
       inbound,
@@ -532,6 +546,72 @@ describe("integration: conversational lifecycle (#87)", () => {
     // Swept → the replay did NOT resume into the stale thread; it parsed fresh and asked the question.
     expect(sys.sent.at(-1)?.body).toBe(CLARIFY_QUESTIONS.missing_date);
     expect(sys.events.listEvents()).toHaveLength(0);
+  });
+
+  it("agentic cancel: resolves by ASSIGNEE (deterministic miss) → confirm → כן → board+Google delete (#147)", async () => {
+    const { calendar, calls } = recordingCalendar("gcal-1"); // an existing mirror → DELETEd on confirm
+    const conversations = createConversationStore(":memory:");
+    const sys = makeSystem(parse, {}, undefined, { calendar, conversations });
+
+    // Seed evA (title "אסיפת הורים", assignee "אבא") via a normal forward.
+    await sys.runInbound({ id: "wamid.seed", from: sender, type: "text", text: "single" });
+    expect(sys.events.listEvents()).toHaveLength(1);
+
+    // Cancel by ASSIGNEE: title-only findEventsByRef misses "אבא" → the resolve agent kicks in.
+    await sys.runInbound({
+      id: "wamid.c1",
+      from: sender,
+      type: "text",
+      text: "בטל את הפגישה של אבא",
+    });
+    // Confirm-before-destroy: a thread is open, NOTHING deleted yet, no junk event created (AC#3).
+    expect(sys.events.listEvents()).toHaveLength(1);
+    expect(sys.sent.at(-1)?.body).toContain("לבטל");
+    expect(conversations.getPending(sender, NOW_SQLITE)?.kind).toBe("cancel");
+    expect(calls.delete).toHaveLength(0);
+
+    // Confirm with כן → board delete + best-effort Google mirror delete.
+    await sys.runInbound({ id: "wamid.c2", from: sender, type: "text", text: "כן" });
+    expect(sys.events.listEvents()).toHaveLength(0);
+    expect(calls.delete).toEqual(["gcal-1"]);
+    expect(sys.sent.at(-1)?.body).toMatch(/בוטל/);
+  });
+
+  it("agentic cancel: לא at the confirm leaves the board untouched (fail-closed, #147)", async () => {
+    const { calendar, calls } = recordingCalendar("gcal-1");
+    const conversations = createConversationStore(":memory:");
+    const sys = makeSystem(parse, {}, undefined, { calendar, conversations });
+
+    await sys.runInbound({ id: "wamid.seed", from: sender, type: "text", text: "single" });
+    await sys.runInbound({
+      id: "wamid.c1",
+      from: sender,
+      type: "text",
+      text: "בטל את הפגישה של אבא",
+    });
+    await sys.runInbound({ id: "wamid.c2", from: sender, type: "text", text: "לא" });
+
+    expect(sys.events.listEvents()).toHaveLength(1); // nothing deleted
+    expect(calls.delete).toHaveLength(0); // no Google delete
+    expect(conversations.getPending(sender, NOW_SQLITE)).toBeNull(); // consumed
+  });
+
+  it("a forwarded message CONTAINING 'בטל' (not a leading command) still extracts, never deletes (AC#4)", async () => {
+    const sys = makeSystem();
+    // Seed two events at distinct slots ("multi" → evB 06-25 + evC 06-23).
+    await sys.runInbound({ id: "wamid.seed", from: sender, type: "text", text: "multi" });
+    expect(sys.events.listEvents()).toHaveLength(2);
+
+    // "תזכורת…: בטל…" does not START with a cancel verb → not a command → extracted as a forward (evA, a
+    // different slot), and the two seeded events are untouched.
+    await sys.runInbound({
+      id: "wamid.fwd",
+      from: sender,
+      type: "text",
+      text: "תזכורת חשובה: בטל את המנוי עד מחר",
+    });
+    expect(sys.events.listEvents()).toHaveLength(3); // extracted, nothing deleted
+    expect(sys.sent.at(-1)?.body).toContain("הוספתי");
   });
 
   it("guardrails unchanged: replies are SERVER-owned templates, never model prose (single-purpose, G1–G16)", async () => {

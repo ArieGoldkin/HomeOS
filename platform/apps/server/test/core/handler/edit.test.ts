@@ -124,6 +124,73 @@ describe("handleInbound — #86 edit in place + correction", () => {
   });
 });
 
+// #147 — the agentic edit fallback: deterministic 0-match → resolve over title+location+assignee → CONFIRM
+// (holding the patch) before writing; fail-closed כן/לא.
+describe("handleInbound — #147 agentic edit fallback + confirm-before-edit", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const board = (id: number, over: Partial<SavedEvent> = {}): SavedEvent => ({
+    ...sampleEvent,
+    id,
+    source_provider: null,
+    ...over,
+  });
+
+  it("deterministic 0-match → agentic resolve → edit confirm thread holds the patch, no write yet", async () => {
+    const conversations = createConversationStore(":memory:");
+    const resolved = [board(42, { title_he: "פגישה", assignee: "יונתן" })];
+    const { deps, sendText, events, agent, resolveRun } = makeDeps({ conversations, resolved });
+    events.findEventsByRef.mockReturnValue([]); // title-only strict match misses the assignee
+
+    await handleInbound({ ...textMsg, text: "שנה את הפגישה עם יונתן ל-18:00" }, deps);
+
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(resolveRun).toHaveBeenCalled();
+    expect(events.updateEvent).not.toHaveBeenCalled(); // confirm first
+    expect(sendText.mock.calls[0]?.[1]).toContain("לעדכן");
+    const pending = conversations.getPending(textMsg.from, NOW);
+    expect(pending?.kind).toBe("edit");
+    const payload = JSON.parse(pending?.payload_json ?? "{}");
+    expect(payload.candidateIds).toEqual([42]);
+    expect(payload.patch).toMatchObject({ time: "18:00" }); // held until confirmed
+  });
+
+  it("confirm כן → applies the held patch to that candidate", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "edit", candidateIds: [42], patch: { time: "18:00" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.updateEvent.mockReturnValue(board(42, { time: "18:00" }));
+
+    await handleInbound({ ...textMsg, text: "כן" }, deps);
+
+    expect(events.updateEvent).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ time: "18:00" }),
+      "default",
+    );
+    expect(sendText.mock.calls[0]?.[1]).toContain("עודכן ✓");
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull();
+  });
+
+  it("confirm לא → NO write (fail-closed)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "edit", candidateIds: [42], patch: { time: "18:00" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "לא" }, deps);
+
+    expect(events.updateEvent).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("השארתי");
+  });
+});
+
 describe("extractEditDelta location bound (#126/F2)", () => {
   it("a location delta does NOT swallow a trailing time token", async () => {
     const { deps, events } = makeDeps();
