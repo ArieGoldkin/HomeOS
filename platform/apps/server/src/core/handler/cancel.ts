@@ -337,7 +337,7 @@ async function openBulkCancelConfirm(
 /**
  * #147 — open a CONFIRM-before-destroy thread for an agentic 1-match cancel: a single-candidate `cancel`
  * thread (reuses the existing kind — no migration) + a `כן/לא` prompt. Resolved by `resumeCancel`'s
- * fail-closed `AFFIRM_RE`. No conversations store ⇒ we can't confirm, so we DON'T delete (rephrase).
+ * fail-closed `isAffirmative`. No conversations store ⇒ we can't confirm, so we DON'T delete (rephrase).
  */
 async function openCancelConfirm(
   deps: HandlerDeps,

@@ -217,7 +217,7 @@ export function editConfirmPrompt(e: SavedEvent): string {
 }
 /**
  * #163 — confirm-before-destroy prompt for a BULK cancel: list the whole in-scope set so the family SEES
- * exactly what a כן will delete, then ask for a single yes/no (fail-closed via AFFIRM_RE). Bullets (not a
+ * exactly what a כן will delete, then ask for a single yes/no (fail-closed via isAffirmative). Bullets (not a
  * numbered list) signal "this is a yes/no over all of them", not a pick-some disambiguation.
  */
 export function bulkCancelConfirmPrompt(events: SavedEvent[]): string {

@@ -219,7 +219,7 @@ export async function routeEditByRef(
 /**
  * #147 — open a CONFIRM-before-edit thread for an agentic 1-match: a single-candidate `edit` thread holding
  * the patch (reuses the existing kind — no migration) + a `כן/לא` prompt. Resolved by `resumeEdit`'s
- * fail-closed `AFFIRM_RE`. No conversations store ⇒ we can't confirm, so we DON'T write (rephrase).
+ * fail-closed `isAffirmative`. No conversations store ⇒ we can't confirm, so we DON'T write (rephrase).
  */
 async function openEditConfirm(
   deps: HandlerDeps,
