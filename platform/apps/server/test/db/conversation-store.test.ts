@@ -2,9 +2,11 @@ import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it } from "vitest";
 import {
   type ConversationPayload,
+  cancelPayloadSchema,
   createConversationStore,
   editPayloadSchema,
 } from "../../src/db/conversation-store.ts";
+import { BULK_CANCEL_MAX } from "../../src/db/event-store.ts";
 
 const draft: ParsedEvent = {
   kind: "event",
@@ -130,5 +132,38 @@ describe("editPayloadSchema + create derives kind (#86)", () => {
       expiresAt: "2026-06-20 12:00:00",
     });
     expect(row.kind).toBe("edit");
+  });
+});
+
+describe("cancelPayloadSchema — #163 bulk-cancel (confirmAll + raised cap)", () => {
+  it("accepts a confirmAll bulk payload with MORE than 5 ids (up to BULK_CANCEL_MAX)", () => {
+    const ids = Array.from({ length: 8 }, (_, i) => i + 1); // 8 > the old cap of 5
+    expect(
+      cancelPayloadSchema.safeParse({ kind: "cancel", candidateIds: ids, confirmAll: true }),
+    ).toMatchObject({ success: true });
+    // still capped — BULK_CANCEL_MAX + 1 ids is rejected
+    const tooMany = Array.from({ length: BULK_CANCEL_MAX + 1 }, (_, i) => i + 1);
+    expect(cancelPayloadSchema.safeParse({ kind: "cancel", candidateIds: tooMany }).success).toBe(
+      false,
+    );
+  });
+
+  it("keeps confirmAll OPTIONAL — a plain disambiguation payload (no flag) still validates", () => {
+    expect(cancelPayloadSchema.safeParse({ kind: "cancel", candidateIds: [1, 2] }).success).toBe(
+      true,
+    );
+  });
+
+  it("a bulk thread round-trips through create() with kind=cancel", () => {
+    const store = createConversationStore(":memory:");
+    const row = store.create({
+      fromPhone: "972500000010",
+      payload: { kind: "cancel", candidateIds: [1, 2, 3, 4, 5, 6], confirmAll: true },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    expect(row.kind).toBe("cancel");
+    const parsed = cancelPayloadSchema.safeParse(JSON.parse(row.payload_json));
+    expect(parsed.success && parsed.data.confirmAll).toBe(true);
+    expect(parsed.success && parsed.data.candidateIds).toHaveLength(6);
   });
 });

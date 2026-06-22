@@ -111,6 +111,7 @@ function makeApp(
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn(() => []),
     searchEvents: vi.fn(() => []),
+    findEventsInScope: vi.fn(() => []),
     updateEvent: vi.fn(() => null),
     findSlotConflict: vi.fn(() => null),
   };
