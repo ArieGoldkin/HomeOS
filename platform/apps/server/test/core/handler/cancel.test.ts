@@ -240,6 +240,23 @@ describe("handleInbound — #147 agentic cancel fallback + confirm-before-destro
     expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
   });
 
+  it("a כן into an EXPIRED single-candidate confirm thread does NOT delete (timeout fail-closed, AC#2)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [42] },
+      expiresAt: "2026-06-20 08:00:00", // EXPIRED at NOW (09:00) — the confirm window elapsed
+    });
+    const { deps, events } = makeDeps({ conversations, saved: null });
+
+    await handleInbound({ ...textMsg, text: "כן" }, deps);
+
+    // The boot/per-inbound expireStale sweep removes the stale confirm BEFORE getPending, so "כן" is no
+    // longer a resume — it falls through and deletes nothing (a timed-out confirm never destroys, G20).
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull();
+  });
+
   it("agentic N>1 resolve → numbered disambiguation thread (never auto-pick)", async () => {
     const conversations = createConversationStore(":memory:");
     const resolved = [cand(1, { assignee: "יונתן" }), cand(2, { assignee: "יונתן" })];
