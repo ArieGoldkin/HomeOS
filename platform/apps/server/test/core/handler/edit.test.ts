@@ -83,6 +83,64 @@ describe("handleInbound — #86 edit in place + correction", () => {
     );
   });
 
+  // #161 — edit disambiguation shares the multi-select parser with cancel: a single reply may pick more
+  // than one candidate ("1,2", "1 ו-2") or הכל/כולם → apply the held patch to ALL of them, ONE summary,
+  // never falling through to agent.run.
+  it("edit resume '1,2' applies the held patch to BOTH and sends one summary (עודכנו 2)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "edit", candidateIds: [11, 22, 33], patch: { time: "18:00" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events, agent } = makeDeps({ conversations });
+    events.updateEvent.mockImplementation((id: number) => board(id, { time: "18:00" }));
+    await handleInbound({ ...textMsg, text: "1,2" }, deps);
+    expect(events.updateEvent).toHaveBeenCalledWith(
+      11,
+      expect.objectContaining({ time: "18:00" }),
+      "default",
+    );
+    expect(events.updateEvent).toHaveBeenCalledWith(
+      22,
+      expect.objectContaining({ time: "18:00" }),
+      "default",
+    );
+    expect(events.updateEvent).not.toHaveBeenCalledWith(33, expect.anything(), "default");
+    expect(sendText).toHaveBeenCalledTimes(1); // one summary, not N replies
+    expect(sendText.mock.calls[0]?.[1]).toContain("עודכנו 2");
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("edit resume 'הכל' applies the held patch to EVERY candidate", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "edit", candidateIds: [11, 22, 33], patch: { location: "זום" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.updateEvent.mockImplementation((id: number) => board(id, { location: "זום" }));
+    await handleInbound({ ...textMsg, text: "הכל" }, deps);
+    expect(events.updateEvent).toHaveBeenCalledTimes(3);
+    expect(sendText.mock.calls[0]?.[1]).toContain("עודכנו 3");
+  });
+
+  it("edit disambiguation prompt asks לעדכן (not לבטל) and invites multi-select", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.findEventsByRef.mockReturnValue([
+      board(1, { title_he: "פגישה" }),
+      board(2, { title_he: "פגישה" }),
+    ]);
+    await handleInbound({ ...textMsg, text: "שנה פגישה ל-18:00" }, deps);
+    const prompt = sendText.mock.calls[0]?.[1] ?? "";
+    expect(prompt).toContain("לעדכן");
+    expect(prompt).not.toContain("לבטל");
+    expect(prompt).toContain("הכל");
+  });
+
   it("CORRECTION 'לא ב-28, ב-21' in an open clarify thread completes the draft IN PLACE (one save, not a 2nd event)", async () => {
     const conversations = createConversationStore(":memory:");
     const draft = {

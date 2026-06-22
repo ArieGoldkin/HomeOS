@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import type { AgentResult } from "../../../src/core/agent.ts";
 import type { HandlerDeps } from "../../../src/core/handler/index.ts";
 import type { ConversationStore } from "../../../src/db/conversation-store.ts";
-import type { SavedEvent } from "../../../src/db/event-store.ts";
+import type { EventPatch, SavedEvent } from "../../../src/db/event-store.ts";
 import type { InboundStore } from "../../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../../src/http/webhook.ts";
 import type {
@@ -82,7 +82,9 @@ export function makeDeps(
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn((): SavedEvent[] => []),
     searchEvents: vi.fn((): SavedEvent[] => []),
-    updateEvent: vi.fn((): SavedEvent | null => null),
+    updateEvent: vi.fn(
+      (_id: number, _patch: EventPatch, _familyId: string): SavedEvent | null => null,
+    ),
     findSlotConflict: vi.fn((): SavedEvent | null => null),
   };
   // The handler depends on the agent; run() returns persisted SavedEvent[], a {clarify} arm (#84), or

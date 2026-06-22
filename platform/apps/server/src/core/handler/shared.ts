@@ -154,6 +154,8 @@ export function stripLeadingFiller(text: string): string {
 export const TIME_RE = /(\d{1,2}):(\d{2})/u;
 export const CANCEL_NOT_FOUND_HE = "לא מצאתי אירוע כזה 🤷 נסו עם תאריך/שעה מדויקים";
 export const CANCEL_WHICH_HE = "איזה מהם לבטל? השב/י במספרים (למשל 1 ו-2, או 'הכל'):";
+/** #161 — edit's own disambiguation prompt (לעדכן, not the cancel-specific לבטל); same multi-select invite. */
+export const EDIT_WHICH_HE = "איזה מהם לעדכן? השב/י במספרים (למשל 1 ו-2, או 'הכל'):";
 /** #85 — bare "ביטול" while a thread is open ABORTS the thread (it never falls through to the undo). */
 export const ABORT_THREAD_HE = "בסדר, ביטלתי 👍";
 /**

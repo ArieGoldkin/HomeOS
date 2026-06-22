@@ -4,17 +4,17 @@ import type { EventPatch, SavedEvent } from "../../db/event-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
-import { extractCancelRef } from "./cancel.ts";
+import { extractCancelRef, parseSelection } from "./cancel.ts";
 import {
   AFFIRM_RE,
   CANCEL_NOT_FOUND_HE,
-  CANCEL_WHICH_HE,
   CONFIRM_ABORT_HE,
   conversationExpiresAt,
   EDIT_DAY_RE,
   EDIT_LOCATION_RE,
   EDIT_SYNCED_HE,
   EDIT_TIME_RE,
+  EDIT_WHICH_HE,
   editConfirmPrompt,
   formatWhen,
   type HandlerDeps,
@@ -77,6 +77,41 @@ export async function applyPatchToId(
   await deps.sendText(msg.from, `עודכן ✓\n${updated.title_he} · ${formatWhen(updated)}`);
 }
 
+/**
+ * #161 — apply a held patch to one OR MORE selected board rows (each via updateEvent — board-only, so a
+ * synced id can never be written even if it slipped in), best-effort Calendar patch per row, then ONE
+ * confirm. A single selection keeps the detailed "עודכן ✓ · title · when"; multi-select sends a summary
+ * "עודכנו N פריטים ✓". Zero successful updates → rephrase (e.g. every selected row was synced/invalid).
+ */
+async function applyPatchToMany(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  ids: number[],
+  patch: EventPatch,
+): Promise<void> {
+  if (ids.length === 1) {
+    await applyPatchToId(deps, msg, ids[0]!, patch);
+    return;
+  }
+  const log = deps.log ?? (() => {});
+  const updated: SavedEvent[] = [];
+  for (const id of ids) {
+    const row = deps.events.updateEvent(id, patch, FAMILY_ID);
+    if (row) {
+      updated.push(row);
+      if (deps.calendar) {
+        await pushSavedEventsToCalendar([row], deps.calendar, FAMILY_ID, log); // G25 best-effort
+      }
+    }
+  }
+  if (updated.length === 0) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  log("edit multi-select applied", { from: msg.from, count: updated.length });
+  await deps.sendText(msg.from, `עודכנו ${updated.length} פריטים ✓`);
+}
+
 /** #86 — the explicit 1-match edit: refuse a synced row up front (a read→write loop), else apply. */
 export async function applyEdit(
   deps: HandlerDeps,
@@ -122,13 +157,19 @@ export async function resumeEdit(
     }
     return;
   }
-  const m = /^([1-5])$/.exec(reply);
-  const id = m?.[1] ? ids[Number(m[1]) - 1] : undefined;
-  if (id === undefined) {
+  // N>1 — a disambiguation thread (#161): a SINGLE reply may pick one OR MORE candidates ("1", "1,2",
+  // "1 ו-2") or הכל/כולם → apply the held patch to ALL of them; any non-selection reply writes nothing.
+  const picks = parseSelection(reply, ids.length);
+  if (picks.length === 0) {
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
-  await applyPatchToId(deps, msg, id, parsed.data.patch);
+  await applyPatchToMany(
+    deps,
+    msg,
+    picks.map((n) => ids[n - 1]!),
+    parsed.data.patch,
+  );
 }
 
 /**
@@ -219,5 +260,5 @@ async function openEditDisambiguation(
     expiresAt: conversationExpiresAt(deps),
   });
   log("edit disambiguation opened", { from: msg.from, count: candidates.length });
-  await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
+  await deps.sendText(msg.from, `${EDIT_WHICH_HE}\n${list}`);
 }

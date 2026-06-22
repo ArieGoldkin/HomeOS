@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractCancelRef,
   handleInbound,
-  parseCancelSelection,
+  parseSelection,
 } from "../../../src/core/handler/index.ts";
 import {
   type ConversationStore,
@@ -396,29 +396,29 @@ describe("handleInbound — #161 multi-select cancel disambiguation", () => {
   });
 });
 
-// #161 — the pure selection parser (exported for unit coverage, like extractCancelRef). Accepts one or
-// more 1-based indices in any human list form, or the "all" words; returns deduped, in-range picks in
-// reply order. An empty result means "no valid selection" → the caller deletes nothing (G20).
-describe("parseCancelSelection (#161)", () => {
+// #161 — the pure selection parser (exported for unit coverage, like extractCancelRef; shared by the
+// cancel + edit resume paths). Accepts one or more 1-based indices in any human list form, or the "all"
+// words; returns deduped, in-range picks in reply order. An empty result means "no valid selection".
+describe("parseSelection (#161)", () => {
   it("parses a single index", () => {
-    expect(parseCancelSelection("2", 3)).toEqual([2]);
+    expect(parseSelection("2", 3)).toEqual([2]);
   });
   it("parses comma / vav / space separated lists", () => {
-    expect(parseCancelSelection("1,2", 3)).toEqual([1, 2]);
-    expect(parseCancelSelection("1 ו-2", 3)).toEqual([1, 2]);
-    expect(parseCancelSelection("1 2 3", 3)).toEqual([1, 2, 3]);
+    expect(parseSelection("1,2", 3)).toEqual([1, 2]);
+    expect(parseSelection("1 ו-2", 3)).toEqual([1, 2]);
+    expect(parseSelection("1 2 3", 3)).toEqual([1, 2, 3]);
   });
   it("הכל / כולם select every candidate", () => {
-    expect(parseCancelSelection("הכל", 3)).toEqual([1, 2, 3]);
-    expect(parseCancelSelection("כולם", 2)).toEqual([1, 2]);
+    expect(parseSelection("הכל", 3)).toEqual([1, 2, 3]);
+    expect(parseSelection("כולם", 2)).toEqual([1, 2]);
   });
   it("dedupes and drops out-of-range numbers", () => {
-    expect(parseCancelSelection("1,1,2", 3)).toEqual([1, 2]);
-    expect(parseCancelSelection("9", 3)).toEqual([]);
-    expect(parseCancelSelection("1,9", 2)).toEqual([1]);
+    expect(parseSelection("1,1,2", 3)).toEqual([1, 2]);
+    expect(parseSelection("9", 3)).toEqual([]);
+    expect(parseSelection("1,9", 2)).toEqual([1]);
   });
   it("a non-selection reply (a word / 'לא') yields nothing", () => {
-    expect(parseCancelSelection("לא יודע", 3)).toEqual([]);
-    expect(parseCancelSelection("שלום", 3)).toEqual([]);
+    expect(parseSelection("לא יודע", 3)).toEqual([]);
+    expect(parseSelection("שלום", 3)).toEqual([]);
   });
 });
