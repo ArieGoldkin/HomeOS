@@ -2,6 +2,7 @@ import { PhoneShell, PhoneToday } from "@app/phone";
 import { TabletBoard } from "@app/tablet";
 import { WebShell } from "@app/web";
 import { ConnectionsView } from "@features/connections";
+import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { FamilyView } from "@features/family";
 import { WhatsAppIngestion } from "@features/ingestion";
 import { Onboarding } from "@features/onboarding";
@@ -48,7 +49,14 @@ function RootLayout() {
 const todayApi = getRouteApi("/phone/today");
 function PhoneTodayScreen() {
   const { date } = todayApi.useSearch();
-  return <PhoneToday dateIso={coerceDateIso(date)} />;
+  // #153 — phone hosts the detail drawer in a bottom Sheet; the kiosk (TabletBoard) never wires this.
+  const { selected, openDetail, closeDetail } = useEventDetail();
+  return (
+    <>
+      <PhoneToday dateIso={coerceDateIso(date)} onOpenDetail={openDetail} />
+      <EventDetailDrawer event={selected} onClose={closeDetail} surface="phone" />
+    </>
+  );
 }
 
 const weekApi = getRouteApi("/phone/week");
@@ -68,18 +76,30 @@ function PhoneWeekScreen() {
 const webTodayApi = getRouteApi("/web/today");
 function WebTodayScreen() {
   const { date } = webTodayApi.useSearch();
-  return <PhoneToday dateIso={coerceDateIso(date)} />;
+  // #153 — web hosts the detail drawer in a centered Modal (same data view as phone, different host).
+  const { selected, openDetail, closeDetail } = useEventDetail();
+  return (
+    <>
+      <PhoneToday dateIso={coerceDateIso(date)} onOpenDetail={openDetail} />
+      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
+    </>
+  );
 }
 
 const webWeekApi = getRouteApi("/web/week");
 function WebWeekScreen() {
   const { date } = webWeekApi.useSearch();
   const navigate = useNavigate();
+  const { selected, openDetail, closeDetail } = useEventDetail();
   return (
-    <WebWeekView
-      dateIso={coerceDateIso(date)}
-      onSelectDate={(d) => navigate({ to: "/web/today", search: { date: d } })}
-    />
+    <>
+      <WebWeekView
+        dateIso={coerceDateIso(date)}
+        onSelectDate={(d) => navigate({ to: "/web/today", search: { date: d } })}
+        onOpenDetail={openDetail}
+      />
+      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
+    </>
   );
 }
 

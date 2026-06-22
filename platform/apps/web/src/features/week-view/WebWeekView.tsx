@@ -1,3 +1,4 @@
+import type { SavedEvent } from "@homeos/shared";
 import { useWeekDays } from "@shared/hooks";
 import { Skeleton } from "@shared/ui";
 import { WeekGrid } from "./components/WeekGrid";
@@ -9,6 +10,8 @@ export interface WebWeekViewProps {
   dateIso: string;
   /** Called with a day's ISO date when its column header is tapped. No router — the controller wires it. */
   onSelectDate: (dateIso: string) => void;
+  /** #153 — when set, the week's EventCards open the detail drawer (phone/web only; never the kiosk). */
+  onOpenDetail?: (event: SavedEvent) => void;
 }
 
 /**
@@ -16,7 +19,7 @@ export interface WebWeekViewProps {
  * counterpart to the phone `WeekView` (which renders a vertical `WeekList` from the same hook). Handles
  * loading (7 skeleton columns) and error (muted Hebrew message).
  */
-export function WebWeekView({ dateIso, onSelectDate }: WebWeekViewProps) {
+export function WebWeekView({ dateIso, onSelectDate, onOpenDetail }: WebWeekViewProps) {
   const { status, days, rangeLabel } = useWeekDays(dateIso);
 
   if (status === "loading") {
@@ -43,7 +46,7 @@ export function WebWeekView({ dateIso, onSelectDate }: WebWeekViewProps) {
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-[13px] font-medium text-muted-foreground px-1">{rangeLabel}</h2>
-      <WeekGrid days={days} onSelectDate={onSelectDate} />
+      <WeekGrid days={days} onSelectDate={onSelectDate} onOpenDetail={onOpenDetail} />
     </div>
   );
 }

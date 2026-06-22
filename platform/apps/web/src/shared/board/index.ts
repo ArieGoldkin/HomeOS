@@ -2,6 +2,7 @@
 // Public API only; never `export *`. Consumers import from "@shared/board".
 export { AnytimeSidebar, type AnytimeSidebarProps, type PeekItem } from "./AnytimeSidebar";
 export { EventCard, type EventCardProps } from "./EventCard";
+export { EventDetail, type EventDetailProps } from "./EventDetail";
 export { NowLine, type NowLineProps } from "./NowLine";
 export { PeekRow, type PeekRowProps } from "./PeekRow";
 export { PersonAvatar, type PersonAvatarProps } from "./PersonAvatar";

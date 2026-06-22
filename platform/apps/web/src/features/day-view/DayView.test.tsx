@@ -72,4 +72,20 @@ describe("DayView", () => {
     render(<DayView {...base} status="ready" timed={[ev({ id: 1, time: "09:00" })]} />);
     expect(screen.getByText("היום")).toBeInTheDocument();
   });
+
+  // #153 — onOpenDetail threads to both the timed (TimeSpine) and untimed (AnytimeSidebar) cards; absent
+  // ⇒ NO interactive cards (the tablet-kiosk default — the DayView the kiosk renders has no affordance).
+  it("threads onOpenDetail to timed + untimed cards (and renders none when omitted)", () => {
+    const props = {
+      ...base,
+      status: "ready" as const,
+      timed: [ev({ id: 1, time: "09:00", title_he: "בוקר" })],
+      untimed: [ev({ id: 2, time: null, kind: "task" as const, title_he: "משימה" })],
+    };
+    const { rerender } = render(<DayView {...props} />);
+    expect(screen.queryAllByRole("button")).toHaveLength(0); // kiosk default: inert
+
+    rerender(<DayView {...props} onOpenDetail={() => {}} />);
+    expect(screen.getAllByRole("button")).toHaveLength(2); // timed + untimed cards now openable
+  });
 });

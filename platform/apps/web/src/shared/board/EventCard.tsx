@@ -42,6 +42,13 @@ export interface EventCardProps extends HTMLAttributes<HTMLDivElement> {
   showTime?: boolean;
   /** Night-optimized assignee color (the always-on tablet runs night). */
   night?: boolean;
+  /**
+   * #153 — when provided, the card becomes an interactive `<button>` that opens the event-detail drawer
+   * (mirrors PersonChip's display→button polymorphism). Omitted ⇒ the card stays a pure, inert `<div>`.
+   * This is the KIOSK-EXCLUSION mechanism: `TabletBoard` never passes it, so the no-auth tablet has no
+   * way to open the drawer (which reveals `source_text` = other people's words) — the #153 security line.
+   */
+  onOpenDetail?: (event: SavedEvent) => void;
 }
 
 /**
@@ -56,6 +63,7 @@ export function EventCard({
   density,
   showTime = true,
   night = false,
+  onOpenDetail,
   className,
   ...props
 }: EventCardProps) {
@@ -65,8 +73,9 @@ export function EventCard({
     ? assigneeColor(event.assignee)[night ? "night" : "light"]
     : undefined;
 
-  return (
-    <div className={cn("@container/card min-w-0", className)} {...props}>
+  // The card body is identical whether inert or interactive — only the wrapping element changes.
+  const body = (
+    <>
       <div className="flex items-baseline gap-2">
         {variant === "reminder" && (
           <span
@@ -105,6 +114,29 @@ export function EventCard({
         )}
         <ProviderBadge source={event.source} />
       </div>
+    </>
+  );
+
+  // #153 — interactive only when given onOpenDetail: a real <button> (free keyboard/Enter/Space + role),
+  // following PersonChip's display→button precedent. The kiosk omits the prop, so its cards stay inert.
+  if (onOpenDetail) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenDetail(event)}
+        className={cn(
+          "@container/card block w-full min-w-0 cursor-pointer rounded-[var(--radius)] text-start transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          className,
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <div className={cn("@container/card min-w-0", className)} {...props}>
+      {body}
     </div>
   );
 }

@@ -15,6 +15,8 @@ export interface DayColumnProps {
   isToday?: boolean;
   /** Called with this column's `dateIso` when the header is tapped. */
   onSelect?: (dateIso: string) => void;
+  /** #153 — when set, each EventCard opens the detail drawer; omitted ⇒ inert cards. */
+  onOpenDetail?: (event: SavedEvent) => void;
 }
 
 /**
@@ -29,6 +31,7 @@ export function DayColumn({
   events,
   isToday = false,
   onSelect,
+  onOpenDetail,
 }: DayColumnProps) {
   return (
     <div
@@ -64,7 +67,15 @@ export function DayColumn({
             —
           </span>
         ) : (
-          events.map((ev) => <EventCard key={ev.id} event={ev} surface="web" density="compact" />)
+          events.map((ev) => (
+            <EventCard
+              key={ev.id}
+              event={ev}
+              surface="web"
+              density="compact"
+              onOpenDetail={onOpenDetail}
+            />
+          ))
         )}
       </div>
     </div>

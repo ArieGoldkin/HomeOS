@@ -19,6 +19,8 @@ export interface DayViewProps {
   moreCount?: number;
   night?: boolean;
   todayLabel?: string;
+  /** #153 — when set, the day's EventCards open the detail drawer; omitted ⇒ inert (the tablet kiosk). */
+  onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
 }
 
@@ -38,6 +40,7 @@ export function DayView({
   moreCount = 0,
   night = false,
   todayLabel = "היום",
+  onOpenDetail,
   className,
 }: DayViewProps) {
   if (status === "loading") {
@@ -75,7 +78,7 @@ export function DayView({
         {hasTimed && (
           <div className="min-w-0 @2xl/day:flex-1">
             <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
-            <TimeSpine events={timed} nowTime={nowTime} night={night} />
+            <TimeSpine events={timed} nowTime={nowTime} night={night} onOpenDetail={onOpenDetail} />
             {moreCount > 0 && (
               <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
             )}
@@ -93,6 +96,7 @@ export function DayView({
             tasks={untimed}
             tomorrow={tomorrow}
             night={night}
+            onOpenDetail={onOpenDetail}
           />
         )}
       </div>
