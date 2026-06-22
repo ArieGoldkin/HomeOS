@@ -392,6 +392,13 @@ describe("findEventsInScope (#163 bulk cancel)", () => {
       BULK_CANCEL_MAX,
     );
   });
+
+  it("self-protects against an EMPTY scope — returns [] (never the whole board, #168/F1)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent({ ...event, date_iso: "2026-06-21" }, { fromPhone: "9725", waMessageId: "a" });
+    store.saveEvent({ ...event, date_iso: "2026-06-22" }, { fromPhone: "9725", waMessageId: "b" });
+    expect(store.findEventsInScope(FAMILY_ID, {})).toEqual([]); // defense-in-depth, not a board wipe
+  });
 });
 
 describe("findEventsByRef — LIKE wildcard escaping (#125/F3)", () => {

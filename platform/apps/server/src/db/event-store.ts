@@ -320,10 +320,13 @@ export function createEventStore(dbPath: string): EventStore {
       return rows.map(rowToSaved);
     },
     findEventsInScope(_familyId, scope) {
+      // Defense-in-depth (review #168/F1): an EMPTY scope would match every board row — for a destructive
+      // bulk op the seam must be self-protecting, not rely on the caller's guard. `extractBulkCancel`
+      // already requires a date/time, so this returns [] only for a misuse, never on the real path.
+      if (!scope.dateIso && !scope.time) return [];
       // Same date/time base as findEventsByRef, but NO title clause — bulk cancel matches the whole scope
       // regardless of title/kind. BULK_CANCEL_MAX (not 5) so a busy day is fully listed; the literal is a
-      // trusted constant (never user input), so interpolating it is injection-safe. The caller guarantees
-      // a non-empty scope, but even an empty one stays bounded by source_provider IS NULL + the cap.
+      // trusted constant (never user input), so interpolating it is injection-safe.
       const params: (string | null)[] = [
         scope.dateIso ?? null,
         scope.dateIso ?? null,
