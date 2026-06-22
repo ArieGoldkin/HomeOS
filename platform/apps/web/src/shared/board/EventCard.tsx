@@ -32,7 +32,9 @@ const title = cva("min-w-0 font-display font-medium leading-[1.24]", {
   defaultVariants: { variant: "event", density: "comfortable" },
 });
 
-export interface EventCardProps extends HTMLAttributes<HTMLDivElement> {
+// HTMLElement (not HTMLDivElement) so the same props spread cleanly onto the inert <div> AND the
+// interactive <button> branch — mirroring PersonChip's polymorphic display→button shape (#153/F1).
+export interface EventCardProps extends HTMLAttributes<HTMLElement> {
   event: SavedEvent;
   /** Surface hint — sets the default density (phone → compact, else comfortable). */
   surface?: "tablet" | "phone" | "web";
@@ -122,10 +124,14 @@ export function EventCard({
   if (onOpenDetail) {
     return (
       <button
+        {...props}
         type="button"
         onClick={() => onOpenDetail(event)}
+        // It opens the detail drawer (a dialog) → announce that; min-h-[44px] keeps a bare title-only
+        // card above the phone touch-target floor even though the row padding lives on the parent (F2).
+        aria-haspopup="dialog"
         className={cn(
-          "@container/card block w-full min-w-0 cursor-pointer rounded-[var(--radius)] text-start transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "@container/card block min-h-[44px] w-full min-w-0 cursor-pointer rounded-[var(--radius)] text-start transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
       >
@@ -135,7 +141,7 @@ export function EventCard({
   }
 
   return (
-    <div className={cn("@container/card min-w-0", className)} {...props}>
+    <div {...props} className={cn("@container/card min-w-0", className)}>
       {body}
     </div>
   );

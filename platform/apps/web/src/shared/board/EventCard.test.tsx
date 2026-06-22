@@ -117,9 +117,11 @@ describe("EventCard (canonical anti-slop spec)", () => {
     it("becomes a <button> that calls onOpenDetail with the event when provided", () => {
       const onOpenDetail = vi.fn();
       const event = make({ title_he: "אסיפת הורים" });
-      render(<EventCard event={event} onOpenDetail={onOpenDetail} />);
+      render(<EventCard event={event} onOpenDetail={onOpenDetail} data-testid="card-btn" />);
       const btn = screen.getByRole("button");
       expect(btn).toHaveTextContent("אסיפת הורים"); // accessible name from content (kind/title preserved)
+      expect(btn).toHaveAttribute("aria-haspopup", "dialog"); // announces it opens the detail drawer
+      expect(btn).toHaveAttribute("data-testid", "card-btn"); // F1: props forward to the button branch too
       fireEvent.click(btn);
       expect(onOpenDetail).toHaveBeenCalledWith(event);
     });

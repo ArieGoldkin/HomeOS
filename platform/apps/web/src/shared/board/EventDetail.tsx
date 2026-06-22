@@ -59,7 +59,10 @@ export function EventDetail({ event }: EventDetailProps) {
           {created && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">נוצר:</dt>
-              <dd className="text-foreground">{created}</dd>
+              {/* bidi-isolate: the date carries Latin digits inside Hebrew → keep it from reordering. */}
+              <dd className="text-foreground">
+                <bdi>{created}</bdi>
+              </dd>
             </div>
           )}
         </dl>

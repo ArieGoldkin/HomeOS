@@ -40,9 +40,11 @@ describe("TabletBoard (live /events, fixed clock)", () => {
   // detail drawer that reveals other people's words.
   it("event cards have NO detail affordance — the card is not a button (kiosk exclusion)", async () => {
     render(wrap(<TabletBoard />));
-    await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /אסיפת הורים בגן/ })).toBeNull();
-    // the original message text is never even in the kiosk DOM
+    const card = await screen.findByText("אסיפת הורים בגן");
+    // Name-agnostic (F3): the card's text is NOT inside any <button> — independent of accessible-name
+    // matching, so it can't false-pass if the label ever changes.
+    expect(card.closest("button")).toBeNull();
+    // and the original message text is never even in the kiosk DOM.
     expect(screen.queryByText("תזכורת: אסיפת הורים")).toBeNull();
   });
 });

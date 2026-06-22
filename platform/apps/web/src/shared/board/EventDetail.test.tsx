@@ -32,6 +32,10 @@ describe("EventDetail (#153)", () => {
     expect(screen.getByText("Gmail")).toBeInTheDocument();
     rerender(<EventDetail event={make({ source: "web" })} />);
     expect(screen.getByText("הוספה ידנית")).toBeInTheDocument();
+    // gcal is the only multi-node label ("יומן " + <bdi>Google</bdi>) — assert both fragments (F4).
+    rerender(<EventDetail event={make({ source: "gcal" })} />);
+    expect(screen.getByText(/יומן/)).toBeInTheDocument();
+    expect(screen.getByText("Google")).toBeInTheDocument();
   });
 
   it("formats created_at as the Asia/Jerusalem wall-clock", () => {
