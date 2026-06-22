@@ -80,7 +80,7 @@ export function extractCancelRef(
 
 /**
  * #85 — delete ONE board row + its best-effort Google mirror, then confirm. Shared by the 1-match and the
- * resume-index paths. G25: the Google delete never throws (the board is the source of truth).
+ * agentic-confirm paths. G25: the Google delete never throws (the board is the source of truth).
  */
 export async function cancelOne(
   deps: HandlerDeps,
@@ -94,6 +94,54 @@ export async function cancelOne(
   }
   log("cancel-by-ref delete", { from: msg.from, eventId, removed });
   await deps.sendText(msg.from, cancelReply(removed));
+}
+
+/**
+ * #161 — delete one OR MORE selected board rows (+ their best-effort Google mirrors), then send ONE
+ * summary confirm (cancelReply pluralizes) instead of a burst of N messages. G25: each Google delete is
+ * best-effort and never throws (the board is the source of truth). Drives the multi-select resume path.
+ */
+async function cancelMany(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  eventIds: number[],
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  let removed = 0;
+  for (const id of eventIds) {
+    const n = deps.events.deleteById(id, FAMILY_ID);
+    removed += n;
+    if (n > 0 && deps.calendar) {
+      await deleteFromCalendar(id, deps.calendar, FAMILY_ID, log);
+    }
+  }
+  log("cancel multi-select delete", { from: msg.from, eventIds, removed });
+  await deps.sendText(msg.from, cancelReply(removed));
+}
+
+/**
+ * #161 — parse a numbered-disambiguation selection (shared by the cancel AND edit resume paths). Accepts
+ * one or MORE 1-based indices in a single reply ("1", "1,2", "1 ו-2", "1 2") or an "all" word (הכל/כולם →
+ * every candidate). The whole reply must be selection-shaped (digits + the separators a person uses for a
+ * list, or an all-word) so an arbitrary sentence with an incidental number is NOT treated as a pick (G20).
+ * Returns the chosen indices, deduped and clamped to [1..count] in reply order; an empty array means "no
+ * valid selection" (the caller deletes/edits nothing).
+ */
+export function parseSelection(reply: string, count: number): number[] {
+  const r = reply.trim();
+  if (/^(?:הכל|כולם)$/u.test(r)) return Array.from({ length: count }, (_, i) => i + 1);
+  // Selection-shaped only: digits + list separators (comma, vav, hyphen/maqaf ־, plus, whitespace).
+  if (!/^[\d\s,+ו־-]+$/u.test(r)) return [];
+  const seen = new Set<number>();
+  const picks: number[] = [];
+  for (const match of r.matchAll(/\d+/gu)) {
+    const n = Number(match[0]);
+    if (n >= 1 && n <= count && !seen.has(n)) {
+      seen.add(n);
+      picks.push(n);
+    }
+  }
+  return picks;
 }
 
 /**
@@ -129,15 +177,19 @@ export async function resumeCancel(
     }
     return;
   }
-  // N>1 — a disambiguation thread: a numbered reply (^[1-5]$) picks ONE; any non-index deletes nothing.
-  const m = /^([1-5])$/.exec(reply);
-  const id = m?.[1] ? ids[Number(m[1]) - 1] : undefined;
-  if (id === undefined) {
-    log("cancel resume — non-index reply, no delete", { from: msg.from });
+  // N>1 — a disambiguation thread (#161): a SINGLE reply may pick one OR MORE candidates ("1", "1,2",
+  // "1 ו-2") or הכל/כולם (every candidate); any non-selection reply deletes nothing (G20 never auto-pick).
+  const picks = parseSelection(reply, ids.length);
+  if (picks.length === 0) {
+    log("cancel resume — non-selection reply, no delete", { from: msg.from });
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
-  await cancelOne(deps, msg, id);
+  await cancelMany(
+    deps,
+    msg,
+    picks.map((n) => ids[n - 1]!),
+  );
 }
 
 /**
