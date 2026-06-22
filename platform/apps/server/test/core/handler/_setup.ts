@@ -57,6 +57,9 @@ export function makeDeps(
     parseThrows?: unknown;
     /** #87/G24: override the open-thread TTL (ms). `0` makes a thread expire immediately at open. */
     conversationTtlMs?: number;
+    /** #147: when defined, wires deps.resolveAgent (the agentic cancel/edit fallback) to return this
+     *  `{resolved}` arm. Used on a deterministic 0-match to exercise the confirm/disambiguation flow. */
+    resolved?: SavedEvent[];
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -78,6 +81,7 @@ export function makeDeps(
     deleteByProvider: vi.fn(() => 0),
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn((): SavedEvent[] => []),
+    searchEvents: vi.fn((): SavedEvent[] => []),
     updateEvent: vi.fn((): SavedEvent | null => null),
     findSlotConflict: vi.fn((): SavedEvent | null => null),
   };
@@ -102,6 +106,18 @@ export function makeDeps(
     },
   );
   const agent = { run };
+  // #147: the resolve agent (agentic cancel/edit fallback). Only wired when opts.resolved is set; returns
+  // the {resolved} arm so routeCancel/EditByRef's 0-match branch opens a confirm/disambiguation thread.
+  const resolveRun = vi.fn(
+    async (
+      _text: string,
+      _ctx: ToolContext,
+      _opts?: { forceTool?: string },
+    ): Promise<AgentResult> => ({
+      resolved: opts.resolved ?? [],
+    }),
+  );
+  const resolveAgent = { run: resolveRun };
   // #72: a fake Gmail seam. `google: true` → a stored credential; `google: false` → none (not connected).
   const google: GmailToolDeps | undefined =
     opts.google === undefined
@@ -154,6 +170,7 @@ export function makeDeps(
     allowlist,
     events,
     agent,
+    ...(opts.resolved !== undefined ? { resolveAgent } : {}),
     sendText,
     members: opts.members,
     google,
@@ -178,7 +195,7 @@ export function makeDeps(
         }
       : {}),
   };
-  return { sendText, events, agent, deps, countFromSenderSince };
+  return { sendText, events, agent, resolveRun, deps, countFromSenderSince };
 }
 
 export const textMsg: InboundMessage = {

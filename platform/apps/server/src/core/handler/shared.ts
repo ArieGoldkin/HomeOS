@@ -2,6 +2,8 @@ import type { ClarifyReason, ParsedEvent } from "@homeos/shared";
 import type { ConversationStore } from "../../db/conversation-store.ts";
 import type { EventStore, SavedEvent } from "../../db/event-store.ts";
 import type { InboundStore } from "../../db/inbound-store.ts";
+import { FAMILY_ID } from "../../db/schema.ts";
+import type { InboundMessage } from "../../http/webhook.ts";
 import type { ParseMessage } from "../../parsing/parser.ts";
 import type { CalendarToolDeps, ClarifyResult, GmailToolDeps } from "../../tools/tools.ts";
 import type { SendText } from "../../whatsapp/client.ts";
@@ -11,6 +13,12 @@ import { sqliteUtc } from "../time.ts";
 export interface HandlerDeps {
   allowlist: readonly string[];
   agent: Agent;
+  /**
+   * #147 — the bounded RESOLVE agent for the agentic cancel/edit fallback. Registered with ONLY
+   * `search_events` (NOT `extract_events`), so a cancel routed here can never create an event (AC#3).
+   * Optional: unwired ⇒ a deterministic 0-match just replies not-found, exactly as before (fully additive).
+   */
+  resolveAgent?: Agent;
   events: EventStore;
   sendText: SendText;
   /** Optional phone→family-member-name map; resolves the sender for first-person → assignee (#14). */
@@ -162,6 +170,23 @@ export const EDIT_LOCATION_RE = /ל(?:מיקום|כתובת)\s+(.+?)(?=\s+ל-?\s
 export const EDIT_DAY_RE = /ל-?(\d{1,2})(?![:\d])/u;
 export const EDIT_SYNCED_HE = "אי אפשר לערוך אירוע שמסונכרן מהיומן 🔒";
 /**
+ * #147 — FAIL-CLOSED affirmative for the confirm-before-destroy gate. ONLY an anchored `כן` executes the
+ * agentic 1-match cancel/edit; `לא`, a non-answer, or a timeout all ABORT with no write. `(?!\p{L})` lets
+ * "כן" / "כן בבקשה" through but never a longer word that merely starts with those letters — and crucially,
+ * anything that ISN'T an affirmative defaults to NO (the safe direction for a destructive op on a shared board).
+ */
+export const AFFIRM_RE = /^כן(?!\p{L})/u;
+/** #147 — the no-write reply when a confirm-before-destroy is declined / unanswered (fail-closed). */
+export const CONFIRM_ABORT_HE = "בסדר, השארתי הכול כמו שהיה 👍";
+/** #147 — confirm-before-destroy prompt for an agentic 1-match cancel (the model resolved ONE candidate). */
+export function cancelConfirmPrompt(e: SavedEvent): string {
+  return `לבטל את "${e.title_he}" · ${formatWhen(e)}? השב/י כן לאישור`;
+}
+/** #147 — confirm-before-destroy prompt for an agentic 1-match edit (the model resolved ONE candidate). */
+export function editConfirmPrompt(e: SavedEvent): string {
+  return `לעדכן את "${e.title_he}" · ${formatWhen(e)}? השב/י כן לאישור`;
+}
+/**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)
  * must never be sent to Claude (~2× per message once the agent loop lands). The allowlist bounds
  * *who*, not message *size*; this is the cost/DoS ceiling on a single message.
@@ -266,10 +291,52 @@ export function hasScheduleSignal(text: string): boolean {
   );
 }
 
-/** #84: narrow the agent's 3-arm result. `clarify` → the request to ask; otherwise saved rows (or null). */
+/** #84/#147: narrow the agent's arms. `clarify` → the request to ask; `resolved` → cancel/edit candidates
+ *  (#147, only the resolve agent returns it); otherwise saved rows (or null). */
 export function clarifyOf(r: AgentResult): ClarifyResult | null {
   return r && "clarify" in r ? r.clarify : null;
 }
 export function savedOf(r: AgentResult): SavedEvent[] | null {
-  return r && "clarify" in r ? null : r;
+  if (!r || "clarify" in r || "resolved" in r) return null;
+  return r;
+}
+/** #147: narrow the resolve agent's `{resolved}` arm → the matched candidate rows, or null if it's any
+ *  other arm. An empty array (found nothing) is a valid `resolved` value the caller treats as not-found. */
+export function resolvedOf(r: AgentResult): SavedEvent[] | null {
+  return r && "resolved" in r ? r.resolved : null;
+}
+
+/**
+ * #147 — the agentic resolve fallback shared by the cancel + edit routes. On a deterministic 0-match for a
+ * SPECIFIC reference, run the bounded resolve agent (forced to `search_events` on turn 0 — it has no
+ * `extract_events`, so it can never create an event, AC#3) with the SERVER-resolved date/time pinned via
+ * `ctx.resolveRef` (the model supplies only the text terms; it never sees today's date, G8). Returns the
+ * matched board rows (possibly empty), or `null` when no resolve agent is wired — the caller then behaves
+ * exactly as before (not-found). A TransientError propagates so the inbound stays pending for boot-replay.
+ */
+export async function resolveCandidates(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  text: string,
+  ref: { dateIso?: string; time?: string },
+  today: string,
+): Promise<SavedEvent[] | null> {
+  if (!deps.resolveAgent) return null;
+  const result = await deps.resolveAgent.run(
+    text,
+    {
+      todayIso: today,
+      from: msg.from,
+      waMessageId: msg.id,
+      senderName: deps.members?.[msg.from],
+      familyId: FAMILY_ID,
+      events: deps.events,
+      resolveRef: {
+        ...(ref.dateIso ? { dateIso: ref.dateIso } : {}),
+        ...(ref.time ? { time: ref.time } : {}),
+      },
+    },
+    { forceTool: "search_events" },
+  );
+  return resolvedOf(result) ?? [];
 }

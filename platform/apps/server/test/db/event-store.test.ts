@@ -242,6 +242,100 @@ describe("EventStore (in-memory SQLite)", () => {
   });
 });
 
+// #147 — the broader-field resolve seam behind the agentic fallback. Same base as findEventsByRef, but a
+// title hint matches title OR location OR assignee (the live bug: the disambiguator is in location/assignee).
+describe("searchEvents (#147 broader-field resolve)", () => {
+  it("resolves a reference whose disambiguator is the ASSIGNEE (live bug: '…עם יונתן')", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "פגישה", assignee: "יונתן", date_iso: "2026-06-22" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "פגישה", assignee: "דנה", date_iso: "2026-06-22" },
+      { fromPhone: "9725", waMessageId: "b" },
+    );
+    // findEventsByRef (title-only) can't tell these apart; searchEvents matches the assignee.
+    expect(store.findEventsByRef(FAMILY_ID, { titleHint: "פגישה יונתן" })).toHaveLength(0);
+    const found = store.searchEvents(FAMILY_ID, { titleHint: "פגישה יונתן" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.assignee).toBe("יונתן");
+  });
+
+  it("resolves a reference whose disambiguator is the LOCATION (live bug: '…גן רימון')", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "אסיפת הורים", location: "גן רימון", date_iso: "2026-06-21" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "אסיפת הורים", location: "גן ורד", date_iso: "2026-06-21" },
+      { fromPhone: "9725", waMessageId: "b" },
+    );
+    const found = store.searchEvents(FAMILY_ID, { titleHint: "אסיפת הורים גן רימון" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.location).toBe("גן רימון");
+  });
+
+  it("still matches on the title (superset of findEventsByRef's reach)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "חוג כדורגל", date_iso: "2026-06-23" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    expect(store.searchEvents(FAMILY_ID, { titleHint: "כדורגל" })).toHaveLength(1);
+  });
+
+  it("ANDs multi-word hints ACROSS columns — every word must hit some column", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "פגישה", location: "תל אביב", assignee: "יונתן" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    store.saveEvent(
+      { ...event, title_he: "פגישה", location: "חיפה", assignee: "דנה" },
+      { fromPhone: "9725", waMessageId: "b" },
+    );
+    // "פגישה"→title, "יונתן"→assignee both hit row a; row b misses "יונתן" → excluded.
+    const found = store.searchEvents(FAMILY_ID, { titleHint: "פגישה יונתן" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.assignee).toBe("יונתן");
+  });
+
+  it("is board-only (never a 'google' row) and capped at 5, newest-first", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "פגישה", assignee: "יונתן" },
+      { fromPhone: "9725", waMessageId: "g", sourceProvider: "google" },
+    );
+    const ids: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      ids.push(
+        store.saveEvent(
+          { ...event, title_he: "פגישה", assignee: "יונתן" },
+          { fromPhone: "9725", waMessageId: `w${i}` },
+        ).id,
+      );
+    }
+    const found = store.searchEvents(FAMILY_ID, { titleHint: "יונתן" });
+    expect(found).toHaveLength(5);
+    expect(found.every((e) => e.source_provider === null)).toBe(true);
+    expect(found[0]?.id).toBe(ids[5]);
+  });
+
+  it("escapes LIKE wildcards in the hint (a literal % is not a wildcard)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, title_he: "מבצע 50% הנחה" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    store.saveEvent({ ...event, title_he: "5000 שקל" }, { fromPhone: "9725", waMessageId: "b" });
+    const found = store.searchEvents(FAMILY_ID, { titleHint: "50%" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.title_he).toContain("50%");
+  });
+});
+
 describe("findEventsByRef — LIKE wildcard escaping (#125/F3)", () => {
   it("treats % / _ in the title hint as literals, not wildcards", () => {
     const store = createEventStore(":memory:");

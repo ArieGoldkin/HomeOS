@@ -1,18 +1,23 @@
 import { cancelPayloadSchema } from "../../db/conversation-store.ts";
+import type { SavedEvent } from "../../db/event-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { deleteFromCalendar } from "../../tools/tools.ts";
 import {
+  AFFIRM_RE,
   addDaysIso,
   CANCEL_NOT_FOUND_HE,
   CANCEL_VERB_STRIP_RE,
   CANCEL_WHICH_HE,
+  CONFIRM_ABORT_HE,
+  cancelConfirmPrompt,
   cancelReply,
   conversationExpiresAt,
   formatWhen,
   type HandlerDeps,
   HEBREW_WEEKDAYS,
   REPHRASE_HE,
+  resolveCandidates,
   safeJsonParse,
   TIME_RE,
   WEEKDAY_RE,
@@ -109,10 +114,25 @@ export async function resumeCancel(
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
   }
-  const m = /^([1-5])$/.exec(msg.text?.trim() ?? "");
-  const id = m?.[1] ? parsed.data.candidateIds[Number(m[1]) - 1] : undefined;
+  const ids = parsed.data.candidateIds;
+  const reply = msg.text?.trim() ?? "";
+  // #147 — a SINGLE-candidate thread is a confirm-before-destroy (the agentic 1-match): FAIL-CLOSED, only
+  // an anchored כן deletes; לא / a non-answer / anything else aborts with no write (G20).
+  if (ids.length === 1) {
+    if (AFFIRM_RE.test(reply)) {
+      await cancelOne(deps, msg, ids[0]!);
+    } else {
+      log("cancel confirm declined / non-affirmative — no delete (fail-closed)", {
+        from: msg.from,
+      });
+      await deps.sendText(msg.from, CONFIRM_ABORT_HE);
+    }
+    return;
+  }
+  // N>1 — a disambiguation thread: a numbered reply (^[1-5]$) picks ONE; any non-index deletes nothing.
+  const m = /^([1-5])$/.exec(reply);
+  const id = m?.[1] ? ids[Number(m[1]) - 1] : undefined;
   if (id === undefined) {
-    // a non-index (or out-of-range) reply → no delete; the user can re-issue the cancel.
     log("cancel resume — non-index reply, no delete", { from: msg.from });
     await deps.sendText(msg.from, REPHRASE_HE);
     return;
@@ -134,7 +154,6 @@ export async function routeCancelByRef(
   text: string,
   today: string,
 ): Promise<void> {
-  const log = deps.log ?? (() => {});
   const ref = extractCancelRef(text, today);
   const specific = Boolean(ref.time || ref.dateIso || (ref.titleHint && ref.titleHint.length >= 2));
   if (!specific) {
@@ -142,24 +161,71 @@ export async function routeCancelByRef(
     return;
   }
   const candidates = deps.events.findEventsByRef(FAMILY_ID, ref);
-  if (candidates.length === 0) {
-    await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
-    return;
-  }
+  // Deterministic exact-match path (Option B — UNCHANGED): 1 → delete immediately; N>1 → numbered thread.
   if (candidates.length === 1) {
     await cancelOne(deps, msg, candidates[0]!.id);
     return;
   }
-  if (deps.conversations) {
-    const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
-    deps.conversations.create({
-      fromPhone: msg.from,
-      payload: { kind: "cancel", candidateIds: candidates.map((e) => e.id) },
-      expiresAt: conversationExpiresAt(deps),
-    });
-    log("cancel-by-ref disambiguation opened", { from: msg.from, count: candidates.length });
-    await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
-  } else {
-    await deps.sendText(msg.from, REPHRASE_HE); // no store wired → can't disambiguate
+  if (candidates.length > 1) {
+    await openCancelDisambiguation(deps, msg, candidates);
+    return;
   }
+  // 0 deterministic matches → AGENTIC fallback (#147): the model resolves the reference over
+  // title+location+assignee (the live bug), then we CONFIRM before destroying. resolveAgent unwired ⇒
+  // `null` ⇒ behave exactly as before (not-found). A TransientError propagates (→ pending/replay).
+  const resolved = await resolveCandidates(deps, msg, text, ref, today);
+  if (resolved === null || resolved.length === 0) {
+    await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+    return;
+  }
+  if (resolved.length === 1) {
+    await openCancelConfirm(deps, msg, resolved[0]!);
+    return;
+  }
+  await openCancelDisambiguation(deps, msg, resolved);
+}
+
+/**
+ * #147 — open a CONFIRM-before-destroy thread for an agentic 1-match cancel: a single-candidate `cancel`
+ * thread (reuses the existing kind — no migration) + a `כן/לא` prompt. Resolved by `resumeCancel`'s
+ * fail-closed `AFFIRM_RE`. No conversations store ⇒ we can't confirm, so we DON'T delete (rephrase).
+ */
+async function openCancelConfirm(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidate: SavedEvent,
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  if (!deps.conversations) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  deps.conversations.create({
+    fromPhone: msg.from,
+    payload: { kind: "cancel", candidateIds: [candidate.id] },
+    expiresAt: conversationExpiresAt(deps),
+  });
+  log("cancel confirm opened (agentic 1-match)", { from: msg.from, id: candidate.id });
+  await deps.sendText(msg.from, cancelConfirmPrompt(candidate));
+}
+
+/** #85/#147 — open a numbered disambiguation thread (N>1), shared by the deterministic and agentic paths. */
+async function openCancelDisambiguation(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidates: SavedEvent[],
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  if (!deps.conversations) {
+    await deps.sendText(msg.from, REPHRASE_HE); // no store wired → can't disambiguate
+    return;
+  }
+  const list = candidates.map((e, i) => `${i + 1}. ${e.title_he} · ${formatWhen(e)}`).join("\n");
+  deps.conversations.create({
+    fromPhone: msg.from,
+    payload: { kind: "cancel", candidateIds: candidates.map((e) => e.id) },
+    expiresAt: conversationExpiresAt(deps),
+  });
+  log("cancel-by-ref disambiguation opened", { from: msg.from, count: candidates.length });
+  await deps.sendText(msg.from, `${CANCEL_WHICH_HE}\n${list}`);
 }
