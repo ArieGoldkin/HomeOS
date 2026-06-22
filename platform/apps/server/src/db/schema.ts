@@ -39,6 +39,10 @@ export const ADD_EVENTS_SOURCE_PROVIDER = "ALTER TABLE events ADD COLUMN source_
  * between ack and completion never silently drops it (boot-replays `status = 'pending'`).
  * The `wa_message_id` PRIMARY KEY is also the durable dedupe (Meta delivers at-least-once),
  * replacing the in-memory idempotency store. `status`: pending → done | failed.
+ *
+ * #135 — `outcome` is the FINER terminal disposition (parsed|clarified|rephrase|refused|rate_limited|
+ * text_only) the coarse `status` can't express (all those settle as `done`). Nullable: command paths
+ * (ביטול/sync/cancel/edit) and pending/failed rows leave it null. Set by `markDone(id, outcome)`.
  */
 export const CREATE_INBOUND_TABLE = `
   CREATE TABLE IF NOT EXISTS inbound_messages (
@@ -48,9 +52,16 @@ export const CREATE_INBOUND_TABLE = `
     text          TEXT,
     status        TEXT NOT NULL DEFAULT 'pending',
     received_at   TEXT NOT NULL DEFAULT (datetime('now')),
-    processed_at  TEXT
+    processed_at  TEXT,
+    outcome       TEXT
   );
 `;
+
+/**
+ * #135 — idempotent migration: add `outcome` to a PRE-EXISTING inbound_messages table (mirrors
+ * ADD_EVENTS_SOURCE_PROVIDER). Fresh DBs get it from the DDL above; older DBs get it here. Nullable.
+ */
+export const ADD_INBOUND_OUTCOME = "ALTER TABLE inbound_messages ADD COLUMN outcome TEXT;";
 
 export interface EventRow {
   id: number;
@@ -78,6 +89,7 @@ export interface InboundRow {
   status: string;
   received_at: string;
   processed_at: string | null;
+  outcome: string | null;
 }
 
 /**

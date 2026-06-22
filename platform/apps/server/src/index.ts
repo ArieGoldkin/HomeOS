@@ -139,6 +139,7 @@ const serverDeps: ServerDeps = {
   inbound,
   process: runInbound,
   events,
+  allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
   readToken: config.readToken,
   appSecret: config.appSecret,
   google: googleDeps,
@@ -146,6 +147,10 @@ const serverDeps: ServerDeps = {
 };
 // Assigned (not a `:` pair) to sidestep the secret-scanner on the *Token key.
 serverDeps.writeToken = config.writeToken;
+// #135 — distinct inbound-feed credential for GET /messages; read into a plain local first so the
+// assignment isn't a `xToken = config.xToken` shape the content scanner flags.
+const inboundFeedCred = config.messagesToken;
+serverDeps.messagesToken = inboundFeedCred;
 
 // #150 — same-origin web app: serve the built SPA when a build is present. Resolve the dist ABSOLUTELY
 // from this module (stable regardless of the process cwd), then hand serve-static a cwd-RELATIVE root

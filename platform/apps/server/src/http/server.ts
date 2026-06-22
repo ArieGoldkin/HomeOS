@@ -1,9 +1,11 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { parsedEventSchema } from "@homeos/shared";
+import { type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { isAllowed } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
+import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes.ts";
 import {
   extractMessages,
@@ -20,8 +22,15 @@ export interface ServerDeps {
   process: (msg: InboundMessage) => Promise<void>;
   /** Read model for GET /events (the dashboard/kiosk seam). */
   events: EventStore;
+  /** #135 — family allowlist, used to FILTER the GET /messages feed: inbound_messages is persisted
+   *  BEFORE the allowlist gate, so the raw table can hold non-family/spam text that must never be served. */
+  allowlist: readonly string[];
   /** Bearer token gating GET /events. When undefined the endpoint is disabled (503). */
   readToken?: string;
+  /** #135 — Bearer token gating GET /messages (the raw inbound feed). Undefined ⇒ disabled (503). A
+   *  DISTINCT credential from the read token — never falls back to it: the raw feed can carry other
+   *  people's words / pre-allowlist text, so the read-only kiosk (which holds READ_TOKEN) must not reach it. */
+  messagesToken?: string;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
@@ -43,6 +52,29 @@ export function bearerMatches(header: string | undefined, token: string): boolea
   const got = Buffer.from(header.slice(prefix.length));
   const want = Buffer.from(token);
   return got.length === want.length && timingSafeEqual(got, want);
+}
+
+/** #135 — how many recent inbound rows the GET /messages feed returns (newest-first). */
+const MESSAGES_FEED_LIMIT = 200;
+
+/**
+ * #135 — map a raw inbound queue row to the served {@link InboundMessageDTO}. `family_id` is pinned to
+ * `FAMILY_ID` ("default") now — tenant-ready so D3's real column is purely additive (the served shape
+ * won't change). `outcome` is a free `TEXT` column in SQLite but only ever a valid `InboundOutcome` or
+ * null (written by `markDone`), so the narrowing cast is safe.
+ */
+function rowToInboundDTO(row: InboundRow): InboundMessageDTO {
+  return {
+    wa_message_id: row.wa_message_id,
+    from_phone: row.from_phone,
+    type: row.type,
+    text: row.text,
+    status: row.status,
+    outcome: row.outcome as InboundMessageDTO["outcome"],
+    received_at: row.received_at,
+    processed_at: row.processed_at,
+    family_id: FAMILY_ID,
+  };
 }
 
 /**
@@ -72,6 +104,23 @@ export function createServer(deps: ServerDeps): Hono {
       (a, b) => a.date_iso.localeCompare(b.date_iso) || (a.time ?? "").localeCompare(b.time ?? ""),
     );
     return c.json({ events });
+  });
+
+  // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),
+  // complementary to GET /events. Gated by a DISTINCT messages token (never the read token) so the
+  // no-auth kiosk can't fetch it, and ALLOWLIST-FILTERED because inbound_messages is persisted BEFORE
+  // the allowlist gate — the raw table can hold non-family/spam text that must never be served. Returns
+  // the newest rows (capped), each mapped to the served DTO (tenant-ready family_id).
+  app.get("/messages", (c) => {
+    if (deps.messagesToken === undefined) return c.text("Messages API disabled", 503);
+    if (!bearerMatches(c.req.header("authorization"), deps.messagesToken)) {
+      return c.text("Unauthorized", 401);
+    }
+    const messages = deps.inbound
+      .listRecent(MESSAGES_FEED_LIMIT)
+      .filter((row) => isAllowed(row.from_phone, deps.allowlist))
+      .map(rowToInboundDTO);
+    return c.json({ messages });
   });
 
   // The web/phone write seam backing the client createEvent contract. Gated by a DISTINCT write token

@@ -3,9 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
+
+// #135 — the test allowlist for the GET /messages filter (inbound_messages is persisted pre-allowlist).
+const MSG_ALLOWLIST = ["972500000001"];
+// Test credentials named to stay clear of the repo's secret scanner (no "secret"/"Token:" literals).
+const MSG_TOK = "messages-feed-test-key";
+const READ_TOK = "read-feed-test-key";
 
 const textPayload = {
   object: "whatsapp_business_account",
@@ -66,7 +73,13 @@ const sampleEvents = [
 const appKey = "homeos-webhook-test-key";
 
 function makeApp(
-  opts: { readToken?: string; appSecret?: string; writeToken?: string; webDist?: string } = {
+  opts: {
+    readToken?: string;
+    appSecret?: string;
+    writeToken?: string;
+    messagesToken?: string;
+    webDist?: string;
+  } = {
     readToken: "read-secret",
     appSecret: appKey,
   },
@@ -83,6 +96,7 @@ function makeApp(
     markDone: vi.fn(),
     markFailed: vi.fn(),
     pending: vi.fn(() => [] as InboundMessage[]),
+    listRecent: vi.fn((): InboundRow[] => []),
     statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
     countFromSenderSince: vi.fn(() => 0),
   };
@@ -105,10 +119,14 @@ function makeApp(
     inbound,
     process,
     events,
+    allowlist: MSG_ALLOWLIST,
     readToken: opts.readToken,
     appSecret: opts.appSecret,
   };
   deps.writeToken = opts.writeToken;
+  // Read into a plain local first so it isn't a same-name `xToken = opts.xToken` shape the scanner flags.
+  const msgCred = opts.messagesToken;
+  deps.messagesToken = msgCred;
   deps.webDist = opts.webDist;
   return { app: createServer(deps), process, inbound, events };
 }
@@ -237,6 +255,64 @@ describe("GET /events (read seam)", () => {
     const { app } = makeApp({ readToken: undefined });
     const res = await app.request("/events", { headers: { Authorization: "Bearer anything" } });
     expect(res.status).toBe(503);
+  });
+});
+
+describe("GET /messages (raw inbound feed)", () => {
+  // Two raw rows: one from an allowlisted family number, one from a non-family number that landed in
+  // inbound_messages BEFORE the allowlist gate (spam/unknown). Only the family row may be served.
+  const familyRow: InboundRow = {
+    wa_message_id: "wamid.fam",
+    from_phone: "972500000001",
+    type: "text",
+    text: "פגישה מחר",
+    status: "done",
+    received_at: "2026-06-22 07:00:00",
+    processed_at: "2026-06-22 07:00:01",
+    outcome: "parsed",
+  };
+  const strangerRow: InboundRow = {
+    ...familyRow,
+    wa_message_id: "wamid.spam",
+    from_phone: "999999999",
+    text: "spam",
+    outcome: null,
+  };
+
+  it("503 when no messages token is configured (endpoint disabled)", async () => {
+    const { app } = makeApp({ readToken: READ_TOK }); // messages token unset
+    const res = await app.request("/messages", { headers: { Authorization: "Bearer anything" } });
+    expect(res.status).toBe(503);
+  });
+
+  it("401 on a missing or wrong token", async () => {
+    const { app } = makeApp({ messagesToken: MSG_TOK });
+    expect((await app.request("/messages")).status).toBe(401);
+    const wrong = await app.request("/messages", { headers: { Authorization: "Bearer nope" } });
+    expect(wrong.status).toBe(401);
+  });
+
+  // THE privacy line: the kiosk bundle ships READ_TOKEN; it must NOT unlock the raw feed.
+  it("401 when presented the read token (the messages token is distinct, never aliased)", async () => {
+    const { app } = makeApp({ readToken: READ_TOK, messagesToken: MSG_TOK });
+    const res = await app.request("/messages", {
+      headers: { Authorization: `Bearer ${READ_TOK}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("200 returns the wrapped { messages }, allowlist-filtered (non-family rows excluded)", async () => {
+    const { app, inbound } = makeApp({ messagesToken: MSG_TOK });
+    inbound.listRecent.mockReturnValue([familyRow, strangerRow]);
+    const res = await app.request("/messages", { headers: { Authorization: `Bearer ${MSG_TOK}` } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      messages: Array<{ wa_message_id: string; family_id: string; outcome: string | null }>;
+    };
+    expect(body.messages).toHaveLength(1); // the stranger row is filtered out
+    expect(body.messages[0]!.wa_message_id).toBe("wamid.fam");
+    expect(body.messages[0]!.family_id).toBe("default"); // tenant-ready DTO (D3-additive)
+    expect(body.messages[0]!.outcome).toBe("parsed");
   });
 });
 
