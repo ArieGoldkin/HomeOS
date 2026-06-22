@@ -6,7 +6,6 @@ import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import { extractCancelRef, parseSelection } from "./cancel.ts";
 import {
-  AFFIRM_RE,
   CANCEL_NOT_FOUND_HE,
   CONFIRM_ABORT_HE,
   conversationExpiresAt,
@@ -18,6 +17,7 @@ import {
   editConfirmPrompt,
   formatWhen,
   type HandlerDeps,
+  isAffirmative,
   REPHRASE_HE,
   resolveCandidates,
   safeJsonParse,
@@ -149,7 +149,7 @@ export async function resumeEdit(
   // anchored כן applies the held patch; לא / a non-answer aborts with no write (applyPatchToId is also
   // board-only, so a synced id could never be written even if it slipped in).
   if (ids.length === 1) {
-    if (AFFIRM_RE.test(reply)) {
+    if (isAffirmative(reply)) {
       await applyPatchToId(deps, msg, ids[0]!, parsed.data.patch);
     } else {
       log("edit confirm declined / non-affirmative — no write (fail-closed)", { from: msg.from });

@@ -4,7 +4,6 @@ import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { deleteFromCalendar } from "../../tools/tools.ts";
 import {
-  AFFIRM_RE,
   addDaysIso,
   BULK_QUANTIFIER_RE,
   bulkCancelConfirmPrompt,
@@ -18,6 +17,7 @@ import {
   formatWhen,
   type HandlerDeps,
   HEBREW_WEEKDAYS,
+  isAffirmative,
   REPHRASE_HE,
   resolveCandidates,
   safeJsonParse,
@@ -202,7 +202,7 @@ export async function resumeCancel(
   // numbered pick. Only an anchored כן deletes all; לא / a non-answer / anything else aborts with no write
   // (G20). Checked before the length branches so a bulk set of any size routes here (never to the picker).
   if (parsed.data.confirmAll) {
-    if (AFFIRM_RE.test(reply)) {
+    if (isAffirmative(reply)) {
       await cancelMany(deps, msg, ids);
     } else {
       log("bulk cancel declined / non-affirmative — no delete (fail-closed)", { from: msg.from });
@@ -213,7 +213,7 @@ export async function resumeCancel(
   // #147 — a SINGLE-candidate thread is a confirm-before-destroy (the agentic 1-match): FAIL-CLOSED, only
   // an anchored כן deletes; לא / a non-answer / anything else aborts with no write (G20).
   if (ids.length === 1) {
-    if (AFFIRM_RE.test(reply)) {
+    if (isAffirmative(reply)) {
       await cancelOne(deps, msg, ids[0]!);
     } else {
       log("cancel confirm declined / non-affirmative — no delete (fail-closed)", {
