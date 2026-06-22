@@ -158,5 +158,26 @@
     "input": "להזכיר לי לקחת תרופה מחר בבוקר",
     "today": "2026-06-15",
     "expected": [{ "kind": "reminder", "date_iso": "2026-06-16" }]
+  },
+  {
+    "name": "reminder-imperative-strips-framing (#162)",
+    "input": "תעשה לי תזכורת היום בשעה 18:00 לקנות מגן למסך הטלפון",
+    "today": "2026-06-22",
+    "expected": [
+      {
+        "kind": "reminder",
+        "date_iso": "2026-06-22",
+        "time": "18:00",
+        "title_he": "לקנות מגן למסך הטלפון"
+      }
+    ]
+  },
+  {
+    "name": "reminder-imperative-tazkir-li (#162)",
+    "input": "תזכיר לי מחר לשלם ארנונה",
+    "today": "2026-06-22",
+    "expected": [
+      { "kind": "reminder", "date_iso": "2026-06-23", "time": null, "title_he": "לשלם ארנונה" }
+    ]
   }
 ]
