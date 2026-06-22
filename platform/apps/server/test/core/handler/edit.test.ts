@@ -247,6 +247,26 @@ describe("handleInbound — #147 agentic edit fallback + confirm-before-edit", (
     expect(events.updateEvent).not.toHaveBeenCalled();
     expect(sendText.mock.calls[0]?.[1]).toContain("השארתי");
   });
+
+  // #164 — the broadened affirmative set reaches the edit confirm too (shared isAffirmative predicate).
+  it("#164: 'בטח' confirms a pending edit → applies the held patch", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "edit", candidateIds: [42], patch: { time: "18:00" } },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, events } = makeDeps({ conversations });
+    events.updateEvent.mockReturnValue(board(42, { time: "18:00" }));
+
+    await handleInbound({ ...textMsg, text: "בטח" }, deps);
+
+    expect(events.updateEvent).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ time: "18:00" }),
+      "default",
+    );
+  });
 });
 
 describe("extractEditDelta location bound (#126/F2)", () => {

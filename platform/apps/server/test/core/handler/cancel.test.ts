@@ -5,6 +5,7 @@ import {
   handleInbound,
   parseSelection,
 } from "../../../src/core/handler/index.ts";
+import { isAffirmative } from "../../../src/core/handler/shared.ts";
 import {
   type ConversationStore,
   createConversationStore,
@@ -560,5 +561,92 @@ describe("handleInbound — #163 bulk cancel", () => {
     // routes to the single-target path (findEventsByRef), never the bulk scope query.
     expect(events.findEventsByRef).toHaveBeenCalled();
     expect(events.findEventsInScope).not.toHaveBeenCalled();
+  });
+});
+
+// #164 — the fail-closed confirm predicate: broadened affirmative set (כן/קן/בטח/בטוח/אישור/אוקיי) AND a
+// negation guard so a negated/hedged reply still ABORTs. Truth table covers every acceptance example.
+describe("isAffirmative (#164)", () => {
+  it("accepts the broadened affirmative set (anchored at start)", () => {
+    for (const yes of ["כן", "קן", "בטח", "בטוח", "אישור", "אוקי", "אוקיי", "כן בבקשה", "בטוח!"]) {
+      expect(isAffirmative(yes)).toBe(true);
+    }
+  });
+
+  it("ABORTs an uncertain / negated reply — even one containing an affirmative token", () => {
+    for (const no of [
+      "לא",
+      "לא בטוח",
+      "אולי",
+      "אוי לא בטוף אני רוצה לבטל", // verbatim dogfood — leads with אוי + carries לא
+      "בטוח שלא רוצה", // affirmative at start, negated by שלא
+      "כן אבל לא עכשיו", // mixed → ambiguous → safe abort
+      "אל תבטל",
+    ]) {
+      expect(isAffirmative(no)).toBe(false);
+    }
+  });
+
+  it("ABORTs a non-affirmative / unrelated reply (fail-closed default)", () => {
+    for (const no of ["סבבה", "מה", "שלום", "תבטל הכל", ""]) {
+      expect(isAffirmative(no)).toBe(false);
+    }
+  });
+
+  it("requires the affirmative at the START — a reply that merely CONTAINS it does not confirm", () => {
+    expect(isAffirmative("אני לא בטוח")).toBe(false);
+    expect(isAffirmative("תשאיר הכל, בטוח")).toBe(false); // בטוח mid-reply
+  });
+});
+
+// #164 — end-to-end: a broadened affirmative confirms a pending destroy; the verbatim uncertain dogfood
+// reply does NOT. Reuses the #147 single-candidate confirm thread.
+describe("handleInbound — #164 broadened confirm affirmation", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const openConfirm = (conversations: ConversationStore) =>
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [42] },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+
+  it("'בטוח' confirms a pending cancel → deletes the candidate", async () => {
+    const conversations = createConversationStore(":memory:");
+    openConfirm(conversations);
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+
+    await handleInbound({ ...textMsg, text: "בטוח" }, deps);
+
+    expect(events.deleteById).toHaveBeenCalledWith(42, "default");
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("בוטל ✓"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("the verbatim 'אוי לא בטוף אני רוצה לבטל' does NOT delete (fail-closed)", async () => {
+    const conversations = createConversationStore(":memory:");
+    openConfirm(conversations);
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "אוי לא בטוף אני רוצה לבטל" }, deps);
+
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("השארתי"); // CONFIRM_ABORT_HE
+  });
+
+  it("'בטוח' also confirms a BULK cancel set (#163 confirmAll path)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11, 22], confirmAll: true },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+
+    await handleInbound({ ...textMsg, text: "בטוח" }, deps);
+
+    expect(events.deleteById).toHaveBeenCalledWith(11, "default");
+    expect(events.deleteById).toHaveBeenCalledWith(22, "default");
   });
 });
