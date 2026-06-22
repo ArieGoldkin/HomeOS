@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { clarifyReasonSchema, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { z } from "zod/v4";
-import type { EventPatch } from "./event-store.ts";
+import { BULK_CANCEL_MAX, type EventPatch } from "./event-store.ts";
 import {
   type ConversationRow,
   CREATE_CONVERSATIONS_INDEX,
@@ -27,7 +27,7 @@ export type ConversationKind = "clarify" | "cancel" | "edit";
  */
 export type ConversationPayload =
   | { kind: "clarify"; reason: string; draft: ParsedEvent }
-  | { kind: "cancel"; candidateIds: number[] }
+  | { kind: "cancel"; candidateIds: number[]; confirmAll?: boolean }
   | { kind: "edit"; candidateIds: number[]; patch: EventPatch };
 
 /**
@@ -45,10 +45,15 @@ export const clarifyPayloadSchema = z.object({
 /**
  * #85/F3 — runtime guard for a persisted `cancel` disambiguation payload. `candidateIds` are the board
  * rows offered in the numbered list; a corrupt/stale blob degrades to "rephrase" rather than deleting.
+ * #163 — `confirmAll` marks a BULK-cancel thread (every in-scope row): the resume then expects a
+ * fail-closed כן/לא over the whole set, not a numbered pick. Absent/false ⇒ the existing single-confirm
+ * (length 1) / numbered-disambiguation (length >1) behavior. The cap rises to BULK_CANCEL_MAX so a bulk
+ * set fits; the disambiguation path is still bounded to 5 by findEventsByRef's own LIMIT.
  */
 export const cancelPayloadSchema = z.object({
   kind: z.literal("cancel"),
-  candidateIds: z.array(z.number().int()).min(1).max(5),
+  candidateIds: z.array(z.number().int()).min(1).max(BULK_CANCEL_MAX),
+  confirmAll: z.boolean().optional(),
 });
 
 /** The fields an edit/correction may change — a partial of the relevant ParsedEvent fields (#86). */

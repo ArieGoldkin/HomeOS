@@ -60,6 +60,8 @@ export function makeDeps(
     /** #147: when defined, wires deps.resolveAgent (the agentic cancel/edit fallback) to return this
      *  `{resolved}` arm. Used on a deterministic 0-match to exercise the confirm/disambiguation flow. */
     resolved?: SavedEvent[];
+    /** #163: the rows findEventsInScope returns — the bulk-cancel candidate set for a date/time scope. */
+    scopeMatches?: SavedEvent[];
   } = {},
 ) {
   const sendText = vi.fn(async (_to: string, _body: string) => {});
@@ -82,6 +84,7 @@ export function makeDeps(
     deleteById: vi.fn(() => 1),
     findEventsByRef: vi.fn((): SavedEvent[] => []),
     searchEvents: vi.fn((): SavedEvent[] => []),
+    findEventsInScope: vi.fn((): SavedEvent[] => opts.scopeMatches ?? []),
     updateEvent: vi.fn(
       (_id: number, _patch: EventPatch, _familyId: string): SavedEvent | null => null,
     ),

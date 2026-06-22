@@ -139,6 +139,15 @@ const CANCEL_VERBS = "בטל|תבטל|לבטל|מחק|תמחק|למחוק|הסר
 export const CANCEL_REF_RE = new RegExp(`^(?:${CANCEL_VERBS})\\s+\\S+`, "u");
 export const CANCEL_VERB_STRIP_RE = new RegExp(`^(?:${CANCEL_VERBS})\\s+`, "u");
 /**
+ * #163 — a BULK quantifier ("בטל את כל הפגישות מחר"). ANCHORED to the START of the cancel OBJECT (applied
+ * after the verb + a leading "את" are stripped) so the quantifier must LEAD the thing being cancelled — a
+ * mid-sentence "כל" ("בטל את הפגישה עם כל המשפחה מחר" → cancel THE meeting) is NOT a bulk op and stays on
+ * the single-target path. `(?!\p{L})` keeps it a whole word: matches bare "כל ה…", "הכל", "כולם", but
+ * never a longer word that merely starts with those letters. A scope (date/time) is still required by the
+ * caller, so "בטל הכל" (no scope) never offers a whole-board wipe.
+ */
+export const BULK_QUANTIFIER_RE = /^(?:כל|הכל|כולם)(?!\p{L})/u;
+/**
  * Leading conversational filler a user puts before a command ("טוב בטל…", "אוקיי שנה…"). Stripped only
  * to TEST + drive the deterministic verb-led routes (cancel/edit); the ORIGINAL text is what reaches the
  * model on fall-through, so over-stripping can never corrupt a real forward — at worst a command isn't
@@ -187,6 +196,15 @@ export function cancelConfirmPrompt(e: SavedEvent): string {
 /** #147 — confirm-before-destroy prompt for an agentic 1-match edit (the model resolved ONE candidate). */
 export function editConfirmPrompt(e: SavedEvent): string {
   return `לעדכן את "${e.title_he}" · ${formatWhen(e)}? השב/י כן לאישור`;
+}
+/**
+ * #163 — confirm-before-destroy prompt for a BULK cancel: list the whole in-scope set so the family SEES
+ * exactly what a כן will delete, then ask for a single yes/no (fail-closed via AFFIRM_RE). Bullets (not a
+ * numbered list) signal "this is a yes/no over all of them", not a pick-some disambiguation.
+ */
+export function bulkCancelConfirmPrompt(events: SavedEvent[]): string {
+  const list = events.map((e) => `• ${e.title_he} · ${formatWhen(e)}`).join("\n");
+  return `לבטל את כל ${events.length} הפריטים הבאים? השב/י כן לאישור\n${list}`;
 }
 /**
  * G2 — cap input length BEFORE any model call. A 50–100KB forward (long newsletters / pasted PDFs)

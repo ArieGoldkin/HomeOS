@@ -6,6 +6,8 @@ import { deleteFromCalendar } from "../../tools/tools.ts";
 import {
   AFFIRM_RE,
   addDaysIso,
+  BULK_QUANTIFIER_RE,
+  bulkCancelConfirmPrompt,
   CANCEL_NOT_FOUND_HE,
   CANCEL_VERB_STRIP_RE,
   CANCEL_WHICH_HE,
@@ -25,17 +27,18 @@ import {
 } from "./shared.ts";
 
 /**
- * #85 — extract a cancel REFERENCE server-side (NO model call): strip the verb, then pull an explicit
- * time (HH:MM, hour zero-padded), a relative Hebrew DATE (היום/מחר/מחרתיים or a weekday → its next
- * occurrence, #125/F2), and treat the remaining content words as a title substring hint. Exported so the
- * extraction contract is unit-tested. (The 12h/24h expansion — "3:30" also matching 15:30 — stays a #87
+ * #85/#163 — pull a relative scope (an explicit HH:MM time + a relative Hebrew DATE: היום/מחר/מחרתיים or
+ * a weekday → its NEXT occurrence, #125/F2) out of the verb-stripped remainder, REMOVING the matched words
+ * so they don't pollute a downstream title hint. Returns the extracted fields + the leftover `rest`. The
+ * single source of the date/time cascade, shared by `extractCancelRef` (single-target) and
+ * `extractBulkCancel` (bulk). (The 12h/24h expansion — "3:30" also matching 15:30 — stays a #87
  * refinement; today a low bare hour matches its 24h form.)
  */
-export function extractCancelRef(
+function stripDateTime(
   text: string,
   todayIso: string,
-): { dateIso?: string; time?: string; titleHint?: string } {
-  let rest = text.replace(CANCEL_VERB_STRIP_RE, "");
+): { dateIso?: string; time?: string; rest: string } {
+  let rest = text;
 
   let time: string | undefined;
   const tm = TIME_RE.exec(rest);
@@ -44,7 +47,6 @@ export function extractCancelRef(
     rest = rest.replace(TIME_RE, " ");
   }
 
-  // Resolve a relative date so the words don't pollute the title hint AND a date-bearing cancel matches.
   // מחרתיים is tested BEFORE מחר; a weekday name resolves to its NEXT occurrence (0 = today, never past).
   let dateIso: string | undefined;
   if (/(?<!\p{L})היום(?!\p{L})/u.test(rest)) {
@@ -65,6 +67,19 @@ export function extractCancelRef(
     }
   }
 
+  return { ...(dateIso ? { dateIso } : {}), ...(time ? { time } : {}), rest };
+}
+
+/**
+ * #85 — extract a cancel REFERENCE server-side (NO model call): strip the verb, pull the date/time scope,
+ * and treat the remaining content words as a title substring hint. Exported so the extraction contract is
+ * unit-tested.
+ */
+export function extractCancelRef(
+  text: string,
+  todayIso: string,
+): { dateIso?: string; time?: string; titleHint?: string } {
+  const { dateIso, time, rest } = stripDateTime(text.replace(CANCEL_VERB_STRIP_RE, ""), todayIso);
   const titleHint = rest
     .replace(/(?<!\p{L})את(?!\p{L})/gu, " ")
     .replace(/(?<!\p{L})יום(?!\p{L})/gu, " ")
@@ -76,6 +91,25 @@ export function extractCancelRef(
     ...(time ? { time } : {}),
     ...(titleHint ? { titleHint } : {}),
   };
+}
+
+/**
+ * #163 — detect a BULK cancel ("בטל את כל הפגישות מחר") and extract its date/time SCOPE. Strips the verb +
+ * a leading "את", then requires the bulk quantifier (`כל ה…`/`הכל`/`כולם`) to LEAD the cancel object
+ * (`BULK_QUANTIFIER_RE`, anchored) — so a mid-sentence "כל" ("…עם כל המשפחה") is NOT bulk. Returns the
+ * scope, or `null` when it isn't a bulk request OR carries no date/time scope (a scopeless "בטל הכל" must
+ * never offer a whole-board wipe — it falls through to the single-target path → not-found). Kind-agnostic
+ * by design: the quantifier's noun ("פגישות") is a bulk marker, not a kind filter.
+ */
+export function extractBulkCancel(
+  text: string,
+  todayIso: string,
+): { dateIso?: string; time?: string } | null {
+  const afterVerb = text.replace(CANCEL_VERB_STRIP_RE, "").replace(/^\s*את\s+/u, "");
+  if (!BULK_QUANTIFIER_RE.test(afterVerb)) return null;
+  const { dateIso, time } = stripDateTime(afterVerb, todayIso);
+  if (!dateIso && !time) return null; // require a scope — never a whole-board wipe
+  return { ...(dateIso ? { dateIso } : {}), ...(time ? { time } : {}) };
 }
 
 /**
@@ -164,6 +198,18 @@ export async function resumeCancel(
   }
   const ids = parsed.data.candidateIds;
   const reply = msg.text?.trim() ?? "";
+  // #163 — a BULK confirm-before-destroy (every in-scope row): FAIL-CLOSED yes/no over the WHOLE set, not a
+  // numbered pick. Only an anchored כן deletes all; לא / a non-answer / anything else aborts with no write
+  // (G20). Checked before the length branches so a bulk set of any size routes here (never to the picker).
+  if (parsed.data.confirmAll) {
+    if (AFFIRM_RE.test(reply)) {
+      await cancelMany(deps, msg, ids);
+    } else {
+      log("bulk cancel declined / non-affirmative — no delete (fail-closed)", { from: msg.from });
+      await deps.sendText(msg.from, CONFIRM_ABORT_HE);
+    }
+    return;
+  }
   // #147 — a SINGLE-candidate thread is a confirm-before-destroy (the agentic 1-match): FAIL-CLOSED, only
   // an anchored כן deletes; לא / a non-answer / anything else aborts with no write (G20).
   if (ids.length === 1) {
@@ -206,6 +252,13 @@ export async function routeCancelByRef(
   text: string,
   today: string,
 ): Promise<void> {
+  // #163 — a BULK cancel ("בטל את כל הפגישות מחר") takes precedence over the single-target path: the
+  // quantifier "כל ה…" would otherwise be mis-read as a title hint and match nothing (the live miss).
+  const bulk = extractBulkCancel(text, today);
+  if (bulk) {
+    await routeBulkCancel(deps, msg, bulk);
+    return;
+  }
   const ref = extractCancelRef(text, today);
   const specific = Boolean(ref.time || ref.dateIso || (ref.titleHint && ref.titleHint.length >= 2));
   if (!specific) {
@@ -235,6 +288,50 @@ export async function routeCancelByRef(
     return;
   }
   await openCancelDisambiguation(deps, msg, resolved);
+}
+
+/**
+ * #163 — route a BULK cancel: list EVERY board row in the date/time scope, then confirm-before-destroy the
+ * whole set. 0 matches → not-found (no thread). The scope is always non-empty here (extractBulkCancel
+ * requires it), so this never lists the entire board.
+ */
+async function routeBulkCancel(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  scope: { dateIso?: string; time?: string },
+): Promise<void> {
+  const candidates = deps.events.findEventsInScope(FAMILY_ID, scope);
+  if (candidates.length === 0) {
+    await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
+    return;
+  }
+  await openBulkCancelConfirm(deps, msg, candidates);
+}
+
+/**
+ * #163 — open a BULK confirm-before-destroy thread: a `cancel` thread holding ALL in-scope ids + the
+ * `confirmAll` discriminator (reuses the existing kind — NO migration), plus a prompt listing the set.
+ * `resumeCancel`'s `confirmAll` branch resolves it with a fail-closed כן. No store ⇒ can't confirm ⇒ no
+ * delete (rephrase). The set is already capped at BULK_CANCEL_MAX by findEventsInScope, so the payload
+ * always fits cancelPayloadSchema.
+ */
+async function openBulkCancelConfirm(
+  deps: HandlerDeps,
+  msg: InboundMessage,
+  candidates: SavedEvent[],
+): Promise<void> {
+  const log = deps.log ?? (() => {});
+  if (!deps.conversations) {
+    await deps.sendText(msg.from, REPHRASE_HE);
+    return;
+  }
+  deps.conversations.create({
+    fromPhone: msg.from,
+    payload: { kind: "cancel", candidateIds: candidates.map((e) => e.id), confirmAll: true },
+    expiresAt: conversationExpiresAt(deps),
+  });
+  log("bulk cancel confirm opened", { from: msg.from, count: candidates.length });
+  await deps.sendText(msg.from, bulkCancelConfirmPrompt(candidates));
 }
 
 /**

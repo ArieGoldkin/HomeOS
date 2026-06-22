@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractBulkCancel,
   extractCancelRef,
   handleInbound,
   parseSelection,
@@ -420,5 +421,144 @@ describe("parseSelection (#161)", () => {
   it("a non-selection reply (a word / 'לא') yields nothing", () => {
     expect(parseSelection("לא יודע", 3)).toEqual([]);
     expect(parseSelection("שלום", 3)).toEqual([]);
+  });
+});
+
+// #163 — the pure bulk-detection + scope extractor (exported like extractCancelRef). Detects a quantifier
+// LEADING the cancel object and pulls the date/time scope; returns null when it's not bulk OR has no scope.
+describe("extractBulkCancel (#163)", () => {
+  const TODAY = "2026-06-20"; // a Saturday → מחר = 2026-06-21 (Sunday)
+
+  it("verbatim live message: 'תבטל את כל הפגישות שלי מחר' → scope = tomorrow", () => {
+    expect(extractBulkCancel("תבטל את כל הפגישות שלי מחר", TODAY)).toEqual({
+      dateIso: "2026-06-21",
+    });
+  });
+
+  it("resolves a weekday scope ('בטל את כל הפגישות ביום שישי')", () => {
+    expect(extractBulkCancel("בטל את כל הפגישות ביום שישי", TODAY)).toEqual({
+      dateIso: "2026-06-26",
+    });
+  });
+
+  it("supports a time-only scope ('בטל את כל הפגישות ב-18:00')", () => {
+    expect(extractBulkCancel("בטל את כל הפגישות ב-18:00", TODAY)).toEqual({ time: "18:00" });
+  });
+
+  it("accepts the הכל / כולם quantifier forms (with a scope)", () => {
+    expect(extractBulkCancel("בטל את הכל מחר", TODAY)).toEqual({ dateIso: "2026-06-21" });
+    expect(extractBulkCancel("בטל את כולם היום", TODAY)).toEqual({ dateIso: "2026-06-20" });
+  });
+
+  it("works without the 'את' filler ('בטל כל הפגישות מחר')", () => {
+    expect(extractBulkCancel("בטל כל הפגישות מחר", TODAY)).toEqual({ dateIso: "2026-06-21" });
+  });
+
+  it("is NULL for a SCOPELESS bulk ('בטל את כל הפגישות' / 'בטל הכל') — never a whole-board wipe", () => {
+    expect(extractBulkCancel("בטל את כל הפגישות", TODAY)).toBeNull();
+    expect(extractBulkCancel("בטל הכל", TODAY)).toBeNull();
+  });
+
+  it("is NULL when 'כל' is MID-sentence, not leading the object (single-target, not bulk)", () => {
+    // "cancel THE meeting with the whole family tomorrow" — a single event, not every event.
+    expect(extractBulkCancel("בטל את הפגישה עם כל המשפחה מחר", TODAY)).toBeNull();
+  });
+
+  it("is NULL for an ordinary single-target cancel ('בטל את הפגישה עם דנה מחר')", () => {
+    expect(extractBulkCancel("בטל את הפגישה עם דנה מחר", TODAY)).toBeNull();
+  });
+});
+
+// #163 — bulk cancel end-to-end: "בטל את כל הפגישות מחר" lists the whole in-scope set + asks ONE yes/no;
+// כן deletes them all (one summary), anything else deletes nothing (fail-closed, reusing #147's AFFIRM_RE).
+// Reuses the `cancel` thread kind + #161's cancelMany — no migration.
+describe("handleInbound — #163 bulk cancel", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const cand = (id: number, over: Partial<SavedEvent> = {}): SavedEvent => ({
+    ...sampleEvent,
+    id,
+    date_iso: "2026-06-21",
+    source_provider: null,
+    ...over,
+  });
+
+  it("lists the in-scope set + opens a confirmAll thread; deletes NOTHING yet", async () => {
+    const conversations = createConversationStore(":memory:");
+    const scopeMatches = [cand(11, { title_he: "אסיפה" }), cand(22, { title_he: "חוג" })];
+    const { deps, sendText, events, agent } = makeDeps({ conversations, scopeMatches });
+
+    await handleInbound({ ...textMsg, text: "בטל את כל הפגישות מחר" }, deps);
+
+    expect(events.findEventsInScope).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({ dateIso: "2026-06-21" }),
+    );
+    expect(events.deleteById).not.toHaveBeenCalled(); // confirm first — nothing destroyed yet
+    expect(agent.run).not.toHaveBeenCalled(); // deterministic route — no model call
+    expect(sendText.mock.calls[0]?.[1]).toContain("לבטל את כל 2 הפריטים"); // bulk confirm prompt
+    expect(sendText.mock.calls[0]?.[1]).toContain("אסיפה"); // lists the set
+    const pending = conversations.getPending(textMsg.from, NOW);
+    expect(pending?.kind).toBe("cancel");
+    const payload = JSON.parse(pending?.payload_json ?? "{}");
+    expect(payload.confirmAll).toBe(true);
+    expect(payload.candidateIds).toEqual([11, 22]);
+  });
+
+  it("כן → deletes the WHOLE set, one summary (בוטלו 2 פריטים), single-use", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11, 22], confirmAll: true },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events, agent } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+
+    await handleInbound({ ...textMsg, text: "כן" }, deps);
+
+    expect(events.deleteById).toHaveBeenCalledWith(11, "default");
+    expect(events.deleteById).toHaveBeenCalledWith(22, "default");
+    expect(sendText).toHaveBeenCalledTimes(1); // ONE summary, not N replies
+    expect(sendText.mock.calls[0]?.[1]).toContain("בוטלו 2 פריטים");
+    expect(agent.run).not.toHaveBeenCalled();
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("לא / a non-answer into a bulk thread → NO delete (fail-closed)", async () => {
+    const conversations = createConversationStore(":memory:");
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds: [11, 22], confirmAll: true },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "לא" }, deps);
+
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText.mock.calls[0]?.[1]).toContain("השארתי"); // CONFIRM_ABORT_HE
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // consumed (single-use)
+  });
+
+  it("0 in-scope matches → not-found, no thread opened", async () => {
+    const conversations = createConversationStore(":memory:");
+    const { deps, sendText, events } = makeDeps({ conversations, scopeMatches: [] });
+
+    await handleInbound({ ...textMsg, text: "בטל את כל הפגישות מחר" }, deps);
+
+    expect(events.deleteById).not.toHaveBeenCalled();
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull();
+  });
+
+  it("a single-target cancel is UNCHANGED — bulk detection doesn't hijack it", async () => {
+    const { deps, events } = makeDeps();
+    events.findEventsByRef.mockReturnValue([]);
+
+    await handleInbound({ ...textMsg, text: "בטל את הפגישה עם דנה מחר" }, deps);
+
+    // routes to the single-target path (findEventsByRef), never the bulk scope query.
+    expect(events.findEventsByRef).toHaveBeenCalled();
+    expect(events.findEventsInScope).not.toHaveBeenCalled();
   });
 });

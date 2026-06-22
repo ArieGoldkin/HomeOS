@@ -1,6 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it } from "vitest";
-import { createEventStore } from "../../src/db/event-store.ts";
+import { BULK_CANCEL_MAX, createEventStore } from "../../src/db/event-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 
 const event: ParsedEvent = {
@@ -333,6 +333,64 @@ describe("searchEvents (#147 broader-field resolve)", () => {
     const found = store.searchEvents(FAMILY_ID, { titleHint: "50%" });
     expect(found).toHaveLength(1);
     expect(found[0]?.title_he).toContain("50%");
+  });
+});
+
+// #163 — the bulk-cancel SCOPE seam: every board row on a date (optionally at a time), NO title clause,
+// kind-agnostic, capped at BULK_CANCEL_MAX (not 5). Drives "בטל את כל הפגישות מחר".
+describe("findEventsInScope (#163 bulk cancel)", () => {
+  it("returns EVERY board row in a date scope — past the cap-5 of findEventsByRef", () => {
+    const store = createEventStore(":memory:");
+    for (let i = 0; i < 7; i++) {
+      store.saveEvent(
+        { ...event, title_he: `פגישה ${i}`, date_iso: "2026-06-21" },
+        { fromPhone: "9725", waMessageId: `w${i}` },
+      );
+    }
+    const found = store.findEventsInScope(FAMILY_ID, { dateIso: "2026-06-21" });
+    expect(found).toHaveLength(7); // NOT capped at 5 — a bulk op sees the whole day
+    expect(found[0]?.title_he).toBe("פגישה 6"); // newest-first (ORDER BY id DESC)
+  });
+
+  it("is board-only (never a 'google'/synced row) and date-exact", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, date_iso: "2026-06-21" },
+      { fromPhone: "9725", waMessageId: "g", sourceProvider: "google" },
+    );
+    store.saveEvent({ ...event, date_iso: "2026-06-21" }, { fromPhone: "9725", waMessageId: "a" });
+    store.saveEvent({ ...event, date_iso: "2026-06-22" }, { fromPhone: "9725", waMessageId: "b" });
+    const found = store.findEventsInScope(FAMILY_ID, { dateIso: "2026-06-21" });
+    expect(found).toHaveLength(1); // the google row + the other-date row are excluded
+    expect(found.every((e) => e.source_provider === null)).toBe(true);
+  });
+
+  it("narrows further when a time is also in scope (date + time)", () => {
+    const store = createEventStore(":memory:");
+    store.saveEvent(
+      { ...event, date_iso: "2026-06-21", time: "18:00" },
+      { fromPhone: "9725", waMessageId: "a" },
+    );
+    store.saveEvent(
+      { ...event, date_iso: "2026-06-21", time: "09:00" },
+      { fromPhone: "9725", waMessageId: "b" },
+    );
+    const found = store.findEventsInScope(FAMILY_ID, { dateIso: "2026-06-21", time: "18:00" });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.time).toBe("18:00");
+  });
+
+  it("caps a pathologically busy scope at BULK_CANCEL_MAX", () => {
+    const store = createEventStore(":memory:");
+    for (let i = 0; i < BULK_CANCEL_MAX + 5; i++) {
+      store.saveEvent(
+        { ...event, date_iso: "2026-06-21" },
+        { fromPhone: "9725", waMessageId: `w${i}` },
+      );
+    }
+    expect(store.findEventsInScope(FAMILY_ID, { dateIso: "2026-06-21" })).toHaveLength(
+      BULK_CANCEL_MAX,
+    );
   });
 });
 

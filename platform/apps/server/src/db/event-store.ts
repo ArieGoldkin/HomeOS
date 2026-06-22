@@ -10,6 +10,14 @@ export type EventPatch = Partial<
   Pick<ParsedEvent, "date_iso" | "time" | "location" | "title_he" | "assignee" | "recurrence">
 >;
 
+/**
+ * #163 — the ceiling on a single bulk-cancel ("בטל את כל הפגישות מחר"): caps both the in-scope query
+ * (`findEventsInScope` LIMIT) AND the persisted confirm-thread payload (`cancelPayloadSchema.max`), so a
+ * pathologically busy day can never blow up the confirm message or the stored blob. A family's day-scope
+ * realistically holds far fewer; 25 is a generous bound that keeps the listing readable.
+ */
+export const BULK_CANCEL_MAX = 25;
+
 // node:sqlite is a newer builtin that bundlers (Vite/Vitest) don't externalize cleanly;
 // loading it via createRequire keeps it a runtime resolution Node handles directly.
 const { DatabaseSync } = createRequire(import.meta.url)(
@@ -71,6 +79,16 @@ export interface EventStore {
     familyId: string,
     query: { dateIso?: string; time?: string; titleHint?: string },
   ): SavedEvent[];
+  /**
+   * #163 — list EVERY board row in a date/time SCOPE for bulk cancel ("בטל את כל הפגישות מחר"). Same
+   * board-only (`source_provider IS NULL`), family-scoped, date/time-exact, newest-first base as
+   * `findEventsByRef`, but with NO title clause (the quantifier "כל ה…" is not a title — kind-agnostic by
+   * design) and capped at `BULK_CANCEL_MAX` (not 5: a bulk op must see the whole day, not a sample). The
+   * caller (`routeBulkCancel`) requires a non-empty scope before calling, so this never wipes the board;
+   * a scope matching nothing returns `[]`. Read-only; the destructive step is confirm-gated. `familyId`
+   * is the reserved Phase-8 contract.
+   */
+  findEventsInScope(familyId: string, scope: { dateIso?: string; time?: string }): SavedEvent[];
   /**
    * #86 — edit a board row in place. FAMILY-scoped (`source_provider IS NULL` only: a synced gcal/gmail
    * row is NEVER written, preventing a read→write loop). Merges `patch` onto the row, re-validates the
@@ -298,6 +316,21 @@ export function createEventStore(dbPath: string): EventStore {
       // Three columns per variant ⇒ push each variant value three times, in clause order.
       for (const variants of groups) for (const v of variants) params.push(v, v, v);
       const sql = `${findByRefBase}${titleSql ? ` AND ${titleSql}` : ""} ORDER BY id DESC LIMIT 5;`;
+      const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
+      return rows.map(rowToSaved);
+    },
+    findEventsInScope(_familyId, scope) {
+      // Same date/time base as findEventsByRef, but NO title clause — bulk cancel matches the whole scope
+      // regardless of title/kind. BULK_CANCEL_MAX (not 5) so a busy day is fully listed; the literal is a
+      // trusted constant (never user input), so interpolating it is injection-safe. The caller guarantees
+      // a non-empty scope, but even an empty one stays bounded by source_provider IS NULL + the cap.
+      const params: (string | null)[] = [
+        scope.dateIso ?? null,
+        scope.dateIso ?? null,
+        scope.time ?? null,
+        scope.time ?? null,
+      ];
+      const sql = `${findByRefBase} ORDER BY id DESC LIMIT ${BULK_CANCEL_MAX};`;
       const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
       return rows.map(rowToSaved);
     },
