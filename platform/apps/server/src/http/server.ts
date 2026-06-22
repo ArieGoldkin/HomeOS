@@ -2,7 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
-import { isAllowed } from "../core/allowlist.ts";
+import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
@@ -109,17 +109,16 @@ export function createServer(deps: ServerDeps): Hono {
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),
   // complementary to GET /events. Gated by a DISTINCT messages token (never the read token) so the
   // no-auth kiosk can't fetch it, and ALLOWLIST-FILTERED because inbound_messages is persisted BEFORE
-  // the allowlist gate — the raw table can hold non-family/spam text that must never be served. Returns
-  // the newest rows (capped), each mapped to the served DTO (tenant-ready family_id).
+  // the allowlist gate — the raw table can hold non-family/spam text that must never be served. The
+  // filter is pushed into SQL (digit-normalized allowlist) so the cap applies to family rows, not to a
+  // spam-padded window (F1). Each kept row maps to the served DTO (tenant-ready family_id).
   app.get("/messages", (c) => {
     if (deps.messagesToken === undefined) return c.text("Messages API disabled", 503);
     if (!bearerMatches(c.req.header("authorization"), deps.messagesToken)) {
       return c.text("Unauthorized", 401);
     }
-    const messages = deps.inbound
-      .listRecent(MESSAGES_FEED_LIMIT)
-      .filter((row) => isAllowed(row.from_phone, deps.allowlist))
-      .map(rowToInboundDTO);
+    const allowed = deps.allowlist.map(normalizePhone);
+    const messages = deps.inbound.listRecent(MESSAGES_FEED_LIMIT, allowed).map(rowToInboundDTO);
     return c.json({ messages });
   });
 

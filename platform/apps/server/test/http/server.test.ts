@@ -259,8 +259,8 @@ describe("GET /events (read seam)", () => {
 });
 
 describe("GET /messages (raw inbound feed)", () => {
-  // Two raw rows: one from an allowlisted family number, one from a non-family number that landed in
-  // inbound_messages BEFORE the allowlist gate (spam/unknown). Only the family row may be served.
+  // One already-allowlist-filtered row (the store does the WHERE from_phone IN (…) filtering — see the
+  // inbound-store tests; the endpoint only delegates + maps to the DTO).
   const familyRow: InboundRow = {
     wa_message_id: "wamid.fam",
     from_phone: "972500000001",
@@ -270,13 +270,6 @@ describe("GET /messages (raw inbound feed)", () => {
     received_at: "2026-06-22 07:00:00",
     processed_at: "2026-06-22 07:00:01",
     outcome: "parsed",
-  };
-  const strangerRow: InboundRow = {
-    ...familyRow,
-    wa_message_id: "wamid.spam",
-    from_phone: "999999999",
-    text: "spam",
-    outcome: null,
   };
 
   it("503 when no messages token is configured (endpoint disabled)", async () => {
@@ -301,18 +294,20 @@ describe("GET /messages (raw inbound feed)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("200 returns the wrapped { messages }, allowlist-filtered (non-family rows excluded)", async () => {
+  it("200 serves the wrapped { messages } DTO and delegates allowlist filtering to the store", async () => {
     const { app, inbound } = makeApp({ messagesToken: MSG_TOK });
-    inbound.listRecent.mockReturnValue([familyRow, strangerRow]);
+    inbound.listRecent.mockReturnValue([familyRow]); // the store already applied the allowlist + cap
     const res = await app.request("/messages", { headers: { Authorization: `Bearer ${MSG_TOK}` } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       messages: Array<{ wa_message_id: string; family_id: string; outcome: string | null }>;
     };
-    expect(body.messages).toHaveLength(1); // the stranger row is filtered out
+    expect(body.messages).toHaveLength(1);
     expect(body.messages[0]!.wa_message_id).toBe("wamid.fam");
     expect(body.messages[0]!.family_id).toBe("default"); // tenant-ready DTO (D3-additive)
     expect(body.messages[0]!.outcome).toBe("parsed");
+    // F1 — the endpoint pushes the digit-normalized allowlist into the store so LIMIT applies post-filter.
+    expect(inbound.listRecent).toHaveBeenCalledWith(expect.any(Number), ["972500000001"]);
   });
 });
 

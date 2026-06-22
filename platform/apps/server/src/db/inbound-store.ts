@@ -37,9 +37,14 @@ export interface InboundStore {
   /**
    * #135 [D2] — the most recent inbound rows (raw, newest-first), capped at `limit`. Backs the
    * `GET /messages` feed; returns full {@link InboundRow}s (text/status/outcome/timestamps), which the
-   * endpoint allowlist-filters + maps to the served DTO. Read-only; an append-only audit surface.
+   * endpoint maps to the served DTO. Read-only; an append-only audit surface.
+   *
+   * `fromPhones` (optional) scopes to those senders via a SQL `WHERE from_phone IN (…)` so the `limit`
+   * applies AFTER filtering — a burst of pre-allowlist spam can't crowd the family's rows out of the
+   * feed (review F1). Pass digit-normalized numbers (the column holds Meta's digit form). Omitted ⇒ no
+   * filter (every row); an empty array ⇒ no rows (an empty allowlist serves nothing, matching isAllowed).
    */
-  listRecent(limit: number): InboundRow[];
+  listRecent(limit: number, fromPhones?: readonly string[]): InboundRow[];
   /** Status counts for inbounds received at/after `sinceIso` (SQLite UTC datetime). Feeds the daily digest. */
   statsSince(sinceIso: string): InboundStats;
   /**
@@ -113,8 +118,19 @@ export function createInboundStore(dbPath: string): InboundStore {
     pending() {
       return (selectPending.all() as unknown as InboundRow[]).map(rowToMsg);
     },
-    listRecent(limit) {
-      return selectRecent.all(limit) as unknown as InboundRow[];
+    listRecent(limit, fromPhones) {
+      if (fromPhones === undefined) {
+        return selectRecent.all(limit) as unknown as InboundRow[];
+      }
+      if (fromPhones.length === 0) return []; // empty allowlist → serve nothing (no `IN ()`)
+      // Filter IN SQL so LIMIT applies to the kept rows (F1). The IN-arity varies, so this stmt is
+      // built per call (the /messages feed is low-traffic — no hot-path prepare-cache needed).
+      const placeholders = fromPhones.map(() => "?").join(", ");
+      const stmt = db.prepare(
+        `SELECT * FROM inbound_messages WHERE from_phone IN (${placeholders})
+         ORDER BY received_at DESC, rowid DESC LIMIT ?;`,
+      );
+      return stmt.all(...fromPhones, limit) as unknown as InboundRow[];
     },
     statsSince(sinceIso) {
       const rows = statsStmt.all(sinceIso) as unknown as Array<{ status: string; c: number }>;

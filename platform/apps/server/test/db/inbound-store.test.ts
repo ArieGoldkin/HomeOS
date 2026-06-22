@@ -125,6 +125,31 @@ describe("InboundStore (in-memory SQLite)", () => {
     expect(store.listRecent(3)).toHaveLength(3);
   });
 
+  // #135 F1 — the allowlist filter is pushed into SQL so the LIMIT applies to the kept rows.
+  it("listRecent(limit, fromPhones) returns only the given senders' rows", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue({ id: "fam", from: "972500000001", type: "text", text: "x" });
+    store.enqueue({ id: "spam", from: "999", type: "text", text: "y" });
+    expect(store.listRecent(10, ["972500000001"]).map((r) => r.wa_message_id)).toEqual(["fam"]);
+  });
+
+  it("listRecent applies the allowlist filter BEFORE the limit (spam can't crowd out family)", () => {
+    const store = createInboundStore(":memory:");
+    // the family row is enqueued FIRST (oldest), then 3 newer spam rows
+    store.enqueue({ id: "fam", from: "972500000001", type: "text", text: "real" });
+    for (const id of ["s1", "s2", "s3"])
+      store.enqueue({ id, from: "999", type: "text", text: "spam" });
+    // limit 2: an unfiltered query would return [s3, s2] and drop the family row entirely. With the
+    // filter pushed into SQL, the family row survives despite being the oldest.
+    expect(store.listRecent(2, ["972500000001"]).map((r) => r.wa_message_id)).toEqual(["fam"]);
+  });
+
+  it("listRecent with an empty allowlist serves nothing", () => {
+    const store = createInboundStore(":memory:");
+    store.enqueue(msg);
+    expect(store.listRecent(10, [])).toEqual([]);
+  });
+
   it("the outcome migration is idempotent across store instances on the same file", () => {
     // Two instances over the same path stand in for a restart — the second must NOT re-run the
     // ALTER (would throw "duplicate column"); it should detect the column and skip it.
