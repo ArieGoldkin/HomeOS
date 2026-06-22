@@ -5,6 +5,7 @@ import { ConnectionsView } from "@features/connections";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { FamilyView } from "@features/family";
 import { WhatsAppIngestion } from "@features/ingestion";
+import { MessagesView } from "@features/messages";
 import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
 import { WebWeekView, WeekView } from "@features/week-view";
@@ -215,6 +216,13 @@ function buildRouteTree() {
     component: ConnectionsView,
   });
 
+  // #135 — the raw inbound-message feed. WEB-ONLY (under WebShell); never added to the tablet kiosk.
+  const webMessagesRoute = createRoute({
+    getParentRoute: () => webRoute,
+    path: "messages",
+    component: MessagesView,
+  });
+
   const webSettingsRoute = createRoute({
     getParentRoute: () => webRoute,
     path: "settings",
@@ -250,6 +258,7 @@ function buildRouteTree() {
       webWeekRoute,
       webFamilyRoute,
       webConnectionsRoute,
+      webMessagesRoute,
       webSettingsRoute,
     ]),
     welcomeRoute,

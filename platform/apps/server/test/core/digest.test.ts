@@ -60,6 +60,7 @@ describe("runDigestOnce", () => {
         markDone: vi.fn(),
         markFailed: vi.fn(),
         pending: vi.fn(() => []),
+        listRecent: vi.fn(() => []),
         statsSince: vi.fn(() => ({ done: 5, failed: 1, pending: 0 })),
         countFromSenderSince: vi.fn(() => 0),
       },

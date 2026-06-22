@@ -1,3 +1,4 @@
+import type { InboundOutcome } from "@homeos/shared";
 import type { SavedEvent } from "../../db/event-store.ts";
 import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
@@ -49,15 +50,23 @@ import { runSyncIntent } from "./sync.ts";
  * Voice/media is deferred to M2b, so non-text messages get a friendly "text only" reply.
  * Dedupe + durability now live in the inbound queue (the message is persisted before the
  * ack and de-duped on wa_message_id); `processInbound` wraps this and settles the row.
+ *
+ * #135 — returns the FINER terminal {@link InboundOutcome} for the messages feed: each parse-path
+ * branch returns its disposition (refused/rate_limited/text_only/rephrase/clarified/parsed); command
+ * paths (ביטול/sync/cancel/edit/resume) return `undefined` → `outcome` stays null. `processInbound`
+ * threads this into `markDone`. A thrown TransientError leaves the row pending (no outcome recorded).
  */
-export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Promise<void> {
+export async function handleInbound(
+  msg: InboundMessage,
+  deps: HandlerDeps,
+): Promise<InboundOutcome | undefined> {
   const log = deps.log ?? (() => {});
 
   // 🔒 Allowlist gate — only family numbers are processed.
   if (!isAllowed(msg.from, deps.allowlist)) {
     log("rejected non-allowlisted sender", { from: msg.from });
     await deps.sendText(msg.from, REFUSAL_HE);
-    return;
+    return "refused";
   }
 
   // Read the clock ONCE for the whole handler (#87/F4): the G16 rate gate, the date anchor, and the
@@ -96,7 +105,7 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
           max: deps.maxPerSenderPerDay,
         });
         await deps.sendText(msg.from, RATE_LIMIT_HE);
-        return;
+        return "rate_limited";
       }
       log("ceiling hit but sender has an open thread — exempting the resume (G23)", {
         from: msg.from,
@@ -109,7 +118,7 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   const text = msg.text?.trim();
   if (!text) {
     await deps.sendText(msg.from, TEXT_ONLY_HE);
-    return;
+    return "text_only";
   }
 
   const today = jerusalemToday(now);
@@ -120,7 +129,7 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   if (text.length > MAX_INPUT) {
     log("input over MAX_INPUT — rephrase", { id: msg.id, len: text.length });
     await deps.sendText(msg.from, REPHRASE_HE);
-    return;
+    return "rephrase";
   }
 
   // #83 RESUME branch (Milestone #8) — ORDER IS LOAD-BEARING (G22): the ROUTING sits AFTER the allowlist
@@ -264,22 +273,23 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
   const clarify = clarifyOf(result);
   if (clarify) {
     await openClarifyThread(deps, msg, clarify);
-    return;
+    return "clarified";
   }
 
   const saved = savedOf(result) ?? [];
   if (saved.length === 0 && duplicates.length === 0) {
     log("unparseable message", { id: msg.id });
     await deps.sendText(msg.from, REPHRASE_HE);
-    return;
+    return "rephrase";
   }
 
   // Slot dedup: a forward that ONLY duplicated existing slot(s) — nothing new saved — gets "already on
-  // the board" (not a rephrase), so the user knows it's there and no second copy was made.
+  // the board" (not a rephrase), so the user knows it's there and no second copy was made. It WAS a
+  // parseable event (just already present), so the feed records it as `parsed`.
   if (saved.length === 0) {
     log("duplicate slot", { id: msg.id, count: duplicates.length });
     await deps.sendText(msg.from, formatAlready(duplicates));
-    return;
+    return "parsed";
   }
 
   // The tool already persisted each NEW event (idempotent on (wa_message_id, seq)); the handler is now
@@ -298,6 +308,8 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
     const { pushed } = await pushSavedEventsToCalendar(saved, deps.calendar, FAMILY_ID, log);
     if (pushed > 0) log("auto-pushed to calendar", { id: msg.id, pushed });
   }
+
+  return "parsed";
 }
 
 /**
@@ -309,8 +321,9 @@ export async function handleInbound(msg: InboundMessage, deps: HandlerDeps): Pro
 export async function processInbound(msg: InboundMessage, deps: ProcessDeps): Promise<void> {
   const log = deps.log ?? (() => {});
   try {
-    await handleInbound(msg, deps);
-    deps.inbound.markDone(msg.id);
+    // #135 — settle the row with the finer disposition the handler reached (null for command paths).
+    const outcome = await handleInbound(msg, deps);
+    deps.inbound.markDone(msg.id, outcome);
   } catch (err) {
     if (err instanceof TransientError) {
       // Leave the row `pending` (don't settle) so boot-replay retries it — a service blip

@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
 
-/** The five web tabs (one more than phone — web adds Connections). Hebrew labels; week starts Sunday. */
+/** The web tabs (Hebrew labels; week starts Sunday). #135 adds הודעות (the raw inbound feed) — web-only. */
 const TABS = [
   { to: "/web/today", label: "היום" },
   { to: "/web/week", label: "שבוע" },
   { to: "/web/family", label: "משפחה" },
+  { to: "/web/messages", label: "הודעות" },
   { to: "/web/connections", label: "חיבורים" },
   { to: "/web/settings", label: "הגדרות" },
 ] as const;

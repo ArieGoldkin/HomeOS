@@ -72,13 +72,15 @@ describe("handleInbound — #83 RESUME branch", () => {
       markDone: vi.fn(),
       markFailed: vi.fn(),
       pending: vi.fn(() => []),
+      listRecent: vi.fn(() => []),
       statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
       countFromSenderSince: vi.fn(() => 0),
     };
 
     await processInbound(textMsg, { ...deps, inbound } as unknown as ProcessDeps);
 
-    expect(inbound.markDone).toHaveBeenCalledWith("wamid.1");
+    // #135 — a resume is a command path (not a fresh parse), so the outcome is null (undefined arg).
+    expect(inbound.markDone).toHaveBeenCalledWith("wamid.1", undefined);
     expect(agent.run).not.toHaveBeenCalled();
   });
 });

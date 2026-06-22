@@ -163,3 +163,56 @@ export const savedEventsResponseSchema = z.object({
   events: z.array(savedEventSchema),
 });
 export type SavedEventsResponse = z.infer<typeof savedEventsResponseSchema>;
+
+/**
+ * #135 [D2] — the disposition recorded for an inbound message at its terminal handler branch. Finer than
+ * the queue's coarse `status` (pending|done|failed): a `done` row could be a parsed event, a clarify
+ * question, an unparseable→rephrase, an allowlist refusal, a rate-limit, or a text-only reply — all
+ * indistinguishable by `status` alone. Null when the message took a non-parse path (a command like
+ * ביטול/סנכרן/cancel/edit, or a still-pending/failed row). The web feed renders it as an outcome pill.
+ */
+export const INBOUND_OUTCOMES = [
+  "parsed",
+  "clarified",
+  "rephrase",
+  "refused",
+  "rate_limited",
+  "text_only",
+] as const;
+export const inboundOutcomeSchema = z.enum(INBOUND_OUTCOMES);
+export type InboundOutcome = z.infer<typeof inboundOutcomeSchema>;
+
+/**
+ * #135 [D2] — one row of the raw inbound-message feed served by `GET /messages`: the "what did the bot
+ * receive and what happened" audit/inbox surface, complementary to the structured events board. This is
+ * its OWN contract, deliberately **NOT** a {@link SavedEvent}: a non-text / unparseable / refused message
+ * has no event at all, and this carries the raw `text`, `from_phone`, `received_at`, media `type`, queue
+ * `status`, and disposition `outcome` that an event row has no place for.
+ *
+ * `family_id` is tenant-ready NOW (default `"default"`) so D3 (#136, the real `family_id` column) is
+ * purely additive — the served shape doesn't change when the column lands. The text fields are the
+ * VERBATIM forwarded message (other people's words, persisted BEFORE the allowlist gate), so this feed is
+ * allowlist-filtered server-side and the no-auth tablet kiosk must never reach it (a separate
+ * `MESSAGES_TOKEN` the kiosk bundle never ships).
+ */
+export const inboundMessageSchema = z.object({
+  wa_message_id: z.string(),
+  from_phone: z.string(),
+  type: z.string(),
+  text: z.string().nullable(),
+  status: z.string(),
+  outcome: inboundOutcomeSchema.nullable(),
+  received_at: z.string(),
+  processed_at: z.string().nullable(),
+  family_id: z.string().default("default"),
+});
+export type InboundMessageDTO = z.infer<typeof inboundMessageSchema>;
+
+/**
+ * The `GET /messages` response envelope: rows wrapped as `{ messages: InboundMessageDTO[] }` (NOT a bare
+ * array). The web data layer (`useMessages`) parses against this so any shape drift fails loudly here.
+ */
+export const inboundMessagesResponseSchema = z.object({
+  messages: z.array(inboundMessageSchema),
+});
+export type InboundMessagesResponse = z.infer<typeof inboundMessagesResponseSchema>;

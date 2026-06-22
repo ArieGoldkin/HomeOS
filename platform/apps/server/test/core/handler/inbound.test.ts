@@ -249,7 +249,9 @@ describe("handleInbound (M2)", () => {
       vi.mocked(deps.calendar!.client.insertEvent).mockRejectedValueOnce(
         new TransientError("blip"),
       );
-      await expect(handleInbound(textMsg, deps)).resolves.toBeUndefined();
+      // #135 — the push failure is swallowed inside the best-effort push, so the handler still
+      // completes and returns the "parsed" outcome (the event WAS saved + confirmed).
+      await expect(handleInbound(textMsg, deps)).resolves.toBe("parsed");
       expect(sendText.mock.calls[0]![1]).toContain("הוספתי");
     });
   });

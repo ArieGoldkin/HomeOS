@@ -217,6 +217,7 @@ function makeSystem(
     inbound,
     process: runInbound,
     events,
+    allowlist,
     readToken: "read-secret",
     appSecret: appKey,
   });

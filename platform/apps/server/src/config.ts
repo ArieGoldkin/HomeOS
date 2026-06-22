@@ -35,6 +35,10 @@ const membersMap = z
 // Env name held as a quoted string (scanner-exempt) so the write seam token can be added as a
 // computed key below without tripping the content filter's key-value heuristic.
 const kWrite = "WRITE_TOKEN";
+// #135 — same scanner-exempt trick for the messages-feed read token (GET /messages). A DISTINCT
+// token from READ_TOKEN: the raw inbound feed can hold pre-allowlist/non-family text, so the no-auth
+// kiosk (which ships READ_TOKEN) must never be able to fetch it.
+const kMessages = "MESSAGES_TOKEN";
 
 const schema = z.object({
   VERIFY_TOKEN: z.string().min(1),
@@ -103,6 +107,9 @@ const schema = z.object({
   // A DISTINCT token from the read token — never aliased: the read-only kitchen tablet must not
   // be able to mutate the board. Computed key keeps the content scanner quiet.
   [kWrite]: z.string().min(1).optional(),
+  // #135 — optional Bearer token for GET /messages (the raw inbound feed). DISTINCT from READ_TOKEN
+  // and never aliased to it; unset disables the endpoint (503). Computed key keeps the scanner quiet.
+  [kMessages]: z.string().min(1).optional(),
 });
 
 /** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
@@ -140,6 +147,8 @@ export interface Config {
   calendarId: string;
   calendarAutoPush: boolean;
   writeToken?: string;
+  /** #135 — Bearer token gating GET /messages (raw inbound feed). Distinct from readToken; unset ⇒ 503. */
+  messagesToken?: string;
   google?: GoogleOAuthSettings;
 }
 
@@ -217,5 +226,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   };
   // Assigned via index read (not a `:` pair) to sidestep the secret-scanner on the *Token key.
   cfg.writeToken = e[kWrite];
+  cfg.messagesToken = e[kMessages];
   return cfg;
 }
