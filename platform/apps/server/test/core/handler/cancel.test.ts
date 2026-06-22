@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { extractCancelRef, handleInbound } from "../../../src/core/handler/index.ts";
-import { createConversationStore } from "../../../src/db/conversation-store.ts";
+import {
+  extractCancelRef,
+  handleInbound,
+  parseCancelSelection,
+} from "../../../src/core/handler/index.ts";
+import {
+  type ConversationStore,
+  createConversationStore,
+} from "../../../src/db/conversation-store.ts";
 import type { SavedEvent } from "../../../src/db/event-store.ts";
 import { makeDeps, sampleEvent, textMsg } from "./_setup.ts";
 
@@ -325,5 +332,93 @@ describe("extractCancelRef + cancel specificity (#125/F1+F2)", () => {
       "default",
       expect.objectContaining({ dateIso: "2026-06-21" }),
     );
+  });
+});
+
+// #161 — multi-select cancel: after a numbered disambiguation, a SINGLE reply may pick more than one
+// item ("1,2", "1 ו-2") or "הכל"/"כולם" → cancel all selected at once, ONE summary confirm, and NEVER
+// fall through to agent.run (so a multi-number reply can't be mis-parsed as a new event — the live
+// dogfood bug). The thread stays single-use (resolved on the one reply); the up-front prompt invites
+// selecting everything at once, so a "גם 2" afterthought is rarely needed.
+describe("handleInbound — #161 multi-select cancel disambiguation", () => {
+  const NOW = "2026-06-20 09:00:00";
+  const openThread = (conversations: ConversationStore, candidateIds: number[]) =>
+    conversations.create({
+      fromPhone: textMsg.from,
+      payload: { kind: "cancel", candidateIds },
+      expiresAt: "2026-06-20 12:00:00",
+    });
+
+  it("'1,2' cancels BOTH listed candidates, sends one summary (בוטלו 2), never re-parses", async () => {
+    const conversations = createConversationStore(":memory:");
+    openThread(conversations, [11, 22, 33]);
+    const { deps, sendText, events, agent } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "1,2" }, deps);
+    expect(events.deleteById).toHaveBeenCalledWith(11, "default");
+    expect(events.deleteById).toHaveBeenCalledWith(22, "default");
+    expect(events.deleteById).not.toHaveBeenCalledWith(33, "default");
+    expect(sendText).toHaveBeenCalledTimes(1); // ONE summary, not N replies
+    expect(sendText.mock.calls[0]?.[1]).toContain("בוטלו 2");
+    expect(agent.run).not.toHaveBeenCalled(); // never re-parsed as a new event (the bug)
+    expect(conversations.getPending(textMsg.from, NOW)).toBeNull(); // single-use
+  });
+
+  it("'1 ו-2' (vav-joined) cancels both", async () => {
+    const conversations = createConversationStore(":memory:");
+    openThread(conversations, [11, 22]);
+    const { deps, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "1 ו-2" }, deps);
+    expect(events.deleteById).toHaveBeenCalledWith(11, "default");
+    expect(events.deleteById).toHaveBeenCalledWith(22, "default");
+  });
+
+  it("'הכל' cancels EVERY candidate", async () => {
+    const conversations = createConversationStore(":memory:");
+    openThread(conversations, [11, 22, 33]);
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "הכל" }, deps);
+    expect(events.deleteById).toHaveBeenCalledTimes(3);
+    expect(sendText.mock.calls[0]?.[1]).toContain("בוטלו 3");
+  });
+
+  it("an out-of-range index is ignored ('1,9' on a 2-item list cancels only #1)", async () => {
+    const conversations = createConversationStore(":memory:");
+    openThread(conversations, [11, 22]);
+    const { deps, sendText, events } = makeDeps({ conversations });
+    events.deleteById.mockReturnValue(1);
+    await handleInbound({ ...textMsg, text: "1,9" }, deps);
+    expect(events.deleteById).toHaveBeenCalledTimes(1);
+    expect(events.deleteById).toHaveBeenCalledWith(11, "default");
+    expect(sendText.mock.calls[0]?.[1]).toContain("בוטל ✓");
+  });
+});
+
+// #161 — the pure selection parser (exported for unit coverage, like extractCancelRef). Accepts one or
+// more 1-based indices in any human list form, or the "all" words; returns deduped, in-range picks in
+// reply order. An empty result means "no valid selection" → the caller deletes nothing (G20).
+describe("parseCancelSelection (#161)", () => {
+  it("parses a single index", () => {
+    expect(parseCancelSelection("2", 3)).toEqual([2]);
+  });
+  it("parses comma / vav / space separated lists", () => {
+    expect(parseCancelSelection("1,2", 3)).toEqual([1, 2]);
+    expect(parseCancelSelection("1 ו-2", 3)).toEqual([1, 2]);
+    expect(parseCancelSelection("1 2 3", 3)).toEqual([1, 2, 3]);
+  });
+  it("הכל / כולם select every candidate", () => {
+    expect(parseCancelSelection("הכל", 3)).toEqual([1, 2, 3]);
+    expect(parseCancelSelection("כולם", 2)).toEqual([1, 2]);
+  });
+  it("dedupes and drops out-of-range numbers", () => {
+    expect(parseCancelSelection("1,1,2", 3)).toEqual([1, 2]);
+    expect(parseCancelSelection("9", 3)).toEqual([]);
+    expect(parseCancelSelection("1,9", 2)).toEqual([1]);
+  });
+  it("a non-selection reply (a word / 'לא') yields nothing", () => {
+    expect(parseCancelSelection("לא יודע", 3)).toEqual([]);
+    expect(parseCancelSelection("שלום", 3)).toEqual([]);
   });
 });

@@ -4,7 +4,8 @@
 //   - processInbound  — the composition-root entry (index.ts wires it onto the inbound queue)
 //   - handleInbound   — the message pipeline (tested directly)
 //   - extractCancelRef — exported so the server-side cancel-reference extraction is unit-tested
+//   - parseCancelSelection — exported so the #161 multi-select disambiguation parser is unit-tested
 //   - HandlerDeps / ProcessDeps — the dependency contracts callers construct
-export { extractCancelRef } from "./cancel.ts";
+export { extractCancelRef, parseCancelSelection } from "./cancel.ts";
 export { handleInbound, processInbound } from "./inbound.ts";
 export type { HandlerDeps, ProcessDeps } from "./shared.ts";
