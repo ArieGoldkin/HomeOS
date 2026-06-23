@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,18,400;1,18,500&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  ::selection{background:#1E9E6F;color:#fff}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(120,110,95,.32);border-radius:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#F4F1EB;font-family:'Schibsted Grotesk',system-ui,sans-serif;color:#1B1A17;-webkit-font-smoothing:antialiased">
+
+  <!-- ============ COVER ============ -->
+  <header style="max-width:1120px;margin:0 auto;padding:72px 32px 40px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:54px">
+      <div style="width:26px;height:26px;border-radius:7px;background:#1E9E6F;display:flex;align-items:center;justify-content:center">
+        <div style="width:9px;height:9px;background:#F4F1EB;border-radius:2px;transform:rotate(45deg)"></div>
+      </div>
+      <span style="font-weight:700;font-size:17px;letter-spacing:-.01em">HomeOS</span>
+      <span style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.06em;color:#8A8579;text-transform:uppercase">Design System v1.0</span>
+    </div>
+
+    <div style="font:500 12px 'Spline Sans Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:#1E9E6F;margin-bottom:20px">Extracted &amp; adapted from a modern HR-suite aesthetic</div>
+    <h1 style="font-weight:800;font-size:64px;line-height:1.02;letter-spacing:-.03em;margin:0;max-width:880px">
+      A warm, modern system<br>for <span style="font-family:'Newsreader',serif;font-style:italic;font-weight:500;letter-spacing:-.01em">everything home</span>
+    </h1>
+    <p style="font-size:18px;line-height:1.55;color:#56524B;max-width:560px;margin:26px 0 0">
+      Cream paper surfaces, a living green accent, and a bold-sans / italic-serif voice — paired with a dark gradient dashboard mode. One vocabulary across every HomeOS surface.
+    </p>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:38px">
+      <div style="width:54px;height:54px;border-radius:13px;background:#1E9E6F;box-shadow:0 8px 22px -10px rgba(30,158,111,.7)"></div>
+      <div style="width:54px;height:54px;border-radius:13px;background:#FFD81F"></div>
+      <div style="width:54px;height:54px;border-radius:13px;background:#1B1A17"></div>
+      <div style="width:54px;height:54px;border-radius:13px;background:#E9E5DD;border:1px solid #E2DDD3"></div>
+      <div style="width:54px;height:54px;border-radius:13px;background:radial-gradient(120% 120% at 20% 10%,#2A6BB0 0%,rgba(42,107,176,0) 60%),radial-gradient(130% 120% at 90% 110%,#C2613A 0%,rgba(194,97,58,0) 60%),#13171D"></div>
+    </div>
+  </header>
+
+  <!-- ============ 01 · COLOR ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">01 / Color</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Warm neutrals &amp; living accents</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">Surfaces stay warm and paper-toned. Accents are defined in oklch — one chroma &amp; lightness, hue varies — so they always harmonize.</p>
+      </div>
+
+      <div style="flex:1;min-width:420px">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Warm neutrals</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-bottom:34px">
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#F4F1EB"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Paper</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#F4F1EB</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#FBFAF7"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Raised</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#FBFAF7</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#FFFFFF;border-bottom:1px solid #EEEAE2"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Surface</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#FFFFFF</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#E9E5DD"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Muted</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#E9E5DD</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#56524B"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Ink soft</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#56524B</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#1B1A17"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Ink</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#1B1A17</div></div></div>
+        </div>
+
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Living accents · oklch(0.64 0.13 H)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-bottom:34px">
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#1E9E6F;display:flex;align-items:flex-end;padding:7px"><span style="font:500 9px 'Spline Sans Mono',monospace;color:rgba(255,255,255,.85)">PRIMARY</span></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Green</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">155°</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#3686D8"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Blue</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">245°</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#B57BD6"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Violet</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">305°</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#D9543F"></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Coral</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">28°</div></div></div>
+          <div style="border-radius:13px;overflow:hidden;border:1px solid #E2DDD3;background:#fff"><div style="height:62px;background:#FFD81F;display:flex;align-items:flex-end;padding:7px"><span style="font:500 9px 'Spline Sans Mono',monospace;color:rgba(0,0,0,.5)">SPARK</span></div><div style="padding:9px 11px"><div style="font-weight:600;font-size:12.5px">Yellow</div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579">#FFD81F</div></div></div>
+        </div>
+
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Status</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 9px;background:#fff;border:1px solid #E2DDD3;border-radius:999px"><span style="width:9px;height:9px;border-radius:50%;background:#1E9E6F"></span><span style="font-weight:600;font-size:13px">Active</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 9px;background:#fff;border:1px solid #E2DDD3;border-radius:999px"><span style="width:9px;height:9px;border-radius:50%;background:#3686D8"></span><span style="font-weight:600;font-size:13px">Pending</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 9px;background:#fff;border:1px solid #E2DDD3;border-radius:999px"><span style="width:9px;height:9px;border-radius:50%;background:#D9543F"></span><span style="font-weight:600;font-size:13px">Overdue</span></div>
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 13px 7px 9px;background:#fff;border:1px solid #E2DDD3;border-radius:999px"><span style="width:9px;height:9px;border-radius:50%;background:#A39E92"></span><span style="font-weight:600;font-size:13px">Archived</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 · TYPOGRAPHY ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">02 / Type</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Bold grotesque, italic serif accent</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">Schibsted Grotesk carries everything. Newsreader italic is reserved for a single emphasised phrase in a heading — never body, never more than once.</p>
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:7px">
+          <div style="font:600 13px 'Schibsted Grotesk'">Aa — Schibsted Grotesk</div>
+          <div style="font-family:'Newsreader';font-style:italic;font-weight:500;font-size:16px">Aa — Newsreader Italic</div>
+          <div style="font:400 12px 'Spline Sans Mono',monospace;color:#6B6862">Aa — Spline Sans Mono</div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:420px">
+        <div style="display:flex;flex-direction:column;gap:0">
+          <div style="padding:18px 0;border-bottom:1px solid #E7E2D8;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap"><span style="width:120px;flex:none;font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">Display / 64</span><span style="font-weight:800;font-size:40px;letter-spacing:-.03em;line-height:1">Good <span style="font-family:'Newsreader';font-style:italic;font-weight:500">morning</span></span></div>
+          <div style="padding:18px 0;border-bottom:1px solid #E7E2D8;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap"><span style="width:120px;flex:none;font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">Heading / 28</span><span style="font-weight:700;font-size:28px;letter-spacing:-.02em">One home, fully in sync</span></div>
+          <div style="padding:18px 0;border-bottom:1px solid #E7E2D8;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap"><span style="width:120px;flex:none;font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">Title / 20</span><span style="font-weight:600;font-size:20px;letter-spacing:-.01em">This week’s chores</span></div>
+          <div style="padding:18px 0;border-bottom:1px solid #E7E2D8;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap"><span style="width:120px;flex:none;font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">Body / 16</span><span style="font-weight:400;font-size:16px;line-height:1.5;color:#3A372F;max-width:420px">Every list, calendar and reminder lives in one place — no scattered apps, no nagging, no lost notes on the fridge.</span></div>
+          <div style="padding:18px 0;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap"><span style="width:120px;flex:none;font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">Caption / 11</span><span style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#8A8579">Monday · June 22</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 · RADII / SHADOW / SPACING ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">03 / Tokens</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Soft radii, quiet shadows, 4-pt spacing</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">Generous corners and barely-there shadows keep surfaces calm. Spacing steps in multiples of four.</p>
+      </div>
+      <div style="flex:1;min-width:420px;display:flex;flex-direction:column;gap:30px">
+        <div>
+          <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Radius</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <div style="text-align:center"><div style="width:74px;height:74px;background:#fff;border:1px solid #E2DDD3;border-radius:8px"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">sm · 8</div></div>
+            <div style="text-align:center"><div style="width:74px;height:74px;background:#fff;border:1px solid #E2DDD3;border-radius:14px"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">md · 14</div></div>
+            <div style="text-align:center"><div style="width:74px;height:74px;background:#fff;border:1px solid #E2DDD3;border-radius:20px"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">lg · 20</div></div>
+            <div style="text-align:center"><div style="width:74px;height:74px;background:#fff;border:1px solid #E2DDD3;border-radius:999px"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">pill</div></div>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Elevation</div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap">
+            <div style="text-align:center"><div style="width:96px;height:74px;background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(30,28,24,.05)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">flat</div></div>
+            <div style="text-align:center"><div style="width:96px;height:74px;background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(30,28,24,.05),0 10px 26px -14px rgba(30,28,24,.18)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">card</div></div>
+            <div style="text-align:center"><div style="width:96px;height:74px;background:#fff;border-radius:14px;box-shadow:0 2px 4px rgba(30,28,24,.06),0 24px 50px -20px rgba(30,28,24,.32)"></div><div style="font:400 11px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:7px">float</div></div>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Spacing</div>
+          <div style="display:flex;align-items:flex-end;gap:10px">
+            <div style="text-align:center"><div style="width:4px;height:4px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">4</div></div>
+            <div style="text-align:center"><div style="width:8px;height:8px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">8</div></div>
+            <div style="text-align:center"><div style="width:12px;height:12px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">12</div></div>
+            <div style="text-align:center"><div style="width:16px;height:16px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">16</div></div>
+            <div style="text-align:center"><div style="width:24px;height:24px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">24</div></div>
+            <div style="text-align:center"><div style="width:32px;height:32px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">32</div></div>
+            <div style="text-align:center"><div style="width:48px;height:48px;background:#1E9E6F;margin:0 auto"></div><div style="font:400 10px 'Spline Sans Mono',monospace;color:#8A8579;margin-top:8px">48</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 · BUTTONS + PILLS ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">04 / Controls</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Buttons &amp; pills</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">Ink for primary action, green for go, yellow spark for marketing CTAs, ghost for everything quiet. Pills round to full.</p>
+      </div>
+      <div style="flex:1;min-width:420px">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Buttons</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:34px">
+          <button style="background:#1B1A17;color:#fff;border:none;border-radius:10px;padding:11px 18px;font:600 14px 'Schibsted Grotesk';cursor:pointer" style-hover="background:#322F29">Create view</button>
+          <button style="background:#1E9E6F;color:#fff;border:none;border-radius:10px;padding:11px 18px;font:600 14px 'Schibsted Grotesk';cursor:pointer" style-hover="background:#178A60">Mark done</button>
+          <button style="background:#FFD81F;color:#1B1A17;border:none;border-radius:10px;padding:11px 18px;font:600 14px 'Schibsted Grotesk';cursor:pointer" style-hover="background:#FFCE00">Get the app</button>
+          <button style="background:transparent;color:#3A372F;border:1px solid #DAD4C8;border-radius:10px;padding:11px 18px;font:600 14px 'Schibsted Grotesk';cursor:pointer" style-hover="background:#fff">Cancel</button>
+          <button style="width:40px;height:40px;border-radius:50%;background:#1B1A17;color:#fff;border:none;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center">↑</button>
+        </div>
+
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Suggestion chips</div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:34px">
+          <span style="background:#fff;border:1px solid #E7E2D8;border-radius:999px;padding:8px 15px;font-weight:500;font-size:13.5px;color:#3A372F;box-shadow:0 1px 2px rgba(30,28,24,.04)">What’s for dinner tonight?</span>
+          <span style="background:#fff;border:1px solid #E7E2D8;border-radius:999px;padding:8px 15px;font-weight:500;font-size:13.5px;color:#3A372F;box-shadow:0 1px 2px rgba(30,28,24,.04)">Weekend grocery run</span>
+          <span style="background:#fff;border:1px solid #E7E2D8;border-radius:999px;padding:8px 15px;font-weight:500;font-size:13.5px;color:#3A372F;box-shadow:0 1px 2px rgba(30,28,24,.04)">Who’s on school pickup?</span>
+          <span style="background:#fff;border:1px solid #E7E2D8;border-radius:999px;padding:8px 15px;font-weight:500;font-size:13.5px;color:#3A372F;box-shadow:0 1px 2px rgba(30,28,24,.04)">Pay the electricity bill</span>
+        </div>
+
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#A39E92;margin-bottom:14px">Status pills</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <span style="background:rgba(30,158,111,.12);color:#147A55;border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px">Active</span>
+          <span style="background:rgba(54,134,216,.13);color:#2E6FB8;border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px">Pending arrival</span>
+          <span style="background:rgba(217,84,63,.13);color:#B7402D;border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px">Overdue</span>
+          <span style="background:rgba(163,158,146,.18);color:#6B6862;border-radius:999px;padding:5px 12px;font-weight:600;font-size:12.5px">Archived</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 · CARDS ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">05 / Cards</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Three surfaces</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">A clean white card for content, a muted beige card for grouping, and a dark glass card that floats over a gradient for the dashboard.</p>
+      </div>
+      <div style="flex:1;min-width:420px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+        <div style="background:#fff;border:1px solid #ECE7DD;border-radius:18px;padding:18px;box-shadow:0 1px 2px rgba(30,28,24,.05),0 10px 26px -16px rgba(30,28,24,.18)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14px">This week’s chores</span><span style="color:#B8B2A4;font-size:18px;line-height:0">···</span></div>
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:2px solid #1E9E6F;background:#1E9E6F;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px">✓</span><span style="font-size:13.5px;color:#8A8579;text-decoration:line-through">Take out recycling</span></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13.5px;color:#3A372F">Water the plants</span></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13.5px;color:#3A372F">Refill dog food</span></div>
+          </div>
+        </div>
+        <div style="background:#E9E5DD;border:1px solid #E2DDD3;border-radius:18px;padding:18px">
+          <div style="font-weight:600;font-size:14px;margin-bottom:14px">Household</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:50%;background:#1E9E6F;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px">MA</span><div><div style="font-weight:600;font-size:13px">Maya</div><div style="font-size:11.5px;color:#7A766D">Parent · admin</div></div></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:50%;background:#3686D8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px">JO</span><div><div style="font-weight:600;font-size:13px">Jonah</div><div style="font-size:11.5px;color:#7A766D">Parent</div></div></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:30px;height:30px;border-radius:50%;background:#B57BD6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px">EL</span><div><div style="font-weight:600;font-size:13px">Ella</div><div style="font-size:11.5px;color:#7A766D">Kid · 12</div></div></div>
+          </div>
+        </div>
+        <div style="border-radius:18px;padding:18px;position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(22,23,28,.72),rgba(14,15,19,.82)),radial-gradient(120% 120% at 15% 0%,#2A6BB0 0%,rgba(42,107,176,0) 55%),radial-gradient(130% 120% at 95% 110%,#C2613A 0%,rgba(194,97,58,0) 55%),#13171D;border:1px solid rgba(255,255,255,.09);box-shadow:0 20px 50px -22px rgba(0,0,0,.55)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14px;color:#EDEAE3">Tonight</span><span style="color:rgba(255,255,255,.4);font-size:18px;line-height:0">···</span></div>
+          <div style="font-family:'Newsreader';font-style:italic;font-weight:500;font-size:26px;color:#fff;line-height:1.1">Pasta night</div>
+          <div style="font-size:13px;color:rgba(237,234,227,.7);margin-top:6px">Jonah cooking · 7:30pm</div>
+          <div style="display:flex;gap:7px;margin-top:16px"><span style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:#EDEAE3;border-radius:999px;padding:5px 11px;font-weight:500;font-size:11.5px">Tomatoes</span><span style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:#EDEAE3;border-radius:999px;padding:5px 11px;font-weight:500;font-size:11.5px">Basil</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 · COMMAND BAR ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">06 / Command</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Describe-it command bar</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">A floating white field over imagery. Sparkle glyph, plain placeholder, ink action button. Suggestion chips sit beneath.</p>
+      </div>
+      <div style="flex:1;min-width:420px">
+        <div style="border-radius:20px;padding:26px;background:linear-gradient(180deg,rgba(120,170,210,.55),rgba(150,180,140,.5)),#9DB4C2;position:relative">
+          <div style="background:#fff;border-radius:16px;padding:18px 18px 14px;box-shadow:0 14px 40px -16px rgba(0,0,0,.4)">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:36px"><span style="color:#1E9E6F;font-size:17px">✦</span><span style="font-size:16px;color:#9A958B">Describe what you want to plan…</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="width:30px;height:30px;border-radius:8px;background:#F1EEE7;display:flex;align-items:center;justify-content:center;color:#8A8579">📎</span>
+              <button style="background:#1B1A17;color:#fff;border:none;border-radius:9px;padding:9px 15px;font:600 13.5px 'Schibsted Grotesk';cursor:pointer">Plan it</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+            <span style="background:rgba(255,255,255,.92);border-radius:999px;padding:7px 13px;font-weight:500;font-size:12.5px;color:#3A372F">Birthday party for Ella</span>
+            <span style="background:rgba(255,255,255,.92);border-radius:999px;padding:7px 13px;font-weight:500;font-size:12.5px;color:#3A372F">Summer trip checklist</span>
+            <span style="background:rgba(255,255,255,.92);border-radius:999px;padding:7px 13px;font-weight:500;font-size:12.5px;color:#3A372F">Weekly meal plan</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 · INTEGRATION TILES ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">07 / Connect</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Integration tiles</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">White rounded tiles in a row, each a connected service, feeding a single query node anchored by the yellow spark.</p>
+      </div>
+      <div style="flex:1;min-width:420px">
+        <div style="background:#E9E5DD;border:1px solid #E2DDD3;border-radius:20px;padding:30px 24px;display:flex;flex-direction:column;align-items:center">
+          <div style="display:flex;gap:14px">
+            <div style="width:52px;height:52px;background:#fff;border-radius:14px;box-shadow:0 4px 12px -6px rgba(30,28,24,.25);display:flex;align-items:center;justify-content:center"><span style="width:18px;height:18px;border:2.5px solid #D9543F;border-radius:50%"></span></div>
+            <div style="width:52px;height:52px;background:#fff;border-radius:14px;box-shadow:0 4px 12px -6px rgba(30,28,24,.25);display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;background:#1B1A17;border-radius:4px;transform:rotate(45deg)"></span></div>
+            <div style="width:52px;height:52px;background:#fff;border-radius:14px;box-shadow:0 4px 12px -6px rgba(30,28,24,.25);display:flex;align-items:center;justify-content:center"><span style="width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 50% 50%,#3686D8 0 5px,transparent 6px),radial-gradient(circle at 50% 50%,transparent 0 7px,#3686D8 7px 9px)"></span></div>
+            <div style="width:52px;height:52px;background:#fff;border-radius:14px;box-shadow:0 4px 12px -6px rgba(30,28,24,.25);display:flex;align-items:center;justify-content:center"><span style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:16px solid #1E9E6F"></span></div>
+            <div style="width:52px;height:52px;background:#fff;border-radius:14px;box-shadow:0 4px 12px -6px rgba(30,28,24,.25);display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;border:2.5px solid #B57BD6"></span></div>
+          </div>
+          <div style="width:1px;height:24px;background:#C9C2B4"></div>
+          <div style="background:#fff;border-radius:999px;padding:9px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 16px -8px rgba(30,28,24,.3)">
+            <span style="font-weight:600;font-size:14px;color:#1B1A17">Who’s free this weekend?</span>
+            <span style="width:26px;height:26px;border-radius:50%;background:#1B1A17;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px">↑</span>
+          </div>
+          <div style="width:1px;height:24px;background:#C9C2B4"></div>
+          <div style="width:46px;height:46px;border-radius:14px;background:#FFD81F;box-shadow:0 8px 20px -8px rgba(255,216,31,.8);display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;background:#1B1A17;border-radius:3px;transform:rotate(45deg)"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 08 · DATA TABLE ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">08 / Table</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Data table with avatars</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">Quiet header, avatar + name lead column, status as a coloured pill. Rows breathe at 14px vertical.</p>
+      </div>
+      <div style="flex:1;min-width:420px">
+        <div style="background:#fff;border:1px solid #ECE7DD;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(30,28,24,.05),0 12px 28px -18px rgba(30,28,24,.18)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #F0EBE1"><span style="font-weight:600;font-size:15px">Family &amp; helpers</span><span style="font-family:'Newsreader';font-style:italic;font-weight:400;font-size:14px;color:#8A8579">6 people</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;padding:10px 20px;border-bottom:1px solid #F0EBE1;font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#A39E92"><span>Name</span><span>Status</span><span>Role</span><span>Room</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;align-items:center;padding:13px 20px;border-bottom:1px solid #F4F0E7"><span style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#1E9E6F;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">MA</span><span style="font-weight:600;font-size:13.5px">Maya Adler</span></span><span><span style="background:rgba(30,158,111,.12);color:#147A55;border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">Active</span></span><span style="font-size:13px;color:#56524B">Admin</span><span style="font-size:13px;color:#56524B">—</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;align-items:center;padding:13px 20px;border-bottom:1px solid #F4F0E7"><span style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#3686D8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">JO</span><span style="font-weight:600;font-size:13.5px">Jonah Adler</span></span><span><span style="background:rgba(30,158,111,.12);color:#147A55;border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">Active</span></span><span style="font-size:13px;color:#56524B">Parent</span><span style="font-size:13px;color:#56524B">—</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;align-items:center;padding:13px 20px;border-bottom:1px solid #F4F0E7"><span style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#B57BD6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">EL</span><span style="font-weight:600;font-size:13.5px">Ella Adler</span></span><span><span style="background:rgba(30,158,111,.12);color:#147A55;border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">Active</span></span><span style="font-size:13px;color:#56524B">Kid</span><span style="font-size:13px;color:#56524B">Loft</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;align-items:center;padding:13px 20px;border-bottom:1px solid #F4F0E7"><span style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#D9543F;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">SO</span><span style="font-weight:600;font-size:13.5px">Sofia (nanny)</span></span><span><span style="background:rgba(54,134,216,.13);color:#2E6FB8;border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">Mon–Thu</span></span><span style="font-size:13px;color:#56524B">Helper</span><span style="font-size:13px;color:#56524B">—</span></div>
+          <div style="display:grid;grid-template-columns:1.6fr 1fr 1.1fr .9fr;align-items:center;padding:13px 20px"><span style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:#A39E92;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">RO</span><span style="font-weight:600;font-size:13.5px">Robi (dog-sitter)</span></span><span><span style="background:rgba(163,158,146,.18);color:#6B6862;border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">As needed</span></span><span style="font-size:13px;color:#56524B">Helper</span><span style="font-size:13px;color:#56524B">—</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 09 · NAV RAIL ============ -->
+  <section style="max-width:1120px;margin:0 auto;padding:56px 32px;border-top:1px solid #E2DDD3">
+    <div style="display:flex;gap:48px;flex-wrap:wrap">
+      <div style="width:210px;flex:none">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">09 / Nav</div>
+        <h2 style="font-weight:700;font-size:27px;letter-spacing:-.02em;margin:10px 0 0;line-height:1.1">Left icon rail</h2>
+        <p style="font-size:14px;line-height:1.5;color:#6B6862;margin:14px 0 0">A slim vertical rail of glyph buttons. Active item carries the green wash; the brand spark sits at the foot.</p>
+      </div>
+      <div style="flex:1;min-width:420px;display:flex;gap:24px;align-items:flex-start">
+        <div style="width:60px;background:#fff;border:1px solid #ECE7DD;border-radius:18px;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:8px;box-shadow:0 1px 2px rgba(30,28,24,.05)">
+          <div style="width:38px;height:38px;border-radius:11px;background:rgba(30,158,111,.13);display:flex;align-items:center;justify-content:center"><span style="width:13px;height:13px;background:#1E9E6F;border-radius:3px"></span></div>
+          <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center"><span style="width:13px;height:13px;border:2px solid #B8B2A4;border-radius:50%"></span></div>
+          <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center"><span style="display:flex;gap:3px"><span style="width:6px;height:6px;border-radius:50%;background:#B8B2A4"></span><span style="width:6px;height:6px;border-radius:50%;background:#B8B2A4"></span></span></div>
+          <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center"><span style="display:grid;grid-template-columns:1fr 1fr;gap:3px"><span style="width:5px;height:5px;background:#B8B2A4"></span><span style="width:5px;height:5px;background:#B8B2A4"></span><span style="width:5px;height:5px;background:#B8B2A4"></span><span style="width:5px;height:5px;background:#B8B2A4"></span></span></div>
+          <div style="width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center"><span style="width:12px;height:12px;border:2px solid #B8B2A4;transform:rotate(45deg)"></span></div>
+          <div style="flex:1;min-height:14px"></div>
+          <div style="width:38px;height:38px;border-radius:11px;background:#FFD81F;display:flex;align-items:center;justify-content:center"><span style="width:11px;height:11px;background:#1B1A17;border-radius:2px;transform:rotate(45deg)"></span></div>
+        </div>
+        <div style="flex:1;align-self:stretch;min-height:300px;background:repeating-linear-gradient(135deg,#F0ECE3,#F0ECE3 11px,#EDE8DE 11px,#EDE8DE 22px);border:1px dashed #D8D2C6;border-radius:18px;display:flex;align-items:center;justify-content:center"><span style="font:400 12px 'Spline Sans Mono',monospace;color:#A39E92">app content area</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 10 · APPLIED DIRECTIONS ============ -->
+  <section style="background:#EDE9E1;border-top:1px solid #E2DDD3">
+    <div style="max-width:1120px;margin:0 auto;padding:60px 32px 72px">
+      <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#A39E92">10 / Applied</div>
+      <h2 style="font-weight:800;font-size:38px;letter-spacing:-.025em;margin:10px 0 6px;line-height:1.05">The HomeOS <span style="font-family:'Newsreader';font-style:italic;font-weight:500">“Today”</span> screen, three ways</h2>
+      <p style="font-size:16px;line-height:1.5;color:#56524B;max-width:560px;margin:0 0 36px">Same content, same tokens — three moods. Pick a direction and I’ll build it out full-fidelity.</p>
+
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+
+        <!-- A · WARM PAPER -->
+        <div style="flex:none;width:340px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#8A8579">A</span><span style="font-weight:600;font-size:14px">Warm Paper</span></div>
+          <div style="background:#F4F1EB;border:1px solid #E2DDD3;border-radius:22px;padding:18px;box-shadow:0 18px 40px -22px rgba(30,28,24,.4);height:560px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #ECE7DD;border-radius:999px;padding:8px 14px;margin-bottom:18px"><span style="color:#1E9E6F">✦</span><span style="font-family:'Newsreader';font-style:italic;font-size:14px;color:#9A958B">How can I help today?</span></div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#A39E92;margin-bottom:5px">Monday · June 22</div>
+            <div style="font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1.05;margin-bottom:16px">Good morning,<br><span style="font-family:'Newsreader';font-style:italic;font-weight:500">Maya</span></div>
+            <div style="display:flex;gap:7px;margin-bottom:16px"><span style="background:#1B1A17;color:#fff;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px">+ Add task</span><span style="background:#fff;border:1px solid #E2DDD3;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px;color:#3A372F">Meal plan</span></div>
+            <div style="background:#fff;border:1px solid #ECE7DD;border-radius:16px;padding:15px;margin-bottom:12px">
+              <div style="font-weight:600;font-size:13.5px;margin-bottom:12px">Today’s chores</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;background:#1E9E6F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">✓</span><span style="font-size:13px;color:#8A8579;text-decoration:line-through">School pickup</span></div>
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13px;color:#3A372F">Vet appointment · 4pm</span></div>
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13px;color:#3A372F">Grocery run</span></div>
+              </div>
+            </div>
+            <div style="background:#E9E5DD;border-radius:16px;padding:15px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600;font-size:13.5px">Tonight</span><span style="background:rgba(30,158,111,.14);color:#147A55;border-radius:999px;padding:3px 9px;font-weight:600;font-size:11px">Jonah</span></div>
+              <div style="font-family:'Newsreader';font-style:italic;font-weight:500;font-size:22px">Pasta night · 7:30</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- B · NIGHT GRADIENT -->
+        <div style="flex:none;width:340px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#8A8579">B</span><span style="font-weight:600;font-size:14px">Night Gradient</span></div>
+          <div style="border-radius:22px;padding:18px;box-shadow:0 18px 40px -22px rgba(30,28,24,.5);height:560px;overflow:hidden;background:linear-gradient(180deg,rgba(16,18,24,.45),rgba(12,13,18,.7)),radial-gradient(110% 80% at 12% 6%,#2F74BE 0%,rgba(47,116,190,0) 52%),radial-gradient(120% 90% at 95% 40%,#23507C 0%,rgba(35,80,124,0) 55%),radial-gradient(130% 110% at 75% 116%,#C9663C 0%,rgba(201,102,60,0) 52%),radial-gradient(120% 110% at 18% 120%,#B98A5A 0%,rgba(185,138,90,0) 48%),#11151B">
+            <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:8px 14px;margin-bottom:18px;backdrop-filter:blur(8px)"><span style="color:#FFD81F">✦</span><span style="font-family:'Newsreader';font-style:italic;font-size:14px;color:rgba(255,255,255,.7)">How can I help today?</span></div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:5px">Monday · June 22</div>
+            <div style="font-weight:800;font-size:30px;letter-spacing:-.02em;line-height:1.05;margin-bottom:16px;color:#fff">Good morning,<br><span style="font-family:'Newsreader';font-style:italic;font-weight:500">Maya</span></div>
+            <div style="display:flex;gap:7px;margin-bottom:16px"><span style="background:#fff;color:#1B1A17;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px">+ Add task</span><span style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#EDEAE3;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px">Meal plan</span></div>
+            <div style="background:linear-gradient(180deg,rgba(20,21,26,.55),rgba(14,15,20,.7));border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:15px;margin-bottom:12px;backdrop-filter:blur(14px)">
+              <div style="font-weight:600;font-size:13.5px;margin-bottom:12px;color:#EDEAE3">Today’s chores</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;background:#1E9E6F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">✓</span><span style="font-size:13px;color:rgba(255,255,255,.45);text-decoration:line-through">School pickup</span></div>
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid rgba(255,255,255,.3)"></span><span style="font-size:13px;color:#EDEAE3">Vet appointment · 4pm</span></div>
+                <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid rgba(255,255,255,.3)"></span><span style="font-size:13px;color:#EDEAE3">Grocery run</span></div>
+              </div>
+            </div>
+            <div style="background:linear-gradient(180deg,rgba(20,21,26,.55),rgba(14,15,20,.7));border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:15px;backdrop-filter:blur(14px)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600;font-size:13.5px;color:#EDEAE3">Tonight</span><span style="background:rgba(255,216,31,.18);color:#FFD81F;border-radius:999px;padding:3px 9px;font-weight:600;font-size:11px">Jonah</span></div>
+              <div style="font-family:'Newsreader';font-style:italic;font-weight:500;font-size:22px;color:#fff">Pasta night · 7:30</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- C · BOLD BLOCK -->
+        <div style="flex:none;width:340px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#8A8579">C</span><span style="font-weight:600;font-size:14px">Bold Block</span></div>
+          <div style="background:#F4F1EB;border:1px solid #E2DDD3;border-radius:22px;overflow:hidden;box-shadow:0 18px 40px -22px rgba(30,28,24,.4);height:560px">
+            <div style="background:#1E9E6F;padding:18px 18px 22px;color:#fff">
+              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.16);border-radius:999px;padding:7px 13px;margin-bottom:18px;width:fit-content"><span style="color:#FFD81F">✦</span><span style="font-family:'Newsreader';font-style:italic;font-size:13px;color:rgba(255,255,255,.85)">How can I help?</span></div>
+              <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:5px">Monday · June 22</div>
+              <div style="font-weight:800;font-size:29px;letter-spacing:-.02em;line-height:1.05">Good morning,<br><span style="font-family:'Newsreader';font-style:italic;font-weight:500">Maya</span></div>
+            </div>
+            <div style="padding:16px 18px">
+              <div style="display:flex;gap:7px;margin-bottom:14px"><span style="background:#1B1A17;color:#fff;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px">+ Add task</span><span style="background:#FFD81F;color:#1B1A17;border-radius:999px;padding:7px 13px;font-weight:600;font-size:12px">Meal plan</span></div>
+              <div style="background:#fff;border:1px solid #ECE7DD;border-radius:16px;padding:15px;margin-bottom:12px">
+                <div style="font-weight:600;font-size:13.5px;margin-bottom:12px">Today’s chores</div>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;background:#1E9E6F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px">✓</span><span style="font-size:13px;color:#8A8579;text-decoration:line-through">School pickup</span></div>
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13px;color:#3A372F">Vet appointment · 4pm</span></div>
+                  <div style="display:flex;align-items:center;gap:9px"><span style="width:17px;height:17px;border-radius:6px;border:2px solid #D8D2C6"></span><span style="font-size:13px;color:#3A372F">Grocery run</span></div>
+                </div>
+              </div>
+              <div style="background:#1B1A17;border-radius:16px;padding:15px;color:#fff">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:600;font-size:13.5px">Tonight</span><span style="background:rgba(255,216,31,.2);color:#FFD81F;border-radius:999px;padding:3px 9px;font-weight:600;font-size:11px">Jonah</span></div>
+                <div style="font-family:'Newsreader';font-style:italic;font-weight:500;font-size:22px">Pasta night · 7:30</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer style="max-width:1120px;margin:0 auto;padding:30px 32px 48px;display:flex;align-items:center;gap:10px;border-top:1px solid #E2DDD3">
+    <div style="width:20px;height:20px;border-radius:6px;background:#1E9E6F;display:flex;align-items:center;justify-content:center"><div style="width:7px;height:7px;background:#F4F1EB;border-radius:1.5px;transform:rotate(45deg)"></div></div>
+    <span style="font-weight:600;font-size:13px">HomeOS Design System</span>
+    <span style="font:400 11px 'Spline Sans Mono',monospace;color:#A39E92">· warm paper + night gradient · v1.0</span>
+  </footer>
+
+</div>
+</x-dc>
+</body>
+</html>
+

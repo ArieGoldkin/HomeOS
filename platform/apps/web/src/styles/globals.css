@@ -1,95 +1,134 @@
 /* ============================================================================
- * HomeOS — "Ocean × Rubik" design tokens (globals.css)  ·  v0.2 (2026-06-19)
+ * HomeOS — "Warm Paper × Living Green" design tokens (globals.css)  ·  v0.3 (2026-06-23)
  * ----------------------------------------------------------------------------
  * Tailwind v4 (CSS-first, no tailwind.config.js) + shadcn/ui (copy-in).
  * Single source of truth: every shadcn component inherits these variables, so
  * the skin is applied mechanically (the anti-slop defense) — never per-component.
  *
- * Source of truth for: docs/design/DESIGN.md.
- * Destination: copy to platform/apps/web/src/styles/globals.css when the
- * frontend is scaffolded (React + Vite + TS + Tailwind v4 + shadcn `init --rtl`).
+ * Source of truth: docs/design/prototype/HomeOS-Design-System.dc.html +
+ * the LIGHT/DARK maps in docs/design/prototype/HomeOS-Modern.dc.html.
+ * Spec: docs/design/DESIGN.md (v0.3). Transition: docs/design/web-redesign-plan.md.
  *
- * v0.2 extracts the LOCKED prototype (docs/design/prototype/HomeOS-Prototype.dc.html,
- * palette default "ocean") as the visual source of truth: a COOL blue-grey paper
- * (oklch hue ~225 light / ~238 night) with a single OCEAN accent (--primary). This
- * supersedes the retired v0.1 "Editorial Paper" terracotta/warm-brown/Frank-Ruhl.
- * Light is :root; the always-on tablet NIGHT variant is [data-theme="night"].
- * Colors are OKLCH and cool-tinted — never pure #000/#FFF, never zinc/slate.
+ * v0.3 replaces the cool "Ocean × Rubik" v0.2 palette with WARM CREAM PAPER surfaces
+ * (#F4F1EB paper / #FFFFFF surface / #E9E5DD muted / #1B1A17 ink) + a LIVING GREEN
+ * primary (#1E9E6F), with a bounded accent set (blue/violet/coral/spark) for people,
+ * status and event chips. Light is :root; dark is [data-theme="dark"] — now a USER
+ * toggle (default light), not the old always-on tablet "night". The dark mode is a
+ * night-gradient app background + translucent "glass" cards (--card-glass + --card-blur).
+ *
+ * NOTE (intentional translation): the prototype expresses dark --background and dark
+ * --card as multi-stop GRADIENTS. Tailwind's bg-background / bg-card utilities only
+ * paint a <color>, so the semantic --background / --card stay paintable (solid / rgba)
+ * and the gradient lives in --app-bg (painted on <body>) + --card-glass (used by the
+ * glass Card variant with backdrop-filter: var(--card-blur)). This keeps the mechanical
+ * token inheritance intact while still delivering the glass look.
+ *
+ * FONTS are unchanged here (still Rubik) — the font swap is issue #171/A2.
+ * (Superseded rules from v0.2: "OKLCH only / never #FFF or #000" and the single-accent
+ * "anti-rainbow" rule — the new system deliberately uses HEX, #FFFFFF/#1B1A17, and a
+ * bounded multi-accent palette for people/status.)
  * ========================================================================== */
 
 @import "tailwindcss";
 
-/* Night/dark variant is driven by a data attribute (manual control on the
- * always-on tablet), not only by prefers-color-scheme. `dark:` utilities map to it. */
-@custom-variant dark (&:where([data-theme="night"], [data-theme="night"] *));
+/* Dark variant is driven by a data attribute (user toggle, default light), with
+ * prefers-color-scheme only as a first-run default (wired by the ThemeProvider, #172).
+ * `dark:` utilities map to it. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ----------------------------------------------------------------------------
- * 1. SEMANTIC TOKENS — light (cool paper)
+ * 1. SEMANTIC TOKENS — light (warm paper)
  * -------------------------------------------------------------------------- */
 :root {
-  --background: oklch(0.97 0.012 225);          /* cool paper-0 */
-  --foreground: oklch(0.27 0.032 235);          /* deep cool ink, not black */
+  /* root paint: solid paper in light; the night-gradient in dark (see --app-bg below) */
+  --app-bg: #F4F1EB;
 
-  --card: oklch(0.95 0.014 225);                /* raised paper-1 */
+  --background: #F4F1EB;                          /* paper */
+  --foreground: #1B1A17;                          /* ink */
+
+  --card: #FFFFFF;                                /* surface */
   --card-foreground: var(--foreground);
-  --popover: oklch(0.95 0.014 225);
+  --card-border: #ECE7DD;                         /* card hairline */
+  --card-muted: #E9E5DD;                          /* muted/grouping card surface */
+  --card-glass: #FFFFFF;                          /* glass Card variant base (no glass in light) */
+  --card-blur: blur(0px);                         /* dark mode lifts this to blur(16px) */
+  --popover: #FFFFFF;
   --popover-foreground: var(--foreground);
 
-  --primary: oklch(0.55 0.10 228);              /* OCEAN — the ONE accent (buttons, now-line, today, ring) */
-  --primary-foreground: oklch(0.98 0.01 225);   /* paper on ocean */
+  --primary: #1E9E6F;                             /* LIVING GREEN — buttons, now-line, today, ring, reminder */
+  --primary-foreground: #FFFFFF;
 
-  --secondary: oklch(0.92 0.018 225);           /* paper-2 — absence of color, not a 2nd hue */
-  --secondary-foreground: oklch(0.34 0.028 235);
+  --secondary: #E9E5DD;                           /* muted beige — absence of color, not a 2nd hue */
+  --secondary-foreground: #3A372F;               /* ink-2 */
 
-  --muted: oklch(0.92 0.018 225);
-  --muted-foreground: oklch(0.55 0.024 232);    /* meta only (>=14px) */
+  --muted: #E9E5DD;
+  --muted-foreground: #8A8579;                    /* ink-faint — meta only (>=14px) */
 
-  --accent: oklch(0.92 0.018 225);              /* kept NEUTRAL on purpose (hover/selected = paper, not a hue) */
+  --accent: #E9E5DD;                              /* kept NEUTRAL (hover/selected = paper, not a hue) */
   --accent-foreground: var(--secondary-foreground);
 
-  --destructive: oklch(0.55 0.16 25);           /* warm-red — distinct from the cool world */
-  --destructive-foreground: oklch(0.98 0.01 225);
+  --destructive: #D9543F;                         /* coral */
+  --destructive-foreground: #FFFFFF;
 
-  --border: oklch(0.87 0.018 225);              /* cool low-chroma hairline */
-  --input: oklch(0.82 0.022 225);               /* slightly stronger */
-  --ring: var(--primary);                        /* focus ring IS ocean — single-accent in tokens */
+  --border: #E2DDD3;                              /* warm hairline */
+  --input: #D8D2C6;                               /* check/input border — slightly stronger */
+  --ring: var(--primary);                         /* focus ring IS green */
 
-  --radius: 0.75rem;                             /* 12px — prototype "calm" shape (pips/avatars stay 999px) */
+  /* bounded living-accent set — oklch(0.64 0.13 H), one chroma/lightness, hue varies.
+   * Used by people / status pills / event chips (NOT body text). Green is --primary. */
+  --blue: #3686D8;
+  --violet: #B57BD6;
+  --coral: #D9543F;
+  --spark: #FFD81F;                               /* yellow marketing/CTA spark */
 
-  /* charts: derive from the one accent + cool neutral steps (never a rainbow) */
+  /* radius scale — discrete steps (was a single 12px calc). pips/avatars stay 999px. */
+  --radius: 0.875rem;                             /* 14px (md) — the base "calm" shape */
+  --radius-card: 1.125rem;                        /* 18px — the standard content-card corner */
+
+  /* elevation — 3 quiet tiers (replaces the single --shadow-paper; kept as an alias below) */
+  --shadow-flat:  0 1px 2px rgba(30,28,24,.05);
+  --shadow-card:  0 1px 2px rgba(30,28,24,.05), 0 10px 26px -14px rgba(30,28,24,.18);
+  --shadow-float: 0 2px 4px rgba(30,28,24,.06), 0 24px 50px -20px rgba(30,28,24,.32);
+  --shadow-paper: var(--shadow-card);             /* legacy alias — existing `shadow-paper` utility */
+
+  /* charts: derive from the accent family (never a literal rainbow per-series) */
   --chart-1: var(--primary);
-  --chart-2: oklch(0.62 0.05 210);
-  --chart-3: oklch(0.70 0.035 250);
-  --chart-4: oklch(0.78 0.022 225);
-  --chart-5: oklch(0.46 0.055 200);
+  --chart-2: var(--blue);
+  --chart-3: var(--violet);
+  --chart-4: var(--coral);
+  --chart-5: #C99A2E;                             /* amber */
 
-  /* phone sidebar/nav (text labels, never emoji icons) */
-  --sidebar: oklch(0.95 0.014 225);
+  /* nav rail / sidebar (icon rail lands in #175) */
+  --rail: #FFFFFF;
+  --rail-border: #ECE7DD;
+  --nav-active: rgba(30,158,111,.13);             /* green wash on the active nav item */
+  --glyph: #9A958B;                               /* inactive rail glyph */
+  --sidebar: #FFFFFF;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.92 0.018 225);
-  --sidebar-accent-foreground: var(--secondary-foreground);
-  --sidebar-border: var(--border);
+  --sidebar-accent: var(--nav-active);
+  --sidebar-accent-foreground: var(--primary);
+  --sidebar-border: var(--rail-border);
   --sidebar-ring: var(--ring);
 
-  /* fonts: Hebrew-first; Rubik is the friendly default everywhere (MVP ships Rubik only) */
+  /* fonts: UNCHANGED in this issue (still Rubik) — the new stack is issue #171/A2 */
   --font-sans: "Rubik", system-ui, -apple-system, sans-serif;
-  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif; /* AVAILABLE — applied per-component only, never reassigned in :root */
+  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif; /* per-component only */
   --font-display: var(--font-sans);
 
-  /* -- THREE SIGNATURE TOKENS shadcn never ships (the highest-leverage anti-slop move) -- */
-  --hairline: var(--border);                     /* semantic divider color = the editorial structure */
-  --shadow-paper: inset 0 1px 0 oklch(0.995 0.01 225); /* the ONE bespoke shadow, used everywhere (no generic drop shadows) */
+  /* -- SIGNATURE TOKENS shadcn never ships -- */
+  --line: #EFEAE0;                                /* the editorial divider line (lighter than --border) */
+  --hairline: var(--line);                        /* semantic divider color */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  --grain-opacity: 0.045;                         /* near-zero by default — human-authorship signal, never noisy */
+  --grain-opacity: 0.045;                          /* near-zero — human-authorship signal, never noisy */
 
   /* family-board kind language — signal via a PIP or title-color, NEVER a colored left-border */
   --event: var(--muted-foreground);
   --task: var(--muted-foreground);
   --reminder: var(--primary);
 
-  /* WhatsApp brand green — Connections SVG / "connected" status only, NEVER the --primary accent.
+  /* WhatsApp brand green — Connections SVG / WhatsAppBubble only, NEVER the --primary accent.
    * (Assignee colors are a RUNTIME concern — see shared/lib/assignee-color.ts — not tokens.) */
   --wa-green: #3c8a52;
 
@@ -98,62 +137,95 @@
 }
 
 /* ----------------------------------------------------------------------------
- * 2. SEMANTIC TOKENS — NIGHT (always-on tablet; cool dark, never warm brown)
+ * 2. SEMANTIC TOKENS — dark (the night gradient + glass)
+ *    User toggle (default light). bg-* utilities paint solids/rgba; the multi-stop
+ *    app gradient lives in --app-bg (painted on <body>), the card gradient in
+ *    --card-glass (used by the glass Card variant with --card-blur).
  * -------------------------------------------------------------------------- */
-[data-theme="night"] {
-  --background: oklch(0.21 0.022 238);
-  --foreground: oklch(0.94 0.02 238);
+[data-theme="dark"] {
+  --app-bg:
+    linear-gradient(180deg, rgba(16,18,24,.42), rgba(12,13,18,.68)),
+    radial-gradient(90% 70% at 10% 4%, #2F74BE 0%, rgba(47,116,190,0) 50%),
+    radial-gradient(100% 80% at 96% 34%, #23507C 0%, rgba(35,80,124,0) 52%),
+    radial-gradient(120% 100% at 80% 116%, #C9663C 0%, rgba(201,102,60,0) 50%),
+    radial-gradient(110% 100% at 12% 122%, #B98A5A 0%, rgba(185,138,90,0) 46%),
+    #11151B;
 
-  --card: oklch(0.245 0.024 238);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.27 0.026 238);
-  --popover-foreground: var(--foreground);
+  --background: #11151B;                          /* solid base for bg-background utilities */
+  --foreground: #FFFFFF;                          /* ink */
 
-  --primary: oklch(0.72 0.11 222);              /* lightened ocean for contrast on dark */
-  --primary-foreground: oklch(0.20 0.022 238);
+  --card: rgba(24,25,31,.62);                     /* dark translucent card (paints via bg-card) */
+  --card-foreground: #EDEAE3;
+  --card-border: rgba(255,255,255,.10);
+  --card-muted: rgba(255,255,255,.08);
+  --card-glass: linear-gradient(180deg, rgba(24,25,31,.55), rgba(14,15,20,.72)); /* glass Card variant */
+  --card-blur: blur(16px);
+  --popover: rgba(28,30,38,.94);
+  --popover-foreground: #EDEAE3;
 
-  --secondary: oklch(0.27 0.026 238);
-  --secondary-foreground: oklch(0.84 0.018 238);
-  --muted: oklch(0.245 0.024 238);
-  --muted-foreground: oklch(0.68 0.028 238);
+  --primary: #23B083;                             /* lightened green for contrast on dark */
+  --primary-foreground: #08130D;
 
-  --accent: oklch(0.27 0.026 238);
-  --accent-foreground: oklch(0.84 0.018 238);
+  --secondary: rgba(255,255,255,.10);
+  --secondary-foreground: #EDEAE3;
 
-  --destructive: oklch(0.62 0.16 25);
-  --destructive-foreground: oklch(0.20 0.022 238);
+  --muted: rgba(255,255,255,.08);
+  --muted-foreground: rgba(237,234,227,.52);
 
-  --border: oklch(0.33 0.026 238);
-  --input: oklch(0.37 0.028 238);
+  --accent: rgba(255,255,255,.10);
+  --accent-foreground: #EDEAE3;
+
+  --destructive: #E2674F;
+  --destructive-foreground: #FFFFFF;
+
+  --border: rgba(255,255,255,.10);
+  --input: rgba(255,255,255,.16);
   --ring: var(--primary);
 
+  /* accents hold their hue in dark; chips/people use them over the gradient */
+  --blue: #5AA0E6;
+  --violet: #C79AE0;
+  --coral: #E2674F;
+  --spark: #FFD81F;
+
+  --shadow-flat:  0 1px 2px rgba(0,0,0,.4);
+  --shadow-card:  0 20px 50px -22px rgba(0,0,0,.55);
+  --shadow-float: 0 24px 60px -20px rgba(0,0,0,.6);
+  --shadow-paper: var(--shadow-card);
+
   --chart-1: var(--primary);
-  --chart-2: oklch(0.66 0.05 210);
-  --chart-3: oklch(0.74 0.035 250);
-  --chart-4: oklch(0.80 0.025 225);
-  --chart-5: oklch(0.56 0.055 200);
+  --chart-2: var(--blue);
+  --chart-3: var(--violet);
+  --chart-4: var(--coral);
+  --chart-5: #E0B65A;
 
-  --sidebar: oklch(0.245 0.024 238);
+  --rail: rgba(20,22,28,.5);
+  --rail-border: rgba(255,255,255,.09);
+  --nav-active: rgba(255,255,255,.14);
+  --glyph: rgba(237,234,227,.6);
+  --sidebar: var(--rail);
   --sidebar-foreground: var(--foreground);
-  --sidebar-accent: oklch(0.27 0.026 238);
-  --sidebar-accent-foreground: var(--secondary-foreground);
-  --sidebar-border: var(--border);
+  --sidebar-accent: var(--nav-active);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--rail-border);
 
-  --shadow-paper: none;                          /* dark mode lifts via tone steps, not a light edge */
+  --line: rgba(255,255,255,.10);
+  --hairline: var(--line);
   --grain-opacity: 0.03;
 }
 
 /* ----------------------------------------------------------------------------
  * 3. @theme inline — surface the tokens as Tailwind v4 utilities
  *    (bg-background, text-foreground, border-border, rounded-md, font-display,
- *     shadow-paper, text-reminder, etc.). `inline` = utilities read the live vars,
- *     so theme swaps just work.
+ *     shadow-card, bg-blue, bg-card-muted, text-reminder, etc.). `inline` = utilities
+ *     read the live vars, so theme swaps just work.
  * -------------------------------------------------------------------------- */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-card-muted: var(--card-muted);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -170,6 +242,14 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-hairline: var(--hairline);
+  --color-line: var(--line);
+
+  /* bounded living-accent palette */
+  --color-blue: var(--blue);
+  --color-violet: var(--violet);
+  --color-coral: var(--coral);
+  --color-spark: var(--spark);
+  --color-nav-active: var(--nav-active);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -191,34 +271,45 @@
   --color-reminder: var(--reminder);
   --color-wa-green: var(--wa-green);
 
+  --color-glyph: var(--glyph);
+  --color-rail: var(--rail);
+
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-display: var(--font-display);
 
-  /* radius scale derived from the one --radius (shadcn convention) */
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* discrete radius scale (sm 8 / md 14 / lg 20 / xl 28; card = 18 via --radius-card) */
+  --radius-sm: 0.5rem;    /* 8 */
+  --radius-md: 0.875rem;  /* 14 */
+  --radius-lg: 1.25rem;   /* 20 */
+  --radius-xl: 1.75rem;   /* 28 */
 
-  /* the bespoke shadow as a utility: shadow-paper */
+  /* elevation tiers as utilities: shadow-flat / shadow-card / shadow-float (+ legacy shadow-paper) */
+  --shadow-flat: var(--shadow-flat);
+  --shadow-card: var(--shadow-card);
+  --shadow-float: var(--shadow-float);
   --shadow-paper: var(--shadow-paper);
 }
 
 /* ----------------------------------------------------------------------------
- * 4. BASE — RTL-first, cool defaults, ledger-grade numerals
+ * 4. BASE — RTL-first, paper defaults, ledger-grade numerals
  * -------------------------------------------------------------------------- */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   html {
-    /* The app root is RTL Hebrew: <html dir="rtl" lang="he"> (scaffold with `init --rtl`). */
+    /* The app root is RTL Hebrew: <html dir="rtl" lang="he">. */
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    /* paint the root surface: solid paper (light) or the night gradient (dark).
+     * `background` (shorthand) is required because --app-bg is a multi-stop gradient in dark. */
+    background: var(--app-bg);
+    background-attachment: fixed;
+    min-block-size: 100vh;
     font-family: var(--font-sans);
   }
   /* schedule data (times, dates) reads like a well-set ledger */
@@ -226,7 +317,7 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
-  /* display face for headings/dates/event titles (Rubik by default) */
+  /* display face for headings/dates/event titles */
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
   }
@@ -237,7 +328,7 @@
  * -------------------------------------------------------------------------- */
 @layer components {
   /* paper grain: a near-invisible tactility layer = human-authorship signal.
-   * Apply to the board root: <div class="paper-grain"> ... </div> */
+   * Apply to a surface root: <div class="paper-grain"> ... </div> */
   .paper-grain {
     position: relative;
     isolation: isolate;
@@ -252,7 +343,7 @@
     opacity: var(--grain-opacity);
     mix-blend-mode: multiply;
   }
-  [data-theme="night"] .paper-grain::before {
+  [data-theme="dark"] .paper-grain::before {
     mix-blend-mode: screen;
   }
 
@@ -268,7 +359,7 @@
     animation: drawRule var(--dur) cubic-bezier(0.65, 0, 0.35, 1) both;
   }
 
-  /* signature: the ambient NOW marker on the tablet time-spine — a 1.5px ocean rule. The inline
+  /* signature: the ambient NOW marker on the time-spine — a 1.5px GREEN rule. The inline
    * `now · HH:MM` label is wrapped dir=ltr + tabular-nums by the NowLine component. */
   .now-line {
     block-size: 1.5px;
@@ -277,8 +368,7 @@
 }
 
 /* ----------------------------------------------------------------------------
- * 6. MOTION — the prototype's 5 keyframes (kept here, NOT per-component: they
- *    collide). Restrained, composite-only; reduced-motion is table stakes.
+ * 6. MOTION — restrained, composite-only; reduced-motion is table stakes.
  * -------------------------------------------------------------------------- */
 @keyframes drawRule { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes settleIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }

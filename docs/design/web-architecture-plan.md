@@ -7,10 +7,17 @@ shared per-group barrels. Supersedes the retired "Editorial Paper" palette/fonts
 
 # HomeOS Phase 6 — Family Board UI Architecture
 
+> **⚠️ Partly superseded by Phase 6b (2026-06-23).** The **three-surface** model below (kitchen-tablet kiosk /
+> phone / web, split by URL prefix) is being **collapsed into ONE responsive authenticated app**, and the visual
+> system swaps from "Ocean × Rubik" to **"Warm Paper × Living Green"** with **light + dark**. The no-auth tablet
+> kiosk is **retired**. See the new section **"Web redesign (Phase 6b)"** at the bottom, [`web-redesign-plan.md`](./web-redesign-plan.md),
+> and milestone #12. The decisions below remain accurate for the *stack* (Tailwind v4 + shadcn, TanStack, feature
+> folders, the live `GET /events` contract); the *surface split* and *palette/fonts* are what change.
+
 > Phase 6 builds the **frontend** for HomeOS: the family "board" that shows what the WhatsApp bot
-> captured. One responsive app serves three surfaces — kitchen-tablet ambient display, phone companion,
-> web dashboard. Backend (Phase 1–5) is complete and live; this is greenfield `platform/apps/web/`.
-> Source of truth = the imported Claude-design prototype (`docs/design/prototype/HomeOS-Prototype.dc.html`).
+> captured. ~~One responsive app serves three surfaces — kitchen-tablet ambient display, phone companion,
+> web dashboard.~~ *(Phase 6b: one responsive app, no surface split.)* Backend (Phase 1–5) is complete and live; this is `platform/apps/web/`.
+> Source of truth = the imported Claude-design prototypes (`docs/design/prototype/HomeOS-Modern.dc.html` + `HomeOS-Design-System.dc.html`).
 
 ## 1 Decision summary
 
@@ -361,3 +368,36 @@ note; keep §RTL, §anti-slop, §a11y.
 | **shadcn `--rtl` / style-preset maturity** | Risk | Verify with `shadcn init --dry-run` on a throwaway before building screens; fall back to neutral style + manual token apply. |
 | **WeekGrid Sunday-on-right under RTL** | Risk | DOM-order `[Sun..Sat]` test + `getBoundingClientRect` x-order check; verify gap-via-bg trick under RTL; test on the throwaway scaffold first. |
 | **`source_text` (raw forwarded Hebrew) is in the payload** | Open question | Decide deliberately whether the UI/bundle should carry it (privacy + payload weight) rather than silently shipping it. |
+
+---
+
+## Web redesign (Phase 6b · 2026-06-23) — one responsive app + "Warm Paper × Living Green"
+
+Tracked in **[`web-redesign-plan.md`](./web-redesign-plan.md)** · GitHub **milestone #12**, issues **#170–#187**.
+Produced by `/etk:auto-research` → a 7-agent analysis workflow (5 analysts → synthesis → adversarial critic).
+
+**What changes vs. the architecture above:**
+
+| Dimension | Phase 6 (above) | Phase 6b (now) |
+|---|---|---|
+| Surfaces | 3 shells split by URL (`/` kiosk, `/phone/*`, `/web/*`) | **ONE responsive AppShell** (66px icon rail ≥ md → bottom bar < md + header + scrollable main) |
+| Routing | per-surface subtrees + per-surface screen wrappers | flat single-layout tree: `/today`, `/calendar`, `/people`, `/connections`, `/settings`, `/lists` (stub); `/` → `/today`; `/welcome` + `/tokens` standalone; `/web/messages` + `/ingestion` folded into Connections |
+| Palette / fonts | Ocean (cool blue) × Rubik, single-accent, OKLCH-only | **Warm paper cream + living green #1E9E6F** + bounded accents; **Heebo/Frank Ruhl (he) / Schibsted/Newsreader (en) + Spline Mono**; HEX |
+| Theme | always-on tablet `[data-theme=night]`, no user toggle | **user light/dark toggle** (`data-theme` + ThemeProvider, localStorage, anti-FOUC); default light |
+| Kiosk | no-auth `/` ambient board (READ_TOKEN), #135/#153 exclusions | **retired** — one authenticated app; exclusion machinery removed |
+| `night` prop | drilled through board atoms (kiosk-only `true`) | **removed** — dark is a theme-context read |
+| New primitives | — | `Card` (surface/muted/glass), `StatusPill`, RTL-aware `Switch`, `ink` button |
+
+**Unchanged (still load-bearing):** Tailwind v4 + shadcn copy-in; the `@theme inline` + `@custom-variant dark` token
+mechanism (only *values* change); TanStack Router + Query; the live `GET /events` `{ events: [...] }` Bearer-gated
+contract + `savedEventSchema`; feature-folder + shared-barrel layout; assignee color as a runtime concern; the
+EventCard kind-by-form anti-slop contract; Sunday-first RTL week grid; co-located Vitest tests (TDD).
+
+**Server / contract impact:** ~98% client work. No endpoint, schema, or token-logic change. The distinct
+`READ`/`WRITE`/`MESSAGES` bearer model + the `/messages` allowlist filter are **kept**; only kiosk-referencing
+*comments* are refreshed (issue #186). **Real per-user auth is deferred** — tokens remain build-embedded
+family-shared secrets in the single Vite bundle (this was always true; there is no separate kiosk bundle).
+
+**Deferred net-new** (NOT in #12): Lists real build (+ its own backend), the agent-wired command bar, the Celebrations
+card, the Tonight-dinner banner, the full he/en language-toggle UI, real app-entry auth, tri-state system theme, and
+persisted task-`done`.
