@@ -23,12 +23,7 @@ export interface WeekGridProps {
  */
 export function WeekGrid({ days, onSelectDate, onOpenDetail, className }: WeekGridProps) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-7 gap-px overflow-hidden rounded-[var(--radius)] border border-border bg-border",
-        className,
-      )}
-    >
+    <div className={cn("grid grid-cols-7 gap-2", className)}>
       {days.map((d) => (
         <DayColumn
           key={d.dateIso}

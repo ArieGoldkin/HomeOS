@@ -1,11 +1,10 @@
 import { AppShell, ListsPlaceholder } from "@app/shell";
 import { ConnectionsView } from "@features/connections";
 import { TodayScreen } from "@features/day-view";
-import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { FamilyView } from "@features/family";
 import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
-import { WebWeekView } from "@features/week-view";
+import { CalendarScreen } from "@features/week-view";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
@@ -52,19 +51,15 @@ function TodayRoute() {
 }
 
 const calendarApi = getRouteApi("/app/calendar");
-function CalendarScreen() {
+function CalendarRoute() {
   const { date } = calendarApi.useSearch();
   const navigate = useNavigate();
-  const { selected, openDetail, closeDetail } = useEventDetail();
   return (
-    <>
-      <WebWeekView
-        dateIso={coerceDateIso(date)}
-        onSelectDate={(d) => navigate({ to: "/today", search: { date: d } })}
-        onOpenDetail={openDetail}
-      />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
-    </>
+    <CalendarScreen
+      dateIso={coerceDateIso(date)}
+      onSelectDate={(d) => navigate({ to: "/today", search: { date: d } })}
+      onChangeWeek={(anchor) => navigate({ to: "/calendar", search: { date: anchor } })}
+    />
   );
 }
 
@@ -111,7 +106,7 @@ function buildRouteTree() {
     getParentRoute: () => appRoute,
     path: "/calendar",
     validateSearch: validateDateSearch,
-    component: CalendarScreen,
+    component: CalendarRoute,
   });
 
   const peopleRoute = createRoute({

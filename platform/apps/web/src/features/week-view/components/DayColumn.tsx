@@ -36,7 +36,7 @@ export function DayColumn({
   return (
     <div
       className={cn(
-        "flex min-h-[8rem] flex-col bg-card",
+        "flex min-h-[10rem] flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--card-border)] bg-card shadow-card",
         isToday && "ring-1 ring-inset ring-primary",
       )}
     >
