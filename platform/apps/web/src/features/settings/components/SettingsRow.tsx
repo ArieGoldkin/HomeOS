@@ -30,7 +30,7 @@ export function SettingsRow({ label, value, control, onClick }: SettingsRowProps
         onClick={onClick}
         className={cn(ROW_BASE, "cursor-pointer text-start hover:bg-accent transition-colors")}
       >
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-sm font-medium text-[color:var(--ink)]">{label}</span>
         <span className="flex items-center gap-2">
           {end}
           {/* RTL chevron: "‹" points right in LTR but acts as a back-arrow in RTL,
@@ -45,7 +45,7 @@ export function SettingsRow({ label, value, control, onClick }: SettingsRowProps
 
   return (
     <div className={cn(ROW_BASE)}>
-      <span className="text-sm font-medium text-foreground">{label}</span>
+      <span className="text-sm font-medium text-[color:var(--ink)]">{label}</span>
       {end && <span className="flex items-center">{end}</span>}
     </div>
   );
