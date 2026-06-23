@@ -31,4 +31,13 @@ describe("Onboarding", () => {
     await user.click(screen.getByRole("button", { name: "חזרה" }));
     expect(screen.getByText("ברוכים הבאים ל-HomeOS")).toBeInTheDocument();
   });
+
+  it("dismisses to the board (onDone) when the close X is clicked", async () => {
+    const onDone = vi.fn();
+    const user = userEvent.setup();
+    render(<Onboarding onDone={onDone} />);
+
+    await user.click(screen.getByRole("button", { name: "סגירה" }));
+    expect(onDone).toHaveBeenCalledOnce();
+  });
 });
