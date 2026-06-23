@@ -13,10 +13,9 @@ export interface AddEventController {
 }
 
 /**
- * Shared controller for the AddEvent surfaces — the phone {@link AddEventSheet} and the web
- * {@link AddEventModal}. Owns the create mutation (`POST /events`), resets it on close, and closes on
- * success. The two surfaces differ only in their container chrome (bottom sheet vs centered modal);
- * keeping the persistence wiring here is the "no duplication" half of the shared-form contract.
+ * Controller for the AddEvent host ({@link AddEventDialog}) — owns the create mutation (`POST /events`),
+ * resets it on close, and closes on success. Kept separate from the form so the persistence wiring lives
+ * in one place (the "no duplication" half of the shared-form contract).
  */
 export function useAddEventController(
   onOpenChange: (open: boolean) => void,
