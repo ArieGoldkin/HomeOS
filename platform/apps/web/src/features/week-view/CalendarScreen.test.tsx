@@ -34,11 +34,28 @@ describe("CalendarScreen", () => {
   it("re-anchors to the next week from the nav (2026-06-21 → 2026-06-28)", () => {
     const onChangeWeek = vi.fn();
     render(
-      <QueryClientProvider client={new QueryClient()}>
-        <CalendarScreen dateIso="2026-06-21" onSelectDate={noop} onChangeWeek={onChangeWeek} />
-      </QueryClientProvider>,
+      wrap(<CalendarScreen dateIso="2026-06-21" onSelectDate={noop} onChangeWeek={onChangeWeek} />),
     );
     fireEvent.click(screen.getByRole("button", { name: "שבוע הבא" }));
+    expect(onChangeWeek).toHaveBeenCalledWith("2026-06-28");
+  });
+
+  it("re-anchors to the previous week (2026-06-21 → 2026-06-14)", () => {
+    const onChangeWeek = vi.fn();
+    render(
+      wrap(<CalendarScreen dateIso="2026-06-21" onSelectDate={noop} onChangeWeek={onChangeWeek} />),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "שבוע קודם" }));
+    expect(onChangeWeek).toHaveBeenCalledWith("2026-06-14");
+  });
+
+  it("snaps a mid-week anchor to its week start before stepping (Wed 2026-06-24 → next = 2026-06-28)", () => {
+    const onChangeWeek = vi.fn();
+    render(
+      wrap(<CalendarScreen dateIso="2026-06-24" onSelectDate={noop} onChangeWeek={onChangeWeek} />),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "שבוע הבא" }));
+    // startOfWeekSundayIso(2026-06-24)=2026-06-21, +7 → 2026-06-28 (not 2026-07-01).
     expect(onChangeWeek).toHaveBeenCalledWith("2026-06-28");
   });
 

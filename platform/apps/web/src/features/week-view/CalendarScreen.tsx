@@ -44,7 +44,7 @@ export function CalendarScreen({ dateIso, onSelectDate, onChangeWeek }: Calendar
           <div className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
             {rangeLabel}
           </div>
-          <h1 className="mt-2 font-display font-extrabold text-[34px] text-[color:var(--ink)] leading-[1.04] tracking-tight">
+          <h1 className="mt-2 font-display font-extrabold text-[34px] text-[color:var(--ink)] leading-[1.05] tracking-tight">
             {month} <span className="font-accent font-medium text-primary">{year}</span>
           </h1>
         </div>
@@ -53,17 +53,17 @@ export function CalendarScreen({ dateIso, onSelectDate, onChangeWeek }: Calendar
             type="button"
             aria-label="שבוע קודם"
             onClick={() => onChangeWeek(addDaysIso(sunday, -7))}
-            className="grid size-9 place-items-center rounded-[10px] border border-[var(--chip-border)] bg-[var(--chip-bg)] text-[color:var(--ink-2)] transition-colors hover:bg-secondary"
+            className="grid size-9 place-items-center rounded-[var(--radius-sm)] border border-[var(--chip-border)] bg-[var(--chip-bg)] text-[color:var(--ink-2)] transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            ›
+            <span aria-hidden="true">›</span>
           </button>
           <button
             type="button"
             aria-label="שבוע הבא"
             onClick={() => onChangeWeek(addDaysIso(sunday, 7))}
-            className="grid size-9 place-items-center rounded-[10px] border border-[var(--chip-border)] bg-[var(--chip-bg)] text-[color:var(--ink-2)] transition-colors hover:bg-secondary"
+            className="grid size-9 place-items-center rounded-[var(--radius-sm)] border border-[var(--chip-border)] bg-[var(--chip-bg)] text-[color:var(--ink-2)] transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            ‹
+            <span aria-hidden="true">‹</span>
           </button>
           <Button
             variant="ink"

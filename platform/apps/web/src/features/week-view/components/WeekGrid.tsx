@@ -16,8 +16,8 @@ export interface WeekGridProps {
 /**
  * The web week layout: a 7-column grid of {@link DayColumn} cells. Days are supplied Sunday→Saturday in
  * DOM order; under the app's `dir="rtl"` the grid renders them right-to-left, so Sunday sits on the
- * RIGHT and Saturday on the left. Hairline grid lines come from the `gap-px` + `bg-border` trick (each
- * cell is `bg-card`). The visual right-to-left x-order is a browser-layout property — jsdom has no
+ * RIGHT and Saturday on the left. Each day is a separate paper day-card (`gap-2`); DayColumn owns the
+ * card framing. The visual right-to-left x-order is a browser-layout property — jsdom has no
  * layout engine, so it's verified at the Playwright milestone; the unit test asserts the DOM order
  * [Sun..Sat] that drives it.
  */

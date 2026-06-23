@@ -46,6 +46,20 @@
   --background: #F4F1EB;                          /* paper */
   --foreground: #1B1A17;                          /* ink */
 
+  /* prototype-named ink scale + chrome surfaces — consumed directly via var() by the AppShell + the
+   * screen compositions (#175/#179/#180). Defined here so they aren't undefined (transparent) at runtime. */
+  --ink: #1B1A17;
+  --ink-2: #3A372F;
+  --ink-soft: #56524B;
+  --ink-faint: #8A8579;
+  --chip-bg: #FFFFFF;
+  --chip-border: #E2DDD3;
+  --header-bg: rgba(244, 241, 235, 0.82);
+  --header-border: #E5E0D6;
+  --cmd-bg: #FFFFFF;
+  --cmd-border: #E2DDD3;
+  --cmd-text: #9A958B;
+
   --card: #FFFFFF;                                /* surface */
   --card-foreground: var(--foreground);
   --card-border: #ECE7DD;                         /* card hairline */
@@ -178,6 +192,19 @@
   --card-muted: rgba(255,255,255,.08);
   --card-glass: linear-gradient(180deg, rgba(24,25,31,.55), rgba(14,15,20,.72)); /* glass Card variant */
   --card-blur: blur(16px);
+
+  /* dark ink scale + chrome surfaces (prototype DARK map) — pair with the :root defaults above. */
+  --ink: #FFFFFF;
+  --ink-2: #EDEAE3;
+  --ink-soft: rgba(237, 234, 227, 0.72);
+  --ink-faint: rgba(237, 234, 227, 0.52);
+  --chip-bg: rgba(255, 255, 255, 0.1);
+  --chip-border: rgba(255, 255, 255, 0.16);
+  --header-bg: rgba(17, 21, 27, 0.55);
+  --header-border: rgba(255, 255, 255, 0.08);
+  --cmd-bg: rgba(255, 255, 255, 0.1);
+  --cmd-border: rgba(255, 255, 255, 0.14);
+  --cmd-text: rgba(237, 234, 227, 0.7);
   --popover: rgba(28,30,38,.94);
   --popover-foreground: #EDEAE3;
 
