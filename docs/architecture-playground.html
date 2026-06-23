@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HomeOS — Architecture Playground</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0c0f0e; --panel:#131917; --panel2:#0f1413; --line:#24302c;
+    --ink:#e8efe9; --ink2:#9fb3a9; --ink3:#6c817a;
+    --green:#2dd4bf; --green-deep:#0f2a27;
+    --amber:#d29922; --blue:#388bfd; --violet:#a371f7; --coral:#f0664f;
+    --radius:14px;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  .app{display:grid;grid-template-columns:320px 1fr;height:100vh;min-height:0}
+  /* ---------- sidebar ---------- */
+  .side{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:22px}
+  .brand{display:flex;align-items:baseline;gap:8px}
+  .brand h1{font-size:17px;margin:0;letter-spacing:-.3px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  .brand .sub{font-size:11px;color:var(--ink3);font-family:var(--mono)}
+  .group{display:flex;flex-direction:column;gap:9px}
+  .group > .label{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+  .presets{display:flex;flex-direction:column;gap:6px}
+  .preset{appearance:none;cursor:pointer;text-align:start;border:1px solid var(--line);background:var(--panel2);color:var(--ink2);
+    border-radius:10px;padding:9px 11px;font-size:13px;font-family:var(--sans);transition:.12s;display:flex;flex-direction:column;gap:2px}
+  .preset:hover{border-color:#39463f;color:var(--ink)}
+  .preset.active{border-color:var(--green);background:var(--green-deep);color:#aef5ec}
+  .preset small{font-size:11px;color:var(--ink3);font-weight:400}
+  .preset.active small{color:#6fb5ab}
+  .toggles{display:flex;flex-direction:column;gap:7px}
+  .tg{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--ink2);user-select:none}
+  .tg input{display:none}
+  .tg .sw{width:30px;height:18px;border-radius:10px;background:#27322e;position:relative;transition:.15s;flex:0 0 auto}
+  .tg .sw::after{content:"";position:absolute;top:2px;inset-inline-start:2px;width:14px;height:14px;border-radius:50%;background:#6c817a;transition:.15s}
+  .tg input:checked + .sw{background:var(--green-deep)}
+  .tg input:checked + .sw::after{inset-inline-start:14px;background:var(--green)}
+  .tg .chip{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+  .notes{width:100%;min-height:66px;resize:vertical;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);font-family:var(--sans);font-size:13px;padding:9px 10px}
+  .notes::placeholder{color:var(--ink3)}
+  .foot{margin-top:auto;font-size:11px;color:var(--ink3);font-family:var(--mono);line-height:1.6;border-top:1px solid var(--line);padding-top:12px}
+  /* ---------- main ---------- */
+  .main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .head{padding:18px 24px 8px;border-bottom:1px solid var(--line)}
+  .head h2{margin:0 0 4px;font-size:18px;letter-spacing:-.3px}
+  .head p{margin:0;color:var(--ink2);font-size:13px;max-width:880px}
+  .canvas{flex:1;overflow:auto;padding:22px 24px;min-height:0}
+  .diagram{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;overflow:auto}
+  .diagram svg{max-width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:14px 2px 0;font-size:11.5px;color:var(--ink2);font-family:var(--mono)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  /* stack */
+  .stack{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .scol{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px}
+  .scol h3{margin:0 0 10px;font-size:12px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+  .scol h3 i{width:9px;height:9px;border-radius:3px}
+  .scol ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+  .scol li{display:flex;flex-direction:column;gap:1px}
+  .scol li b{font-weight:600;font-size:13px}
+  .scol li small{color:var(--ink3);font-size:11.5px;font-family:var(--mono)}
+  /* prompt bar */
+  .promptbar{border-top:1px solid var(--line);background:var(--panel2);padding:12px 24px;display:flex;gap:14px;align-items:flex-start}
+  .promptbar .txt{flex:1;font-family:var(--mono);font-size:12px;color:var(--ink2);white-space:pre-wrap;max-height:96px;overflow:auto}
+  .copy{appearance:none;cursor:pointer;border:1px solid var(--green);background:var(--green-deep);color:#aef5ec;border-radius:10px;
+    padding:9px 16px;font-size:13px;font-weight:600;white-space:nowrap;transition:.12s}
+  .copy:hover{background:#143a35}
+  .hidden{display:none!important}
+  @media (max-width:880px){.app{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="side">
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>HomeOS</h1>
+        <div class="sub">architecture · 2026-06</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">View</div>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Layers</div>
+      <div class="toggles" id="layers"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Focus / notes</div>
+      <textarea class="notes" id="notes" placeholder="e.g. explain how voice notes (M2b) will graft onto the parse seam"></textarea>
+    </div>
+
+    <div class="foot" id="foot"></div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <main class="main">
+    <div class="head">
+      <h2 id="title"></h2>
+      <p id="desc"></p>
+    </div>
+    <div class="canvas">
+      <div class="diagram" id="diagram"></div>
+      <div class="legend" id="legend"></div>
+      <div class="stack" id="stack"></div>
+    </div>
+    <div class="promptbar">
+      <div class="txt" id="prompt"></div>
+      <button class="copy" id="copy">Copy prompt</button>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   Data — real HomeOS structure (WhatsApp-first Hebrew family OS)
+   ============================================================ */
+
+const LAYER_COLORS = {
+  server:"#d29922", web:"#388bfd", shared:"#a371f7", external:"#f0664f", infra:"#2dd4bf"
+};
+
+const CLASSDEFS = `
+  classDef server fill:#2a230f,stroke:#d29922,color:#f5e6c0,stroke-width:1.5px
+  classDef web    fill:#11203a,stroke:#388bfd,color:#cfe2ff,stroke-width:1.5px
+  classDef shared fill:#1a1420,stroke:#a371f7,color:#e7d9ff,stroke-width:1.5px
+  classDef ext    fill:#2a1512,stroke:#f0664f,color:#ffd6cc,stroke-width:1.5px
+  classDef infra  fill:#0f2a27,stroke:#2dd4bf,color:#aef5ec,stroke-width:1.5px
+  classDef gate   fill:#14110a,stroke:#d29922,color:#f5e6c0,stroke-dasharray:4 3
+`;
+
+// Each view: title, desc, the layers it touches, and a function that
+// builds the mermaid source from the set of *enabled* layers.
+const VIEWS = {
+  full: {
+    label:"Full system",
+    blurb:"end-to-end: WhatsApp → bot → board",
+    title:"Full system — forward a Hebrew message, get a structured event",
+    desc:"A family member forwards a Hebrew WhatsApp message. Meta's official WhatsApp Business API hits the Hono webhook; the server acks 200 immediately, then asynchronously runs the allowlist gate, parses with Claude, persists to SQLite, and sends a Hebrew confirmation. The same store backs the responsive web board.",
+    layers:["external","server","shared","web","infra"],
+    build(L){
+      const n=[];
+      if(L.external) n.push(
+        'U["👨‍👩‍👧 Family member<br/><i>forwards Hebrew msg</i>"]:::ext',
+        'WABA["Meta WhatsApp<br/>Business API"]:::ext',
+        'CLAUDE["Anthropic API<br/><i>claude-haiku-4-5</i>"]:::ext');
+      if(L.server) n.push(
+        'subgraph SRV["@homeos/server · Node + Hono"]',
+        '  HTTP["http/ — webhook<br/>+ GET /events,/messages"]:::server',
+        '  WA["whatsapp/ — verify sig<br/>allowlist gate"]:::server',
+        '  CORE["core/handler — orchestrate<br/><i>ack-then-process</i>"]:::server',
+        '  PARSE["parsing/ — build prompt<br/>→ ParsedEvent"]:::server',
+        '  DB["db/ — EventStore<br/>node:sqlite"]:::server',
+        'end');
+      if(L.web) n.push(
+        'subgraph WEBAPP["@homeos/web · React 19 + Vite"]',
+        '  SHELL["AppShell + flat router"]:::web',
+        '  Q["TanStack Query"]:::web',
+        'end');
+      if(L.shared) n.push('SH["@homeos/shared<br/>zod contract"]:::shared');
+      if(L.infra) n.push('RW["Railway<br/><i>prod deploy</i>"]:::infra');
+      const e=[];
+      if(L.external&&L.server){
+        e.push('U -->|forward| WABA','WABA -->|webhook POST| HTTP','HTTP -.->|verify| WA','WA --> CORE',
+               'CORE --> PARSE','PARSE -->|extract| CLAUDE','CLAUDE -->|JSON| PARSE','CORE -->|Hebrew confirm| WABA','WABA -->|reply| U');
+      }
+      if(L.server) e.push('PARSE --> DB','CORE --> DB');
+      if(L.server&&L.shared){ e.push('PARSE -.->|produces| SH'); }
+      if(L.web&&L.server) e.push('Q -->|GET /events,/messages| HTTP');
+      if(L.web) e.push('SHELL --> Q');
+      if(L.web&&L.shared) e.push('Q -.->|consumes| SH');
+      if(L.infra&&L.server) e.push('RW -.-> SRV');
+      if(L.infra&&L.web) e.push('RW -.-> WEBAPP');
+      return `flowchart TB\n${n.join('\n')}\n${e.join('\n')}\n${CLASSDEFS}`;
+    }
+  },
+
+  ingest: {
+    label:"Ingestion pipeline",
+    blurb:"webhook → parse → SQLite → confirm",
+    title:"Ingestion pipeline — ack-then-process, idempotent, fail-closed",
+    desc:"The load-bearing flow. The webhook returns 200 first (Meta retries aggressively), then work happens async and idempotently on wa_message_id. Only allowlisted forwards are processed — the privacy red line. Every inbound is persisted with an outcome (parsed / clarified / refused / rate_limited / text_only) which the Connections 'recent ingestion' feed surfaces.",
+    layers:["external","server","shared"],
+    build(L){
+      // sequence diagram reads best for this flow
+      return `sequenceDiagram
+  autonumber
+  participant U as Family member
+  participant M as Meta WABA
+  participant H as http/ (Hono)
+  participant C as core/handler
+  participant P as parsing/ + Claude
+  participant D as db/ EventStore (SQLite)
+  U->>M: forward Hebrew message
+  M->>H: POST /webhook
+  H-->>M: 200 OK (ack first)
+  Note over H,C: async — idempotent on wa_message_id
+  H->>C: enqueue inbound
+  C->>C: allowlist gate (privacy red line)
+  C->>D: persist inbound_message (status=pending)
+  C->>P: parse(text) → ParsedEvent
+  P-->>C: {kind,title_he,date_iso,time,...}
+  alt parsed cleanly
+    C->>D: insert event + markDone(outcome=parsed)
+    C->>M: Hebrew confirm ✓
+  else needs clarification
+    C->>M: ask a Hebrew question (outcome=clarified)
+  else not allowlisted / non-text / over quota
+    C->>D: markDone(outcome=refused | text_only | rate_limited)
+  end
+  M-->>U: reply on WhatsApp`;
+    }
+  },
+
+  monorepo: {
+    label:"Monorepo",
+    blurb:"pnpm workspace · 3 packages",
+    title:"Monorepo — pnpm workspace under platform/",
+    desc:"All code lives in platform/ so the repo root stays clean and node_modules is isolated. The shared package is the contract seam: the server produces ParsedEvent/SavedEvent, the web app consumes them — neither depends on the other directly.",
+    layers:["server","web","shared"],
+    build(L){
+      const n=['ROOT["platform/ · pnpm workspace"]:::infra'];
+      if(L.server) n.push(
+        'subgraph S["apps/server — @homeos/server"]',
+        '  S1["http · whatsapp · core"]:::server',
+        '  S2["parsing · db"]:::server',
+        'end');
+      if(L.web) n.push(
+        'subgraph W["apps/web — @homeos/web"]',
+        '  W1["app/shell · router"]:::web',
+        '  W2["features/* · shared/{ui,board,api}"]:::web',
+        'end');
+      if(L.shared) n.push('SH["packages/shared — @homeos/shared<br/><i>zod ParsedEvent · SavedEvent · InboundMessage</i>"]:::shared');
+      const e=['ROOT --> S','ROOT --> W','ROOT --> SH'];
+      if(L.server&&L.shared) e.push('S -->|depends on| SH');
+      if(L.web&&L.shared) e.push('W -->|depends on| SH');
+      return `flowchart TB\n${n.join('\n')}\n${e.join('\n')}\n${CLASSDEFS}`;
+    }
+  },
+
+  web: {
+    label:"Web app",
+    blurb:"one responsive AppShell + screens",
+    title:"Web app — one responsive shell, paper+green design system",
+    desc:"The kiosk/phone/web split was retired (#175–#178) into a single authenticated AppShell: an icon rail ≥md collapses to a bottom bar below. A flat router serves six screens, all re-skinned onto the warm-paper + living-green tokens with a light/dark toggle. Data is TanStack Query over the server's read endpoints.",
+    layers:["web","server","shared"],
+    build(L){
+      const n=[];
+      if(L.web){
+        n.push(
+          'subgraph SHELL["AppShell — icon rail ≥md / bottom bar <md + theme toggle"]',
+          '  T["/today<br/>greeting + card grid"]:::web',
+          '  C["/calendar<br/>responsive week"]:::web',
+          '  P["/people<br/>avatar data table"]:::web',
+          '  CN["/connections<br/>channel + ingestion feed"]:::web',
+          '  ST["/settings"]:::web',
+          '  LS["/lists <i>(stub)</i>"]:::web',
+          'end',
+          'DS["design system<br/>tokens · Heebo/Frank-Ruhl · Card/StatusPill"]:::web',
+          'HK["TanStack Query hooks<br/>useEvents · useMessages"]:::web');
+      }
+      if(L.server) n.push('API["@homeos/server<br/>GET /events · /messages"]:::server');
+      if(L.shared) n.push('SH["@homeos/shared<br/>SavedEvent · InboundMessage"]:::shared');
+      const e=[];
+      if(L.web){
+        e.push('T-->HK','C-->HK','P-->HK','CN-->HK','T-.->DS','CN-.->DS','P-.->DS');
+      }
+      if(L.web&&L.server) e.push('HK -->|Bearer tokens| API');
+      if(L.web&&L.shared) e.push('HK -.->|typed by| SH');
+      if(L.server&&L.shared) e.push('API -.->|typed by| SH');
+      return `flowchart TB\n${n.join('\n')}\n${e.join('\n')}\n${CLASSDEFS}`;
+    }
+  },
+
+  contract: {
+    label:"Data contract",
+    blurb:"shared zod schemas",
+    title:"Data contract — @homeos/shared as the seam",
+    desc:"The single source of truth for shapes crossing the wire. The server validates inbound + emits these; the web app parses responses against the same schemas, so any drift fails loudly at the boundary, never silently in the UI. InboundMessage carries the outcome the Connections feed renders; it is tenant-ready (family_id) without being an event.",
+    layers:["shared","server","web"],
+    build(L){
+      const n=[
+        'PE["ParsedEvent<br/><i>parser output</i>"]:::shared',
+        'SE["SavedEvent<br/><i>board row: id, kind, title_he,<br/>date_iso, time, assignee, source_text</i>"]:::shared',
+        'IM["InboundMessage<br/><i>raw feed: outcome, type,<br/>received_at, family_id</i>"]:::shared'];
+      if(L.server) n.push('PROD["server: parsing/ + db/"]:::server');
+      if(L.web) n.push('CONS["web: useEvents / useMessages"]:::web');
+      const e=['PE -->|persisted as| SE'];
+      if(L.server) e.push('PROD -->|produces| PE','PROD -->|writes| IM');
+      if(L.web) e.push('SE -->|consumed by| CONS','IM -->|consumed by| CONS');
+      return `flowchart LR\n${n.join('\n')}\n${e.join('\n')}\n${CLASSDEFS}`;
+    }
+  }
+};
+
+const STACK = {
+  server:{ label:"Server", color:LAYER_COLORS.server, items:[
+    ["Node ≥22 via tsx","no build step"],
+    ["Hono","HTTP + webhook routing"],
+    ["@anthropic-ai/sdk","claude-haiku-4-5 · ANTHROPIC_MODEL"],
+    ["node:sqlite","behind an EventStore interface"],
+    ["WhatsApp Business API","official + allowlist only"],
+  ]},
+  web:{ label:"Web", color:LAYER_COLORS.web, items:[
+    ["React 19 + Vite","strict TS, no build step in dev"],
+    ["Tailwind v4 + shadcn tokens","paper+green design system"],
+    ["TanStack Router","flat typed routes"],
+    ["TanStack Query","GET /events · /messages"],
+    ["Zustand","useThemeMode (light/dark)"],
+    ["Fontsource","Heebo · Frank Ruhl Libre · Spline Mono"],
+  ]},
+  shared:{ label:"Shared", color:LAYER_COLORS.shared, items:[
+    ["zod/v4","ParsedEvent · SavedEvent · InboundMessage"],
+    ["@homeos/shared","produced by server, consumed by web"],
+  ]},
+  external:{ label:"External", color:LAYER_COLORS.external, items:[
+    ["Meta WhatsApp BA","inbound forwards + outbound confirms"],
+    ["Anthropic","Hebrew message → structured event"],
+  ]},
+  infra:{ label:"Tooling & infra", color:LAYER_COLORS.infra, items:[
+    ["pnpm workspaces","platform/ monorepo"],
+    ["Vitest","unit + msw, no live network"],
+    ["Biome","lint + format (CI gate)"],
+    ["Railway","prod · push to production branch"],
+    ["Asia/Jerusalem","all dates anchored here"],
+  ]},
+};
+
+/* ============================================================ */
+const state = {
+  view:"full",
+  layers:{ server:true, web:true, shared:true, external:true, infra:true },
+  notes:""
+};
+
+const $ = s => document.querySelector(s);
+
+// ---- build sidebar presets
+const presetsEl = $("#presets");
+Object.entries(VIEWS).forEach(([k,v])=>{
+  const b=document.createElement("button");
+  b.className="preset"; b.dataset.k=k;
+  b.innerHTML=`<span>${v.label}</span><small>${v.blurb}</small>`;
+  b.onclick=()=>{ state.view=k; syncPresets(); updateAll(); };
+  presetsEl.appendChild(b);
+});
+function syncPresets(){ document.querySelectorAll(".preset").forEach(p=>p.classList.toggle("active",p.dataset.k===state.view)); }
+
+// ---- build layer toggles
+const layersEl = $("#layers");
+const LAYER_LABELS={server:"Server",web:"Web app",shared:"Shared contract",external:"External APIs",infra:"Infra / deploy"};
+Object.keys(state.layers).forEach(k=>{
+  const lab=document.createElement("label"); lab.className="tg";
+  lab.innerHTML=`<input type="checkbox" ${state.layers[k]?"checked":""}/><span class="sw"></span>
+    <span class="chip" style="background:${LAYER_COLORS[k]}"></span><span>${LAYER_LABELS[k]}</span>`;
+  lab.querySelector("input").onchange=e=>{ state.layers[k]=e.target.checked; updateAll(); };
+  layersEl.appendChild(lab);
+});
+
+$("#notes").oninput=e=>{ state.notes=e.target.value; updatePrompt(); };
+
+// ---- mermaid
+const mermaidReady = !!window.mermaid;
+if(mermaidReady){
+  mermaid.initialize({startOnLoad:false, theme:"dark", securityLevel:"loose",
+    themeVariables:{fontSize:"13px",fontFamily:"-apple-system,Segoe UI,Roboto,sans-serif",
+      lineColor:"#4a5a54", primaryColor:"#131917", primaryBorderColor:"#2dd4bf"}});
+}
+let diagSeq=0;
+async function renderDiagram(){
+  const view=VIEWS[state.view];
+  const src=view.build(state.layers);
+  const box=$("#diagram");
+  if(!mermaidReady){
+    box.innerHTML=`<div style="color:#d29922;font-size:12px;margin-bottom:8px">⚠ offline — showing diagram source</div>
+      <pre style="white-space:pre;font-family:var(--mono);font-size:12px;color:#9fb3a9;margin:0">${src.replace(/</g,"&lt;")}</pre>`;
+    return;
+  }
+  try{
+    const id="m"+(++diagSeq);
+    const {svg}=await mermaid.render(id,src);
+    box.innerHTML=svg;
+  }catch(err){
+    box.innerHTML=`<div style="color:#f0664f;font-size:12px;margin-bottom:8px">diagram error — source below</div>
+      <pre style="white-space:pre;font-family:var(--mono);font-size:12px;color:#9fb3a9;margin:0">${src.replace(/</g,"&lt;")}</pre>`;
+  }
+}
+
+// ---- legend (which layers are visible)
+function renderLegend(){
+  const view=VIEWS[state.view];
+  const items=view.layers.filter(l=>state.layers[l]);
+  $("#legend").innerHTML=items.map(l=>
+    `<span><i style="background:${LAYER_COLORS[l]}"></i>${LAYER_LABELS[l]}</span>`).join("")
+    || `<span style="color:#6c817a">all layers hidden — toggle one back on</span>`;
+}
+
+// ---- tech stack (only the columns relevant to the active view + enabled)
+function renderStack(){
+  const view=VIEWS[state.view];
+  const cols=Object.keys(STACK).filter(k=> view.layers.includes(k) && state.layers[k]);
+  $("#stack").innerHTML=cols.map(k=>{
+    const s=STACK[k];
+    return `<div class="scol"><h3><i style="background:${s.color}"></i>${s.label}</h3><ul>${
+      s.items.map(([a,b])=>`<li><b>${a}</b><small>${b}</small></li>`).join("")}</ul></div>`;
+  }).join("");
+}
+
+// ---- prompt output
+function updatePrompt(){
+  const view=VIEWS[state.view];
+  const on=Object.keys(state.layers).filter(l=>state.layers[l]);
+  const off=Object.keys(state.layers).filter(l=>!state.layers[l]);
+  const parts=[];
+  parts.push(`I'm looking at the HomeOS architecture — the "${view.label}" view.`);
+  parts.push(view.desc);
+  if(off.length) parts.push(`(Focused on ${on.map(l=>LAYER_LABELS[l]).join(", ")}; hiding ${off.map(l=>LAYER_LABELS[l]).join(", ")}.)`);
+  if(state.notes.trim()) parts.push(`\nWhat I want help with:\n${state.notes.trim()}`);
+  else parts.push(`\nWalk me through this view and where I'd extend it.`);
+  $("#prompt").textContent=parts.join(" ").replace(" \n","\n");
+}
+
+function renderHead(){
+  const v=VIEWS[state.view];
+  $("#title").textContent=v.title;
+  $("#desc").textContent=v.desc;
+}
+$("#foot").innerHTML=`M1 echo ✅ · M2 parse+confirm ✅<br/>web redesign #12: 22/27 · next M2b voice<br/>solo dev · ≤ $100/mo · evenings`;
+
+function updateAll(){ renderHead(); renderDiagram(); renderLegend(); renderStack(); updatePrompt(); }
+
+$("#copy").onclick=async()=>{
+  try{ await navigator.clipboard.writeText($("#prompt").textContent);
+    const b=$("#copy"); const t=b.textContent; b.textContent="Copied!"; setTimeout(()=>b.textContent=t,1200);
+  }catch{ const b=$("#copy"); b.textContent="Copy failed"; setTimeout(()=>b.textContent="Copy prompt",1200); }
+};
+
+// boot
+syncPresets();
+updateAll();
+</script>
+</body>
+</html>
