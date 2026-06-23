@@ -2,11 +2,11 @@ import type { SavedEvent, SavedEventSource } from "@homeos/shared";
 import type { ReactNode } from "react";
 
 /**
- * #153 — the event-detail body: the ORIGINAL forwarded text + a human source label + when it was
- * captured. Pure/presentational (takes a {@link SavedEvent} directly, like EventCard). Hosted ONLY in the
- * phone Sheet / web Modal — NEVER on the no-auth tablet kiosk, because `source_text` is other people's
- * words (Meta single-purpose + outsider privacy, the #153 security line). The kiosk-exclusion is enforced
- * one level up: EventCard is only interactive when given `onOpenDetail`, which TabletBoard never passes.
+ * The event-detail body: the ORIGINAL forwarded text + a human source label + when it was captured.
+ * Pure/presentational (takes a {@link SavedEvent} directly, like EventCard). Hosted in the responsive
+ * detail Dialog. NOTE (#184): `source_text` (which can be other people's words) now renders in the single
+ * AUTHENTICATED app — the prior #153 exclusion, which kept it off the retired ambient surface, is
+ * consciously relaxed since that surface no longer exists.
  */
 
 // Full provenance labels (the detail names every source; ProviderBadge stays gmail/gcal-only). Latin runs
@@ -44,7 +44,9 @@ export function EventDetail({ event }: EventDetailProps) {
       <section>
         <h3 className="mb-1 text-[13px] font-medium text-muted-foreground">ההודעה המקורית</h3>
         {text ? (
-          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">{text}</p>
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-[color:var(--ink)]">
+            {text}
+          </p>
         ) : (
           <p className="text-[15px] text-muted-foreground">אין טקסט מקורי</p>
         )}
@@ -55,14 +57,14 @@ export function EventDetail({ event }: EventDetailProps) {
           {event.source && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">מקור:</dt>
-              <dd className="text-foreground">{SOURCE_LABEL[event.source]}</dd>
+              <dd className="text-[color:var(--ink)]">{SOURCE_LABEL[event.source]}</dd>
             </div>
           )}
           {created && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">נוצר:</dt>
               {/* bidi-isolate: the date carries Latin digits inside Hebrew → keep it from reordering. */}
-              <dd className="text-foreground">
+              <dd className="text-[color:var(--ink)]">
                 <bdi>{created}</bdi>
               </dd>
             </div>

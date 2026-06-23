@@ -4,9 +4,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { AddEventSheet } from "./AddEventSheet";
+import { AddEventDialog } from "./AddEventDialog";
 
-// AddEventSheet now persists via useCreateEvent (POST /events, stubbed by the global msw handler that
+// AddEventDialog persists via useCreateEvent (POST /events, stubbed by the global msw handler that
 // echoes the body back as a SavedEvent id:999), so it needs a QueryClientProvider.
 function Harness({ onCreate }: { onCreate?: (e: ParsedEvent) => void }) {
   const [open, setOpen] = useState(false);
@@ -15,7 +15,7 @@ function Harness({ onCreate }: { onCreate?: (e: ParsedEvent) => void }) {
       <button type="button" onClick={() => setOpen(true)}>
         פתח
       </button>
-      <AddEventSheet open={open} onOpenChange={setOpen} onCreate={onCreate} />
+      <AddEventDialog open={open} onOpenChange={setOpen} onCreate={onCreate} />
     </>
   );
 }
@@ -29,7 +29,7 @@ function renderHarness(props: { onCreate?: (e: ParsedEvent) => void } = {}) {
   );
 }
 
-describe("AddEventSheet", () => {
+describe("AddEventDialog (the unified responsive Add host)", () => {
   it("opens the form in a dialog and closes on cancel", async () => {
     const user = userEvent.setup();
     renderHarness();
@@ -57,7 +57,7 @@ describe("AddEventSheet", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("keeps the sheet open and shows an error when the create fails", async () => {
+  it("keeps the dialog open and shows an error when the create fails", async () => {
     const { server } = await import("../../test/msw/server");
     const { HttpResponse, http } = await import("msw");
     server.use(http.post("*/events", () => new HttpResponse("err", { status: 500 })));

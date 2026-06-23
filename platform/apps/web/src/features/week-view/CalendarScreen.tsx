@@ -1,4 +1,4 @@
-import { AddEventModal } from "@features/add-event";
+import { AddEventDialog } from "@features/add-event";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { useWeekDays } from "@shared/hooks";
 import { addDaysIso, startOfWeekSundayIso } from "@shared/lib";
@@ -103,8 +103,8 @@ export function CalendarScreen({ dateIso, onSelectDate, onChangeWeek }: Calendar
         </>
       )}
 
-      <AddEventModal open={addOpen} onOpenChange={setAddOpen} />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
+      <AddEventDialog open={addOpen} onOpenChange={setAddOpen} />
+      <EventDetailDrawer event={selected} onClose={closeDetail} />
     </div>
   );
 }

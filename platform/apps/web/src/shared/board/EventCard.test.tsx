@@ -107,9 +107,9 @@ describe("EventCard (canonical anti-slop spec)", () => {
     expect(screen.queryByTestId("provider-badge")).toBeNull();
   });
 
-  // #153 — interactive ONLY when given onOpenDetail (the kiosk-exclusion mechanism).
-  describe("#153 onOpenDetail", () => {
-    it("is INERT (no button) when onOpenDetail is omitted — the kiosk default", () => {
+  // Interactive ONLY when given onOpenDetail — a presentational contract, not a security boundary (#184).
+  describe("onOpenDetail (presentational contract)", () => {
+    it("is INERT (no button) when onOpenDetail is omitted", () => {
       render(<EventCard event={make({ title_he: "ישיבה" })} />);
       expect(screen.queryByRole("button")).toBeNull();
     });

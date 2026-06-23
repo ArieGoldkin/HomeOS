@@ -9,7 +9,7 @@ export interface TimeSpineProps {
   /** Current time as `HH:MM`; when set, a NowLine is injected at its position. */
   nowTime?: string | null;
   density?: "compact" | "comfortable";
-  /** #153 — pass-through to each EventCard: when set, cards open the detail drawer; omitted ⇒ inert (kiosk). */
+  /** Pass-through to each EventCard: when set, cards open the detail drawer; omitted ⇒ inert (presentational). */
   onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
 }

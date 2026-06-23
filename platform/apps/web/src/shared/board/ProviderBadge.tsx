@@ -4,9 +4,8 @@ import type { ReactNode } from "react";
 /**
  * #151 — a quiet provenance marker shown ONLY on provider-synced rows (Gmail / Google Calendar), so a
  * glance distinguishes a synced item from a forwarded/added one. Forwarded WhatsApp and web-added rows
- * are the local default and render NOTHING (returns null). It shows provenance, not `source_text`, so it
- * is safe on every surface incl. the kitchen-tablet kiosk (the detail drawer, which shows the original
- * text, is the phone/web-only surface — see #153).
+ * are the local default and render NOTHING (returns null). It shows provenance, not `source_text` (the
+ * original text lives only in the detail drawer).
  *
  * F3 — the Latin "Gmail" run is wrapped in <bdi> so the Hebrew↔Latin boundary (the neutral hyphen) can't
  * flip under bidi reordering in the RTL label (DESIGN.md §11, matching EventCard's dir="ltr" time atom).
