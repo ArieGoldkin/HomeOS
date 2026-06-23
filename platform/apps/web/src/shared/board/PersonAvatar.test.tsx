@@ -1,7 +1,11 @@
 import { assigneeColor } from "@shared/lib";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { PersonAvatar } from "./PersonAvatar";
+
+afterEach(() => {
+  delete document.documentElement.dataset.theme;
+});
 
 const styleOf = (el: ChildNode | null) =>
   (el instanceof Element ? (el.getAttribute("style") ?? "") : "").toLowerCase();
@@ -21,8 +25,9 @@ describe("PersonAvatar", () => {
     expect(styleOf(container.firstChild)).toContain(rgb(assigneeColor("אבא").light));
   });
 
-  it("uses the night color set when night", () => {
-    const { container } = render(<PersonAvatar name="אבא" night />);
+  it("uses the night color set under data-theme=dark", () => {
+    document.documentElement.dataset.theme = "dark";
+    const { container } = render(<PersonAvatar name="אבא" />);
     expect(styleOf(container.firstChild)).toContain(rgb(assigneeColor("אבא").night));
   });
 

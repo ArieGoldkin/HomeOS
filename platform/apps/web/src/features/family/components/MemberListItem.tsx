@@ -19,7 +19,7 @@ export interface MemberListItemProps {
 export function MemberListItem({ name, subtitle, online = false, className }: MemberListItemProps) {
   return (
     <div className={cn("flex min-h-11 items-center gap-3 py-1", className)}>
-      <PersonAvatar name={name} size={36} night={false} />
+      <PersonAvatar name={name} size={36} />
 
       <div className="min-w-0 flex-1">
         <p className="font-medium leading-snug text-foreground">{name}</p>

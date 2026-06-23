@@ -22,7 +22,6 @@ export function TabletBoard() {
         tomorrow={tomorrow}
         nowTime={nowTime}
         moreCount={moreCount}
-        night
       />
     </TabletShell>
   );

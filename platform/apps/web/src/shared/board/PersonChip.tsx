@@ -1,4 +1,5 @@
 import { assigneeColor, cn } from "@shared/lib";
+import { useThemeMode } from "@shared/theme";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { CSSProperties, HTMLAttributes } from "react";
 
@@ -23,8 +24,6 @@ export interface PersonChipProps
   name: string;
   /** Selected/pressed state. Narrowed to boolean (CVA would allow null) so aria-pressed is valid. */
   selected?: boolean;
-  /** Pick the night-optimized color set (the always-on tablet runs night by default). */
-  night?: boolean;
 }
 
 /**
@@ -41,15 +40,15 @@ export interface PersonChipProps
 export function PersonChip({
   name,
   selected = false,
-  night = false,
   className,
   style,
   onClick,
   ...props
 }: PersonChipProps) {
   const color = assigneeColor(name);
-  const dot = night ? color.night : color.light;
-  const wash = night ? color.nightWash : color.lightWash;
+  const mode = useThemeMode();
+  const dot = mode === "dark" ? color.night : color.light;
+  const wash = mode === "dark" ? color.nightWash : color.lightWash;
   const selectedStyle: CSSProperties = selected ? { borderColor: dot, background: wash } : {};
   const mergedStyle = { ...selectedStyle, ...style };
   const content = (
