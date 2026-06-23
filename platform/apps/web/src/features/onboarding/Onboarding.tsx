@@ -1,4 +1,4 @@
-import { Button } from "@shared/ui";
+import { Button, Card } from "@shared/ui";
 import { useState } from "react";
 import { ArtGlyph } from "./components/ArtGlyph";
 import { MemberInviteRow } from "./components/MemberInviteRow";
@@ -37,14 +37,15 @@ const ROSTER = [
 ];
 
 export interface OnboardingProps {
-  /** Called when the user finishes the last step (the final CTA). */
+  /** Called when the user finishes the last step (the final CTA) or dismisses via the close X. */
   onDone?: () => void;
 }
 
 /**
- * First-run onboarding: a 4-step flow (welcome → connect WhatsApp → invite family → done) with forward
- * and back navigation and a StepDots progress indicator. Presentational; `onDone` is wired by the route
- * to enter the board. Internal step atoms live in components/.
+ * First-run onboarding (#185) — a 4-step flow (welcome → connect WhatsApp → invite family → done) in the
+ * paper modal-card chrome: an art-panel header + StepDots + a sans title + step content + a primary CTA /
+ * Back, with a close X that dismisses to the board. A standalone no-shell route (/welcome); `onDone` is
+ * wired by the route to enter the board (→ /today). Internal step atoms live in components/.
  */
 export function Onboarding({ onDone }: OnboardingProps) {
   const [step, setStep] = useState(0);
@@ -55,34 +56,58 @@ export function Onboarding({ onDone }: OnboardingProps) {
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
   return (
-    <div
-      className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-5 p-6 text-center"
-      data-testid="onboarding"
-    >
-      <ArtGlyph glyph={current.art} />
-      <StepDots total={STEPS.length} active={step} />
-      <h2 className="font-display font-bold text-[22px] text-foreground">{current.title}</h2>
-      <p className="text-[15px] text-muted-foreground">{current.body}</p>
+    <div className="paper-grain flex min-h-dvh items-center justify-center p-6">
+      <Card
+        className="relative w-full max-w-md overflow-hidden shadow-float"
+        data-testid="onboarding"
+      >
+        <button
+          type="button"
+          onClick={() => onDone?.()}
+          aria-label="סגירה"
+          className="absolute end-3 top-3 z-10 grid size-9 place-items-center rounded-full bg-card/70 text-ink-soft transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span aria-hidden="true" className="text-xl leading-none">
+            ×
+          </span>
+        </button>
 
-      {step === 1 && <QRConnectBlock phone="+972 53-800-1200" />}
-      {step === 2 && (
-        <div className="flex w-full flex-col gap-2">
-          {ROSTER.map((m) => (
-            <MemberInviteRow key={m.name} name={m.name} role={m.role} />
-          ))}
+        {/* Art-panel header — a soft green band; the kept ArtGlyph tile sits centered. */}
+        <div
+          aria-hidden="true"
+          className="flex h-[148px] items-center justify-center bg-primary/10"
+        >
+          <ArtGlyph glyph={current.art} />
         </div>
-      )}
 
-      <div className="mt-2 flex w-full flex-col gap-2">
-        <Button variant="primary" onClick={next} className="w-full">
-          {current.cta}
-        </Button>
-        {step > 0 && (
-          <Button variant="ghost" onClick={back}>
-            חזרה
-          </Button>
-        )}
-      </div>
+        <div className="flex flex-col items-center gap-4 p-6 text-center">
+          <StepDots total={STEPS.length} active={step} />
+          <h2 className="font-sans font-bold text-[22px] text-[color:var(--ink)]">
+            {current.title}
+          </h2>
+          <p className="text-[15px] text-muted-foreground">{current.body}</p>
+
+          {step === 1 && <QRConnectBlock phone="+972 53-800-1200" />}
+          {step === 2 && (
+            <div className="flex w-full flex-col gap-2">
+              {ROSTER.map((m) => (
+                <MemberInviteRow key={m.name} name={m.name} role={m.role} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-2 flex w-full flex-col gap-2">
+            <Button variant="primary" onClick={next} className="w-full">
+              {current.cta}
+            </Button>
+            {step > 0 && (
+              <Button variant="ghost" onClick={back}>
+                חזרה
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
