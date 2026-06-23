@@ -7,8 +7,8 @@ describe("assigneeColor", () => {
   });
 
   it("maps a seeded name to its fixed pair", () => {
-    expect(assigneeColor("אבא").light).toBe("#2F7DA6");
-    expect(assigneeColor("אמא").light).toBe("#C26A72");
+    expect(assigneeColor("אבא").light).toBe("#1E9E6F"); // green
+    expect(assigneeColor("אמא").light).toBe("#3686D8"); // blue
   });
 
   it("returns light, night, and precomputed wash fallbacks", () => {

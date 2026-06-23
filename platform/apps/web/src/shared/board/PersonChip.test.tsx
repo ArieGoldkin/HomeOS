@@ -1,7 +1,11 @@
 import { assigneeColor } from "@shared/lib";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PersonChip } from "./PersonChip";
+
+afterEach(() => {
+  delete document.documentElement.dataset.theme;
+});
 
 const styleOf = (el: Element | null) => (el?.getAttribute("style") ?? "").toLowerCase();
 // jsdom serializes inline hex colors to rgb(), so compare against that: "#2F7DA6" -> "rgb(47, 125, 166)".
@@ -20,7 +24,7 @@ describe("PersonChip", () => {
   it("colors the dot from assigneeColor(name) and emits no --who-* token", () => {
     const { container } = render(<PersonChip name="אבא" />);
     const dot = container.querySelector('[aria-hidden="true"]');
-    expect(styleOf(dot)).toContain(rgb(assigneeColor("אבא").light)); // אבא -> #2F7DA6
+    expect(styleOf(dot)).toContain(rgb(assigneeColor("אבא").light)); // אבא -> green #1E9E6F
     expect(container.innerHTML).not.toContain("--who-");
   });
 
@@ -39,10 +43,11 @@ describe("PersonChip", () => {
     expect(styleOf(active)).toContain(rgb(assigneeColor("נועה").light));
   });
 
-  it("uses the night-optimized color set when `night`", () => {
-    const { container } = render(<PersonChip name="אבא" night />);
+  it("uses the night-optimized color set under data-theme=dark", () => {
+    document.documentElement.dataset.theme = "dark";
+    const { container } = render(<PersonChip name="אבא" />);
     const dot = container.querySelector('[aria-hidden="true"]');
-    expect(styleOf(dot)).toContain(rgb(assigneeColor("אבא").night)); // #7FB8D6
+    expect(styleOf(dot)).toContain(rgb(assigneeColor("אבא").night));
   });
 
   it("uses logical properties only (no physical left/right)", () => {

@@ -9,7 +9,6 @@ export interface TimeSpineProps {
   /** Current time as `HH:MM`; when set, a NowLine is injected at its position. */
   nowTime?: string | null;
   density?: "compact" | "comfortable";
-  night?: boolean;
   /** #153 — pass-through to each EventCard: when set, cards open the detail drawer; omitted ⇒ inert (kiosk). */
   onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
@@ -24,7 +23,6 @@ export function TimeSpine({
   events,
   nowTime = null,
   density = "comfortable",
-  night = false,
   onOpenDetail,
   className,
 }: TimeSpineProps) {
@@ -60,13 +58,7 @@ export function TimeSpine({
             <span dir="ltr">{e.time}</span>
           </div>
           <div className={cn("border-border border-t", rowPad)}>
-            <EventCard
-              event={e}
-              showTime={false}
-              density={density}
-              night={night}
-              onOpenDetail={onOpenDetail}
-            />
+            <EventCard event={e} showTime={false} density={density} onOpenDetail={onOpenDetail} />
           </div>
         </Fragment>
       ))}

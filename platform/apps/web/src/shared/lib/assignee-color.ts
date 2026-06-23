@@ -8,13 +8,24 @@ export interface AssigneeColor {
 
 // The prototype's 5 assignee pairs (web-architecture-plan §5) + precomputed pale washes.
 // assignee is a free-form bounded string (@homeos/shared), so this is a RUNTIME concern, never a token.
+// The 5 design-system living accents (#173, retuned from the old blue/rose/teal/indigo/slate to
+// match HomeOS-Design-System.dc.html + the Modern prototype's member colors), with derived dark
+// variants + precomputed pale washes (the fallback where CSS `color-mix(oklab)` is unavailable).
 const PALETTE: readonly AssigneeColor[] = [
-  { light: "#2F7DA6", night: "#7FB8D6", lightWash: "#E4EEF4", nightWash: "#1E2C36" }, // blue
-  { light: "#C26A72", night: "#E29AA0", lightWash: "#F4E6E7", nightWash: "#362426" }, // rose
-  { light: "#2E8C7A", night: "#6FC2B0", lightWash: "#E2F0EC", nightWash: "#1C302B" }, // teal
-  { light: "#6E78C4", night: "#A6AEE6", lightWash: "#E8E9F5", nightWash: "#25283A" }, // indigo
-  { light: "#6B7D86", night: "#8FA3AD", lightWash: "#E9EDEF", nightWash: "#232C31" }, // slate (neutral / unassigned)
+  { light: "#1E9E6F", night: "#3FBF94", lightWash: "#E3F2EC", nightWash: "#15271F" }, // green
+  { light: "#3686D8", night: "#6FA8E4", lightWash: "#E4EEF8", nightWash: "#16222F" }, // blue
+  { light: "#B57BD6", night: "#C9A0E2", lightWash: "#F2E9F7", nightWash: "#241B2C" }, // violet
+  { light: "#D9543F", night: "#E68471", lightWash: "#F8E6E2", nightWash: "#2C1A16" }, // coral
+  { light: "#C99A2E", night: "#E0B65A", lightWash: "#F5ECD8", nightWash: "#292112" }, // amber
 ];
+
+// Neutral (warm gray) for the unassigned / "everyone" case — not one of the per-person accents.
+const NEUTRAL: AssigneeColor = {
+  light: "#8A8579",
+  night: "#A39E92",
+  lightWash: "#ECEAE3",
+  nightWash: "#26241F",
+};
 
 // Known family terms → a fixed palette slot, so the same person is always the same color.
 const SEED: Record<string, number> = {
@@ -26,9 +37,10 @@ const SEED: Record<string, number> = {
   yoav: 2,
   נועה: 3,
   noa: 3,
-  כולם: 4,
-  all: 4,
 };
+
+// "Everyone" is not a single person → render it neutral, not a per-person accent.
+const NEUTRAL_TERMS = new Set(["כולם", "all"]);
 
 function hash(s: string): number {
   let h = 0;
@@ -36,10 +48,10 @@ function hash(s: string): number {
   return h;
 }
 
-/** Map a free-form assignee to a STABLE color (deterministic). null/empty → the neutral slate slot. */
+/** Map a free-form assignee to a STABLE color (deterministic). null/empty/"everyone" → neutral. */
 export function assigneeColor(assignee: string | null | undefined): AssigneeColor {
   const name = assignee?.trim();
-  if (!name) return PALETTE[4] as AssigneeColor;
+  if (!name || NEUTRAL_TERMS.has(name)) return NEUTRAL;
   const idx = SEED[name] ?? hash(name) % PALETTE.length;
   return PALETTE[idx] as AssigneeColor;
 }

@@ -1,4 +1,5 @@
 import { assigneeColor, cn } from "@shared/lib";
+import { useThemeMode } from "@shared/theme";
 import type { CSSProperties, HTMLAttributes } from "react";
 
 export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
@@ -6,8 +7,6 @@ export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
   name: string;
   /** Diameter in px (default 20). */
   size?: number;
-  /** Pick the night-optimized color set (the always-on tablet runs night by default). */
-  night?: boolean;
 }
 
 /**
@@ -16,21 +15,15 @@ export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
  * (`aria-hidden`) by default. White-on-color initial; the color comes from the free-form assignee
  * string at runtime, never a token.
  */
-export function PersonAvatar({
-  name,
-  size = 20,
-  night = false,
-  className,
-  style,
-  ...props
-}: PersonAvatarProps) {
+export function PersonAvatar({ name, size = 20, className, style, ...props }: PersonAvatarProps) {
   const color = assigneeColor(name);
+  const mode = useThemeMode();
   const initial = [...name.trim()][0] ?? "?";
   const dims: CSSProperties = {
     width: size,
     height: size,
     fontSize: Math.round(size * 0.52),
-    background: night ? color.night : color.light,
+    background: mode === "dark" ? color.night : color.light,
     ...style,
   };
 

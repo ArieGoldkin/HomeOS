@@ -16,7 +16,6 @@ export interface AnytimeSidebarProps {
   tomorrow: PeekItem[];
   tasksLabel?: string;
   tomorrowLabel?: string;
-  night?: boolean;
   /** #153 — pass-through to the untimed task EventCards (the tomorrow PeekRows are previews, not openable). */
   onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
@@ -32,7 +31,6 @@ export function AnytimeSidebar({
   tomorrow,
   tasksLabel = "משימות להיום",
   tomorrowLabel = "מחר",
-  night = false,
   onOpenDetail,
   className,
 }: AnytimeSidebarProps) {
@@ -48,7 +46,6 @@ export function AnytimeSidebar({
                   event={t}
                   showTime={false}
                   density="compact"
-                  night={night}
                   onOpenDetail={onOpenDetail}
                 />
               </div>

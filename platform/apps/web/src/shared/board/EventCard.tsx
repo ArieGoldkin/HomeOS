@@ -1,5 +1,6 @@
 import type { EventKind, SavedEvent } from "@homeos/shared";
 import { assigneeColor, cn } from "@shared/lib";
+import { useThemeMode } from "@shared/theme";
 import { cva } from "class-variance-authority";
 import type { HTMLAttributes } from "react";
 import { PersonAvatar } from "./PersonAvatar";
@@ -42,8 +43,6 @@ export interface EventCardProps extends HTMLAttributes<HTMLElement> {
   density?: "compact" | "comfortable";
   /** Show the event's own time. TimeSpine sets false (the grid column owns the time). Default true. */
   showTime?: boolean;
-  /** Night-optimized assignee color (the always-on tablet runs night). */
-  night?: boolean;
   /**
    * #153 — when provided, the card becomes an interactive `<button>` that opens the event-detail drawer
    * (mirrors PersonChip's display→button polymorphism). Omitted ⇒ the card stays a pure, inert `<div>`.
@@ -64,15 +63,15 @@ export function EventCard({
   surface,
   density,
   showTime = true,
-  night = false,
   onOpenDetail,
   className,
   ...props
 }: EventCardProps) {
   const variant = event.kind; // "event" | "task" | "reminder"
   const spacing = density ?? (surface === "phone" ? "compact" : "comfortable");
+  const mode = useThemeMode();
   const assigneeHex = event.assignee
-    ? assigneeColor(event.assignee)[night ? "night" : "light"]
+    ? assigneeColor(event.assignee)[mode === "dark" ? "night" : "light"]
     : undefined;
 
   // The card body is identical whether inert or interactive — only the wrapping element changes.
@@ -106,7 +105,7 @@ export function EventCard({
             className="inline-flex items-center gap-1.5 font-semibold"
             style={{ color: assigneeHex }}
           >
-            <PersonAvatar name={event.assignee} size={20} night={night} />
+            <PersonAvatar name={event.assignee} size={20} />
             {event.assignee}
           </span>
         )}
