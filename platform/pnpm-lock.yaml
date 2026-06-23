@@ -54,6 +54,21 @@ importers:
 
   apps/web:
     dependencies:
+      '@fontsource-variable/frank-ruhl-libre':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/heebo':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/newsreader':
+        specifier: ^5.2.10
+        version: 5.2.10
+      '@fontsource-variable/schibsted-grotesk':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/spline-sans-mono':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@homeos/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -88,9 +103,6 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
     devDependencies:
-      '@fontsource-variable/rubik':
-        specifier: ^5.2.8
-        version: 5.2.8
       '@tailwindcss/vite':
         specifier: ^4.3.1
         version: 4.3.1(vite@8.0.16(@types/node@22.19.21)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4))
@@ -613,8 +625,20 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@fontsource-variable/rubik@5.2.8':
-    resolution: {integrity: sha512-vGDExLzB4a2Fj9mca5LqNoA2ZKcU9o+x5FEBLte/nxYkCB9hOQwZS6ZlItUv+Ssn7YMzKauGuI/Po+YueFuZbg==}
+  '@fontsource-variable/frank-ruhl-libre@5.2.8':
+    resolution: {integrity: sha512-y3kYhvWEAbdrPGnVlKmPJMsAWSh+AGbaGyQKV7b72+5fLfs4fnrgRqwIviwyrhL/lmKo6j69OgBrthS1imDvLw==}
+
+  '@fontsource-variable/heebo@5.2.8':
+    resolution: {integrity: sha512-/Svxjfe2jjjEGuxaPimBVmPpY5XN674+zso3cwXvOLALHkkbpKjqswgn9dEb1E9CksJYsXonKh4VD+oaRUiFtw==}
+
+  '@fontsource-variable/newsreader@5.2.10':
+    resolution: {integrity: sha512-MdI2iRwrqWpMOU/2aV2BgfZ4dJNlj/XlYaY8Zb7t87mWqHskYW0XiUANkt1cyOCiEfW2VQ0bQ5vZgGPp6B2B4w==}
+
+  '@fontsource-variable/schibsted-grotesk@5.2.8':
+    resolution: {integrity: sha512-nZAorDrFue4dXZbI613WdvAhu5DPH1UJYNn5fWl7Poa+nl/s9o3VUcQImIiVZpQnYG/jkPVzHsTE7WZbSDvvkw==}
+
+  '@fontsource-variable/spline-sans-mono@5.2.8':
+    resolution: {integrity: sha512-Z1yYiEtP+8Gll5BJaR9dICK/ZTxoTWH+ZBH6rOTMWajPSOxwl7IZplkwX2J1QhMxqulhhdMrkRx6SkkLM+jLQw==}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -2739,7 +2763,15 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@fontsource-variable/rubik@5.2.8': {}
+  '@fontsource-variable/frank-ruhl-libre@5.2.8': {}
+
+  '@fontsource-variable/heebo@5.2.8': {}
+
+  '@fontsource-variable/newsreader@5.2.10': {}
+
+  '@fontsource-variable/schibsted-grotesk@5.2.8': {}
+
+  '@fontsource-variable/spline-sans-mono@5.2.8': {}
 
   '@hono/node-server@1.19.14(hono@4.12.25)':
     dependencies:

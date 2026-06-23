@@ -14,6 +14,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/frank-ruhl-libre": "^5.2.8",
+    "@fontsource-variable/heebo": "^5.2.8",
+    "@fontsource-variable/newsreader": "^5.2.10",
+    "@fontsource-variable/schibsted-grotesk": "^5.2.8",
+    "@fontsource-variable/spline-sans-mono": "^5.2.8",
     "@homeos/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
     "@radix-ui/react-dialog": "^1.1.17",
@@ -27,7 +32,6 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@fontsource-variable/rubik": "^5.2.8",
     "@tailwindcss/vite": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
