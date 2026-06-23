@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HomeOS</title>
+    <!-- Anti-FOUC theme boot (#172): set data-theme before React mounts. Mirrors
+         resolveInitialTheme() in shared/theme/ThemeProvider — stored choice > OS > light. -->
+    <script>
+      (() => {
+        let theme = "light";
+        try {
+          const stored = localStorage.getItem("homeos-theme");
+          if (stored === "light" || stored === "dark") {
+            theme = stored;
+          } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+            theme = "dark";
+          }
+        } catch {
+          // storage / matchMedia unavailable — keep the light default
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
