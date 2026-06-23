@@ -1,3 +1,4 @@
+import { ThemeProvider } from "@shared/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -6,14 +7,18 @@ import { App } from "./App";
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <ThemeProvider>{node}</ThemeProvider>
+    </QueryClientProvider>
+  );
 }
 
 describe("App", () => {
-  it("renders the tablet board surface at / (masthead greeting heading)", async () => {
+  it("boots into the responsive AppShell (/ → /today)", async () => {
     render(wrap(<App />));
-    // The router resolves `/` to TabletBoard → TabletShell's greeting heading (async route mount).
-    expect(await screen.findByRole("heading")).toBeInTheDocument();
+    // `/` redirects to /today; the AppShell chrome mounts (the render-only command-bar placeholder).
+    expect(await screen.findByText("איך אפשר לעזור היום?")).toBeInTheDocument();
   });
 
   it("enforces RTL Hebrew on the document root", async () => {
