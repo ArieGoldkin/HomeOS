@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,18,400;1,18,500&family=Spline+Sans+Mono:wght@400;500&family=Heebo:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  ::selection{background:#1E9E6F;color:#fff}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(140,130,115,.32);border-radius:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<div ref="{{ root }}" style="--app-bg:#F4F1EB;--ink:#1B1A17;--ink-2:#3A372F;--ink-soft:#56524B;--ink-faint:#8A8579;--card:#FFFFFF;--card-border:#ECE7DD;--card-muted:#E9E5DD;--card-blur:blur(0px);--shadow-card:0 1px 2px rgba(30,28,24,.05),0 10px 26px -16px rgba(30,28,24,.18);--chip-bg:#FFFFFF;--chip-border:#E2DDD3;--line:#EFEAE0;--rail:#FFFFFF;--rail-border:#ECE7DD;--nav-active:rgba(30,158,111,.13);--glyph:#9A958B;--accent:#1E9E6F;--header-bg:rgba(244,241,235,.82);--header-border:#E5E0D6;--cmd-bg:#FFFFFF;--cmd-border:#E2DDD3;--cmd-text:#9A958B;--check-border:#D8D2C6;--seg-active:#1B1A17;--seg-active-text:#FFFFFF;--font-sans:'Heebo',system-ui,sans-serif;--font-accent:'Frank Ruhl Libre',serif;--accent-style:normal;height:100vh;display:flex;overflow:hidden;background:var(--app-bg);color:var(--ink-2);font-family:var(--font-sans);transition:background .45s ease">
+
+  <!-- ===== RAIL ===== -->
+  <aside style="width:66px;flex:none;background:var(--rail);border-inline-end:1px solid var(--rail-border);backdrop-filter:var(--card-blur);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:7px;z-index:6">
+    <div style="width:34px;height:34px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:8px"><div style="width:11px;height:11px;background:#F4F1EB;border-radius:3px;transform:rotate(45deg)"></div></div>
+    <button onClick="{{ goHome }}" style="{{ navHome }}" title="{{ t.navToday }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 11 12 3.5 20.8 11"/><path d="M5.4 9.3V20h13.2V9.3"/><path d="M9.7 20v-5.2h4.6V20"/></svg></button>
+    <button onClick="{{ goCal }}" style="{{ navCal }}" title="{{ t.navCal }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.8" y="5" width="16.4" height="15" rx="2.6"/><path d="M3.8 9.4h16.4"/><path d="M8 3.2v3M16 3.2v3"/></svg></button>
+    <button onClick="{{ goPeople }}" style="{{ navPeople }}" title="{{ t.navPeople }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.4" r="3.1"/><path d="M3.4 19.2c0-3.1 2.5-5.4 5.6-5.4s5.6 2.3 5.6 5.4"/><path d="M16.2 5.6c1.7.2 3 1.7 3 3.5 0 1.2-.6 2.3-1.5 2.9M17.4 13.9c2.2.4 3.8 2.2 3.8 4.6"/></svg></button>
+    <button onClick="{{ goLists }}" style="{{ navLists }}" title="{{ t.navLists }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5l1.4 1.4L8 5.3"/><path d="M4 17.5l1.4 1.4L8 16.3"/><path d="M11 7h9M11 12h9M11 17h9"/></svg></button>
+    <button onClick="{{ goConn }}" style="{{ navConn }}" title="{{ t.navConn }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.4a7.6 7.6 0 0 1-11 6.8L4.5 19.5l1.3-4.4A7.6 7.6 0 1 1 20 11.4z"/></svg></button>
+    <button onClick="{{ goSettings }}" style="{{ navSettings }}" title="{{ t.navSettings }}"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4" fill="var(--rail)"/><circle cx="15" cy="17" r="2.4" fill="var(--rail)"/></svg></button>
+    <div style="flex:1"></div>
+    <div style="width:38px;height:38px;border-radius:11px;background:#FFD81F;display:flex;align-items:center;justify-content:center"><span style="width:11px;height:11px;background:#1B1A17;border-radius:2px;transform:rotate(45deg)"></span></div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+
+    <header style="height:58px;flex:none;display:flex;align-items:center;gap:16px;padding:0 22px;background:var(--header-bg);border-bottom:1px solid var(--header-border);backdrop-filter:var(--card-blur);z-index:5">
+      <div style="display:flex;align-items:baseline;gap:9px">
+        <span style="font-weight:700;font-size:16px;letter-spacing:-.01em;color:var(--ink)">HomeOS</span>
+        <span style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint)">{{ t.tag }}</span>
+      </div>
+      <div style="flex:1;display:flex;justify-content:center">
+        <div style="display:flex;align-items:center;gap:9px;background:var(--cmd-bg);border:1px solid var(--cmd-border);border-radius:999px;padding:8px 18px;min-width:300px;max-width:400px;backdrop-filter:var(--card-blur)">
+          <span style="color:var(--accent);font-size:14px">✦</span>
+          <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:15px;color:var(--cmd-text)">{{ t.cmd }}</span>
+        </div>
+      </div>
+      <button onClick="{{ startOnboard }}" style="background:transparent;border:1px solid var(--header-border);color:var(--ink-soft);border-radius:9px;padding:7px 12px;font:600 12px var(--font-sans);cursor:pointer">{{ t.firstRun }}</button>
+      <div style="display:flex;gap:3px;padding:3px;background:var(--card-muted);border-radius:11px">
+        <button onClick="{{ setHe }}" style="{{ heBtn }}">עב</button>
+        <button onClick="{{ setEn }}" style="{{ enBtn }}">EN</button>
+      </div>
+      <div style="display:flex;gap:3px;padding:3px;background:var(--card-muted);border-radius:11px">
+        <button onClick="{{ setPaper }}" style="{{ paperBtn }}">{{ t.paper }}</button>
+        <button onClick="{{ setNight }}" style="{{ nightBtn }}">{{ t.night }}</button>
+      </div>
+      <div style="width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12.5px">{{ t.avatar }}</div>
+    </header>
+
+    <main style="flex:1;overflow:auto;padding:34px 40px 64px">
+      <div style="max-width:1040px;margin:0 auto">
+
+        <!-- ============ TODAY ============ -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+        <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.date }}</div>
+        <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.greet }} <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500">{{ t.name }}</span></h1>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:22px 0 28px">
+          <div style="display:flex;align-items:center;gap:9px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:999px;padding:9px 16px;box-shadow:var(--shadow-card)"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></span><span style="font-weight:600;font-size:13px;color:var(--ink-2)">{{ tasksLeft }}</span></div>
+          <button onClick="{{ openAdd }}" style="background:var(--seg-active);color:var(--seg-active-text);border:none;border-radius:999px;padding:10px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.actAdd }}</button>
+          <button onClick="{{ noop }}" style="background:var(--chip-bg);border:1px solid var(--chip-border);color:var(--ink-2);border-radius:999px;padding:10px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.actMeals }}</button>
+          <button onClick="{{ noop }}" style="background:var(--chip-bg);border:1px solid var(--chip-border);color:var(--ink-2);border-radius:999px;padding:10px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.actSitter }}</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <!-- tasks -->
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.cardTasks }}</span><span style="color:var(--ink-faint);font-size:18px;line-height:0">···</span></div>
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ tasks }}" as="t2" hint-placeholder-count="4">
+                <div onClick="{{ t2.toggle }}" style="display:flex;align-items:center;gap:11px;cursor:pointer">
+                  <span style="{{ t2.boxStyle }}">{{ t2.mark }}</span>
+                  <span style="{{ t2.labelStyle }}">{{ t2.text }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div onClick="{{ openAdd }}" style="display:flex;align-items:center;gap:9px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line);color:var(--ink-faint);cursor:pointer"><span style="width:18px;height:18px;border-radius:6px;border:1.5px dashed var(--check-border);display:flex;align-items:center;justify-content:center;font-size:12px">+</span><span style="font-size:13px;font-weight:500">{{ t.addTask }}</span></div>
+          </div>
+
+          <!-- this week -->
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.cardWeek }}</span><span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:14px;color:var(--ink-faint)">{{ t.weekCount }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <sc-for list="{{ agenda }}" as="a" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:46px;flex:none;text-align:center;background:var(--card-muted);border-radius:10px;padding:6px 0"><div style="font:500 9px 'Spline Sans Mono',monospace;letter-spacing:.04em;color:var(--ink-faint)">{{ a.wd }}</div><div style="font-weight:700;font-size:16px;color:var(--ink);line-height:1.1">{{ a.num }}</div></div>
+                  <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px;color:var(--ink-2)">{{ a.title }}</div><div style="font-size:12px;color:var(--ink-faint)">{{ a.meta }}</div></div>
+                  <sc-if value="{{ a.hasPill }}" hint-placeholder-val="{{ false }}"><span style="{{ a.pillStyle }};border-radius:999px;padding:4px 10px;font-weight:600;font-size:11px;flex:none">{{ a.pill }}</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- household -->
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.cardHousehold }}</span><span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:14px;color:var(--ink-faint)">{{ t.people4 }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <sc-for list="{{ household }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:50%;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none">{{ m.initials }}</span><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px;color:var(--ink-2)">{{ m.name }}</div><div style="font-size:11.5px;color:var(--ink-faint)">{{ m.role }}</div></div><span style="{{ m.statusStyle }};border-radius:999px;padding:4px 10px;font-weight:600;font-size:11px">{{ m.status }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- celebrations -->
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.cardCeleb }}</span><span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:14px;color:var(--ink-faint)">{{ t.soon }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <sc-for list="{{ celebrations }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:50%;background:{{ c.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none">{{ c.initials }}</span><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px;color:var(--ink-2)">{{ c.name }}</div><div style="font-size:11.5px;color:var(--ink-faint)">{{ c.meta }}</div></div><sc-if value="{{ c.hasPill }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(217,84,63,.13);color:#B7402D;border-radius:999px;padding:4px 10px;font-weight:600;font-size:11px">{{ c.pill }}</span></sc-if></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- tonight banner -->
+        <div style="margin-top:18px;background:var(--accent);border-radius:18px;padding:22px 24px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;box-shadow:0 16px 36px -20px rgba(30,158,111,.7)">
+          <div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.72)">{{ t.tonightKicker }}</div>
+            <div style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500;font-size:30px;color:#fff;line-height:1.1;margin-top:4px">{{ t.tonightDish }}</div>
+            <div style="font-size:13px;color:rgba(255,255,255,.82);margin-top:4px">{{ t.tonightMeta }}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ ingredients }}" as="ing" hint-placeholder-count="3"><span style="background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:999px;padding:6px 13px;font-weight:500;font-size:12.5px">{{ ing }}</span></sc-for>
+            <button onClick="{{ noop }}" style="background:#fff;color:#147A55;border:none;border-radius:999px;padding:9px 16px;font:600 13px var(--font-sans);cursor:pointer;margin-inline-start:4px">{{ t.viewRecipe }}</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ CALENDAR ============ -->
+        <sc-if value="{{ isCal }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:24px">
+          <div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.calKicker }}</div>
+            <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.month }} <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500">2026</span></h1>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onClick="{{ noop }}" style="width:36px;height:36px;border-radius:10px;background:var(--chip-bg);border:1px solid var(--chip-border);color:var(--ink-2);font-size:15px;cursor:pointer">‹</button>
+            <button onClick="{{ noop }}" style="width:36px;height:36px;border-radius:10px;background:var(--chip-bg);border:1px solid var(--chip-border);color:var(--ink-2);font-size:15px;cursor:pointer">›</button>
+            <button onClick="{{ noop }}" style="background:var(--seg-active);color:var(--seg-active-text);border:none;border-radius:10px;padding:9px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.newEvent }}</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px">
+          <sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+            <div style="background:var(--card);border:1px solid var(--card-border);border-radius:14px;padding:11px;min-height:250px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font:500 9px 'Spline Sans Mono',monospace;letter-spacing:.04em;color:var(--ink-faint)">{{ d.wd }}</span><span style="{{ d.numStyle }}">{{ d.num }}</span></div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <sc-for list="{{ d.events }}" as="ev" hint-placeholder-count="1"><div style="{{ ev.style }};border-radius:8px;padding:6px 8px;font-weight:600;font-size:11px;line-height:1.25">{{ ev.text }}</div></sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+
+        <!-- ============ PEOPLE ============ -->
+        <sc-if value="{{ isPeople }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:20px">
+          <div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.peopleKicker }}</div>
+            <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.peopleHead1 }} <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500">{{ t.peopleHead2 }}</span></h1>
+          </div>
+          <button onClick="{{ noop }}" style="background:var(--seg-active);color:var(--seg-active-text);border:none;border-radius:10px;padding:10px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.invite }}</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:9px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:999px;padding:8px 15px"><span style="width:8px;height:8px;border-radius:50%;background:#1E9E6F"></span><span style="font-weight:600;font-size:12.5px;color:var(--ink-2)">{{ t.stat1 }}</span></div>
+          <div style="display:flex;align-items:center;gap:9px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:999px;padding:8px 15px"><span style="width:8px;height:8px;border-radius:50%;background:#3686D8"></span><span style="font-weight:600;font-size:12.5px;color:var(--ink-2)">{{ t.stat2 }}</span></div>
+          <div style="display:flex;align-items:center;gap:9px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:999px;padding:8px 15px"><span style="width:8px;height:8px;border-radius:50%;background:#C99A2E"></span><span style="font-weight:600;font-size:12.5px;color:var(--ink-2)">{{ t.stat3 }}</span></div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+          <div style="display:grid;grid-template-columns:1.7fr 1fr 1.3fr;padding:11px 20px;border-bottom:1px solid var(--line);font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint)"><span>{{ t.colName }}</span><span>{{ t.colStatus }}</span><span>{{ t.colRole }}</span></div>
+          <sc-for list="{{ household }}" as="m" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1.7fr 1fr 1.3fr;align-items:center;padding:13px 20px;border-bottom:1px solid var(--line)"><span style="display:flex;align-items:center;gap:11px"><span style="width:30px;height:30px;border-radius:50%;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">{{ m.initials }}</span><span style="font-weight:600;font-size:13.5px;color:var(--ink-2)">{{ m.name }}</span></span><span><span style="{{ m.statusStyle }};border-radius:999px;padding:4px 11px;font-weight:600;font-size:11.5px">{{ m.status }}</span></span><span style="font-size:13px;color:var(--ink-soft)">{{ m.role }}</span></div>
+          </sc-for>
+        </div>
+        </sc-if>
+
+        <!-- ============ LISTS ============ -->
+        <sc-if value="{{ isLists }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:24px">
+          <div>
+            <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.listsKicker }}</div>
+            <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.listsHead1 }} <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500">{{ t.listsHead2 }}</span></h1>
+          </div>
+          <button onClick="{{ noop }}" style="background:var(--seg-active);color:var(--seg-active-text);border:none;border-radius:10px;padding:10px 16px;font:600 13px var(--font-sans);cursor:pointer">{{ t.newList }}</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.groceryTitle }}</span><span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:13px;color:var(--ink-faint)">{{ t.grocerySub }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ grocery }}" as="g" hint-placeholder-count="6">
+                <div onClick="{{ g.toggle }}" style="display:flex;align-items:center;gap:11px;cursor:pointer"><span style="{{ g.boxStyle }}">{{ g.mark }}</span><span style="{{ g.labelStyle }}">{{ g.text }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span style="font-weight:600;font-size:14.5px;color:var(--ink)">{{ t.errandsTitle }}</span><span style="font-family:var(--font-accent);font-style:var(--accent-style);font-size:13px;color:var(--ink-faint)">{{ t.errandsSub }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ errands }}" as="e" hint-placeholder-count="4">
+                <div onClick="{{ e.toggle }}" style="display:flex;align-items:center;gap:11px;cursor:pointer"><span style="{{ e.boxStyle }}">{{ e.mark }}</span><span style="{{ e.labelStyle }}">{{ e.text }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ CONNECTIONS ============ -->
+        <sc-if value="{{ isConn }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:22px">
+          <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.connKicker }}</div>
+          <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.connHead1 }} <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500">{{ t.connHead2 }}</span></h1>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur);display:flex;gap:16px;align-items:flex-start;margin-bottom:18px">
+          <span style="width:46px;height:46px;border-radius:13px;background:rgba(37,163,90,.16);display:grid;place-items:center;flex:none"><svg width="26" height="26" viewBox="0 0 24 24" fill="#1E9E6F"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.1-1.3A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.1 14.9l-.3-.2-2.6.7.7-2.5-.2-.3A8 8 0 0 1 12 4z"/></svg></span>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:4px;flex-wrap:wrap"><span style="font-weight:700;font-size:16px;color:var(--ink)">{{ t.connChannel }}</span><span style="display:inline-flex;align-items:center;gap:5px;background:rgba(30,158,111,.13);color:#147A55;border-radius:999px;padding:3px 10px;font-weight:600;font-size:11.5px"><span style="width:7px;height:7px;border-radius:999px;background:#1E9E6F"></span>{{ t.connStatus }}</span></div>
+            <div style="color:var(--ink-soft);font-size:13.5px;line-height:1.6">{{ t.connDesc }}</div>
+            <div dir="ltr" style="margin-top:10px;font-weight:700;font-size:16px;color:var(--accent);text-align:start">+972 53-800-1200</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:18px">
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:16px">{{ t.connHowTitle }}</div>
+            <div style="display:flex;flex-direction:column;gap:13px">
+              <div style="display:flex;gap:11px;align-items:center"><span style="width:24px;height:24px;border-radius:999px;background:var(--nav-active);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none">1</span><span style="font-size:13.5px;color:var(--ink-2)">{{ t.connStep1 }}</span></div>
+              <div style="display:flex;gap:11px;align-items:center"><span style="width:24px;height:24px;border-radius:999px;background:var(--nav-active);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none">2</span><span style="font-size:13.5px;color:var(--ink-2)">{{ t.connStep2 }}</span></div>
+              <div style="display:flex;gap:11px;align-items:center"><span style="width:24px;height:24px;border-radius:999px;background:var(--nav-active);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none">3</span><span style="font-size:13.5px;color:var(--ink-2)">{{ t.connStep3 }}</span></div>
+            </div>
+            <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
+              <div style="font:500 10px 'Spline Sans Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:8px">{{ t.connExample }}</div>
+              <div style="background:var(--card-muted);border-radius:12px;padding:11px 13px;font-size:13px;color:var(--ink-2);line-height:1.5"><span style="color:var(--ink-faint)">↪ </span>{{ t.connMsg }}</div>
+              <div style="text-align:center;color:var(--ink-faint);font-size:15px;margin:4px 0">↓</div>
+              <div style="background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow-card)">
+                <div style="font-weight:600;font-size:14px;color:var(--ink)">{{ t.connCardTitle }}</div>
+                <div style="font-size:12.5px;color:var(--ink-faint);margin-top:2px">{{ t.connCardMeta }}</div>
+                <span style="display:inline-flex;align-items:center;gap:6px;margin-top:9px;background:rgba(54,134,216,.14);color:#2E6FB8;border-radius:999px;padding:4px 10px;font-weight:600;font-size:11px"><span style="width:7px;height:7px;border-radius:999px;background:#3686D8"></span>{{ t.connCardWho }}</span>
+              </div>
+            </div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:14px">{{ t.connLinked }}</div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ household }}" as="m" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:11px"><span style="width:30px;height:30px;border-radius:50%;background:{{ m.color }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;flex:none">{{ m.initials }}</span><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;color:var(--ink-2)">{{ m.name }}</div><div style="font-size:11px;color:var(--ink-faint)">{{ m.role }}</div></div><span style="width:8px;height:8px;border-radius:999px;background:#1E9E6F"></span></div>
+              </sc-for>
+            </div>
+            <button onClick="{{ noop }}" style="margin-top:16px;width:100%;background:transparent;border:1.5px dashed var(--check-border);color:var(--ink-soft);border-radius:12px;padding:11px;font:600 13px var(--font-sans);cursor:pointer">+ {{ t.connAddBtn }}</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ============ SETTINGS ============ -->
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:24px">
+          <div style="font:500 11px 'Spline Sans Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)">{{ t.setKicker }}</div>
+          <h1 style="font-weight:800;font-size:42px;letter-spacing:-.025em;line-height:1.04;color:var(--ink);margin:8px 0 0">{{ t.setHead }}</h1>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:16px">{{ t.profile }}</div>
+            <div style="display:flex;align-items:center;gap:13px"><span style="width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:16px">{{ t.avatar }}</span><div style="flex:1"><div style="font-weight:600;font-size:15px;color:var(--ink-2)">{{ t.profileName }}</div><div style="font-size:12.5px;color:var(--ink-faint);direction:ltr">maya@adlerfamily.home</div></div><button onClick="{{ noop }}" style="background:var(--chip-bg);border:1px solid var(--chip-border);color:var(--ink-2);border-radius:9px;padding:8px 14px;font:600 12.5px var(--font-sans);cursor:pointer">{{ t.edit }}</button></div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur)">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:16px">{{ t.appearance }}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13.5px;color:var(--ink-2)">{{ t.theme }}</span><div style="display:flex;gap:3px;padding:3px;background:var(--card-muted);border-radius:11px"><button onClick="{{ setPaper }}" style="{{ paperBtn }}">{{ t.paper }}</button><button onClick="{{ setNight }}" style="{{ nightBtn }}">{{ t.night }}</button></div></div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur);grid-column:1 / -1">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:6px">{{ t.connected }}</div>
+            <div style="font-size:12.5px;color:var(--ink-faint);margin-bottom:16px">{{ t.connectedSub }}</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              <div style="width:52px;height:52px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:14px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;border:2.5px solid #D9543F;border-radius:50%"></span></div>
+              <div style="width:52px;height:52px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:14px;display:flex;align-items:center;justify-content:center"><span style="width:15px;height:15px;background:var(--accent);border-radius:4px;transform:rotate(45deg)"></span></div>
+              <div style="width:52px;height:52px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:14px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;border-radius:50%;border:3px solid #3686D8;box-sizing:border-box"></span></div>
+              <div style="width:52px;height:52px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:14px;display:flex;align-items:center;justify-content:center"><span style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:15px solid #C99A2E"></span></div>
+              <div style="width:52px;height:52px;background:var(--chip-bg);border:1px solid var(--chip-border);border-radius:14px;display:flex;align-items:center;justify-content:center"><span style="width:15px;height:15px;border:2.5px solid #B57BD6;box-sizing:border-box"></span></div>
+            </div>
+          </div>
+          <div style="background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:18px;box-shadow:var(--shadow-card);backdrop-filter:var(--card-blur);grid-column:1 / -1">
+            <div style="font-weight:600;font-size:14.5px;color:var(--ink);margin-bottom:16px">{{ t.notifications }}</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-size:13.5px;font-weight:500;color:var(--ink-2)">{{ t.nWeekly }}</div><div style="font-size:12px;color:var(--ink-faint)">{{ t.nWeeklySub }}</div></div><div onClick="{{ toggleWeekly }}" style="{{ swWeeklyTrack }}"><span style="{{ swWeeklyKnob }}"></span></div></div>
+              <div style="height:1px;background:var(--line)"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-size:13.5px;font-weight:500;color:var(--ink-2)">{{ t.nQuiet }}</div><div style="font-size:12px;color:var(--ink-faint)">{{ t.nQuietSub }}</div></div><div onClick="{{ toggleQuiet }}" style="{{ swQuietTrack }}"><span style="{{ swQuietKnob }}"></span></div></div>
+              <div style="height:1px;background:var(--line)"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:14px"><div><div style="font-size:13.5px;font-weight:500;color:var(--ink-2)">{{ t.nLoc }}</div><div style="font-size:12px;color:var(--ink-faint)">{{ t.nLocSub }}</div></div><div onClick="{{ toggleLoc }}" style="{{ swLocTrack }}"><span style="{{ swLocKnob }}"></span></div></div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ ADD TASK POPUP ============ -->
+  <sc-if value="{{ addOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeAdd }}" style="position:fixed;inset:0;z-index:55;background:rgba(20,16,10,.42);backdrop-filter:blur(4px)"></div>
+    <div style="position:fixed;z-index:56;top:50%;left:50%;transform:translate(-50%,-50%);width:440px;max-width:calc(100% - 32px);background:var(--card);border:1px solid var(--card-border);border-radius:20px;box-shadow:0 30px 70px -28px rgba(20,15,8,.55);padding:24px;font-family:var(--font-sans)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><span style="font-weight:800;font-size:22px;color:var(--ink);letter-spacing:-.02em">{{ t.addTitle }}</span><button onClick="{{ closeAdd }}" style="width:30px;height:30px;border-radius:999px;background:var(--card-muted);border:none;color:var(--ink-faint);cursor:pointer;font-size:13px">✕</button></div>
+      <div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:7px">{{ t.fieldTitle }}</div>
+      <input value="{{ draft }}" onInput="{{ onDraft }}" placeholder="{{ t.addPlaceholder }}" style="width:100%;background:var(--card-muted);border:1px solid var(--card-border);border-radius:12px;padding:12px 14px;color:var(--ink);font:500 15px var(--font-sans);outline:none;margin-bottom:16px" />
+      <div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:8px">{{ t.fieldWho }}</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:22px">
+        <sc-for list="{{ whoChips }}" as="w" hint-placeholder-count="4"><button onClick="{{ w.pick }}" style="{{ w.style }}"><span style="width:8px;height:8px;border-radius:999px;background:{{ w.color }}"></span>{{ w.name }}</button></sc-for>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button onClick="{{ closeAdd }}" style="flex:none;background:var(--card-muted);color:var(--ink-2);border:none;border-radius:12px;padding:12px 18px;font:600 14px var(--font-sans);cursor:pointer">{{ t.cancel }}</button>
+        <button onClick="{{ saveTask }}" style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font:700 14px var(--font-sans);cursor:pointer">{{ t.addSave }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ ONBOARDING ============ -->
+  <sc-if value="{{ onboard }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(20,16,10,.45);backdrop-filter:blur(5px)">
+      <div style="width:438px;max-width:100%;background:var(--card);border:1px solid var(--card-border);border-radius:22px;box-shadow:0 30px 70px -28px rgba(20,15,8,.55);overflow:hidden;font-family:var(--font-sans)">
+        <div style="height:148px;background:var(--card-muted);display:flex;align-items:center;justify-content:center;position:relative;border-bottom:1px solid var(--card-border)">
+          <span style="font-family:var(--font-accent);font-style:var(--accent-style);font-weight:500;font-size:34px;color:var(--accent)">{{ ob.art }}</span>
+          <button onClick="{{ exitOnboard }}" style="position:absolute;top:14px;inset-inline-end:14px;width:30px;height:30px;border-radius:999px;background:var(--card);border:1px solid var(--card-border);color:var(--ink-faint);cursor:pointer;font-size:13px">✕</button>
+        </div>
+        <div style="padding:26px 28px 28px">
+          <div style="display:flex;gap:6px;margin-bottom:18px"><i style="{{ ob.dot0 }}"></i><i style="{{ ob.dot1 }}"></i><i style="{{ ob.dot2 }}"></i><i style="{{ ob.dot3 }}"></i></div>
+          <h2 style="font-weight:800;font-size:25px;letter-spacing:-.02em;line-height:1.18;margin:0 0 9px;color:var(--ink)">{{ ob.title }}</h2>
+          <p style="color:var(--ink-soft);font-size:14.5px;line-height:1.65;margin:0 0 20px">{{ ob.body }}</p>
+          <sc-if value="{{ ob.isConnect }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:14px;align-items:center;padding:14px;background:var(--card-muted);border-radius:14px;margin-bottom:20px">
+              <div style="width:66px;height:66px;border-radius:8px;background:var(--card);border:1px solid var(--card-border);display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);gap:2px;padding:7px;flex:none"><i style="background:var(--ink)"></i><i></i><i style="background:var(--ink)"></i><i style="background:var(--ink)"></i><i></i><i></i><i style="background:var(--ink)"></i><i></i><i></i><i style="background:var(--ink)"></i><i style="background:var(--ink)"></i><i></i><i style="background:var(--ink)"></i><i></i><i style="background:var(--ink)"></i><i style="background:var(--ink)"></i><i style="background:var(--ink)"></i><i></i><i style="background:var(--ink)"></i><i></i><i></i><i style="background:var(--ink)"></i><i style="background:var(--ink)"></i><i></i><i style="background:var(--ink)"></i></div>
+              <div><div style="font-weight:700;font-size:14px;color:var(--ink)">{{ t.connScan }}</div><div style="color:var(--ink-faint);font-size:12.5px;margin-top:2px">{{ t.connScanSub }}</div><div dir="ltr" style="font-weight:700;color:var(--accent);margin-top:6px;font-size:14px;text-align:start">+972 53-800-1200</div></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ ob.isInvite }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-bottom:20px;display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ household }}" as="m" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:11px;padding:8px 2px;border-top:1px solid var(--line)"><span style="width:30px;height:30px;border-radius:999px;background:{{ m.color }};color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px">{{ m.initials }}</span><span style="flex:1;font-weight:600;color:var(--ink-2);font-size:14px">{{ m.name }}</span><span style="color:var(--ink-faint);font-size:12px">{{ m.role }}</span></div></sc-for>
+            </div>
+          </sc-if>
+          <button onClick="{{ obNext }}" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px;font:700 15px var(--font-sans);cursor:pointer">{{ ob.cta }}</button>
+          <sc-if value="{{ ob.canBack }}" hint-placeholder-val="{{ false }}"><button onClick="{{ obBack }}" style="width:100%;background:transparent;color:var(--ink-faint);border:none;padding:11px;margin-top:4px;font:600 13px var(--font-sans);cursor:pointer">{{ ob.backLabel }}</button></sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:860},&quot;defaultTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;},&quot;defaultLang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;he&quot;,&quot;en&quot;],&quot;default&quot;:&quot;he&quot;,&quot;tsType&quot;:&quot;'he'|'en'&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1E9E6F&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+const LIGHT = {
+  '--app-bg':'#F4F1EB','--ink':'#1B1A17','--ink-2':'#3A372F','--ink-soft':'#56524B','--ink-faint':'#8A8579',
+  '--card':'#FFFFFF','--card-border':'#ECE7DD','--card-muted':'#E9E5DD','--card-blur':'blur(0px)',
+  '--shadow-card':'0 1px 2px rgba(30,28,24,.05),0 10px 26px -16px rgba(30,28,24,.18)',
+  '--chip-bg':'#FFFFFF','--chip-border':'#E2DDD3','--line':'#EFEAE0',
+  '--rail':'#FFFFFF','--rail-border':'#ECE7DD','--nav-active':'rgba(30,158,111,.13)','--glyph':'#9A958B',
+  '--accent':'#1E9E6F','--header-bg':'rgba(244,241,235,.82)','--header-border':'#E5E0D6',
+  '--cmd-bg':'#FFFFFF','--cmd-border':'#E2DDD3','--cmd-text':'#9A958B','--check-border':'#D8D2C6',
+  '--seg-active':'#1B1A17','--seg-active-text':'#FFFFFF'
+};
+const DARK = {
+  '--app-bg':'linear-gradient(180deg,rgba(16,18,24,.42),rgba(12,13,18,.68)),radial-gradient(90% 70% at 10% 4%,#2F74BE 0%,rgba(47,116,190,0) 50%),radial-gradient(100% 80% at 96% 34%,#23507C 0%,rgba(35,80,124,0) 52%),radial-gradient(120% 100% at 80% 116%,#C9663C 0%,rgba(201,102,60,0) 50%),radial-gradient(110% 100% at 12% 122%,#B98A5A 0%,rgba(185,138,90,0) 46%),#11151B',
+  '--ink':'#FFFFFF','--ink-2':'#EDEAE3','--ink-soft':'rgba(237,234,227,.72)','--ink-faint':'rgba(237,234,227,.52)',
+  '--card':'linear-gradient(180deg,rgba(24,25,31,.55),rgba(14,15,20,.72))','--card-border':'rgba(255,255,255,.1)',
+  '--card-muted':'rgba(255,255,255,.08)','--card-blur':'blur(16px)',
+  '--shadow-card':'0 20px 50px -22px rgba(0,0,0,.55)',
+  '--chip-bg':'rgba(255,255,255,.1)','--chip-border':'rgba(255,255,255,.16)','--line':'rgba(255,255,255,.1)',
+  '--rail':'rgba(20,22,28,.5)','--rail-border':'rgba(255,255,255,.09)','--nav-active':'rgba(255,255,255,.14)','--glyph':'rgba(237,234,227,.6)',
+  '--accent':'#23B083','--header-bg':'rgba(17,21,27,.55)','--header-border':'rgba(255,255,255,.08)',
+  '--cmd-bg':'rgba(255,255,255,.1)','--cmd-border':'rgba(255,255,255,.14)','--cmd-text':'rgba(237,234,227,.7)','--check-border':'rgba(255,255,255,.32)',
+  '--seg-active':'#FFFFFF','--seg-active-text':'#15161A'
+};
+const FONTS = {
+  en:{'--font-sans':"'Schibsted Grotesk',system-ui,sans-serif",'--font-accent':"'Newsreader',serif",'--accent-style':'italic'},
+  he:{'--font-sans':"'Heebo',system-ui,sans-serif",'--font-accent':"'Frank Ruhl Libre',serif",'--accent-style':'normal'}
+};
+
+const T = {
+  en:{
+    tag:'Family', cmd:'How can I help today?', paper:'Paper', night:'Night', avatar:'MA',
+    navToday:'Today', navCal:'Calendar', navPeople:'People', navLists:'Lists', navSettings:'Settings',
+    date:'Monday · June 22', greet:'Good morning,', name:'Maya',
+    actAdd:'+ Add task', actMeals:'Plan meals', actSitter:'Book a sitter',
+    cardTasks:'Today’s tasks', addTask:'Add a task', cardWeek:'This week', weekCount:'4 events',
+    cardHousehold:'Household', people4:'4 people', cardCeleb:'Celebrations', soon:'soon',
+    tonightKicker:'Tonight’s dinner', tonightDish:'Pasta night', tonightMeta:'Jonah cooking · 7:30pm · serves 4', viewRecipe:'View recipe',
+    calKicker:'This week · 22–28', month:'June', newEvent:'+ New event',
+    peopleKicker:'Who’s in your circle', peopleHead1:'The', peopleHead2:'household', invite:'+ Invite someone',
+    stat1:'4 family', stat2:'2 helpers', stat3:'1 pet', colName:'Name', colStatus:'Status', colRole:'Role',
+    listsKicker:'Shared with everyone', listsHead1:'Family', listsHead2:'lists', newList:'+ New list',
+    groceryTitle:'Grocery list', grocerySub:'for Saturday', errandsTitle:'Errands', errandsSub:'this week',
+    setKicker:'Make HomeOS yours', setHead:'Settings', profile:'Profile', profileName:'Maya Adler', edit:'Edit',
+    appearance:'Appearance', theme:'Theme', connected:'Connected services',
+    connectedSub:'HomeOS pulls everything into one place — calendars, mail, photos and your smart home.',
+    notifications:'Notifications',
+    nWeekly:'Weekly digest', nWeeklySub:'Sunday-evening summary of the week ahead',
+    nQuiet:'Quiet hours', nQuietSub:'Mute non-urgent pings 9pm–7am',
+    nLoc:'Share location with family', nLocSub:'Show “home / away” status on the household',
+    navConn:'Connections', firstRun:'First-run',
+    connKicker:'Bring everything in', connHead1:'Connected', connHead2:'channels', connChannel:'WhatsApp', connStatus:'Connected',
+    connDesc:'The HomeOS bot is linked to your family group. Forward any message and it becomes an event, reminder or list item — automatically.',
+    connHowTitle:'How it works', connStep1:'Forward a message to the bot', connStep2:'HomeOS reads the date, time & who', connStep3:'It lands on the right day on your board',
+    connLinked:'Linked members', connExample:'Recent ingestion',
+    connMsg:'Dear parents, the parents meeting is Sunday 28/6 at 18:00 at Gan Rimon. Please confirm.',
+    connCardTitle:'Parents meeting', connCardMeta:'Sun, 28 June · 18:00 · Gan Rimon', connCardWho:'Mom',
+    connAddBtn:'Add a channel', connScan:'Scan in WhatsApp', connScanSub:'Settings → Linked devices',
+    addTitle:'New task', fieldTitle:'Title', addPlaceholder:'e.g. Pay the electricity bill', fieldWho:'Assign to', cancel:'Cancel', addSave:'Add task'
+  },
+  he:{
+    tag:'משפחה', cmd:'איך אפשר לעזור היום?', paper:'נייר', night:'לילה', avatar:'מא',
+    navToday:'היום', navCal:'יומן', navPeople:'אנשים', navLists:'רשימות', navSettings:'הגדרות',
+    date:'יום שני · 22 ביוני', greet:'בוקר טוב,', name:'מאיה',
+    actAdd:'+ משימה חדשה', actMeals:'תכנון ארוחות', actSitter:'הזמנת בייביסיטר',
+    cardTasks:'המשימות של היום', addTask:'הוספת משימה', cardWeek:'השבוע', weekCount:'4 אירועים',
+    cardHousehold:'משק הבית', people4:'4 בני בית', cardCeleb:'חגיגות', soon:'בקרוב',
+    tonightKicker:'ארוחת הערב', tonightDish:'פסטה הערב', tonightMeta:'יונתן מבשל · 19:30 · ל-4 סועדים', viewRecipe:'למתכון',
+    calKicker:'השבוע · 22–28', month:'יוני', newEvent:'+ אירוע חדש',
+    peopleKicker:'מי בבית', peopleHead1:'בני', peopleHead2:'הבית', invite:'+ הזמנת בן בית',
+    stat1:'4 בני משפחה', stat2:'2 עוזרים', stat3:'חיית מחמד 1', colName:'שם', colStatus:'סטטוס', colRole:'תפקיד',
+    listsKicker:'משותף לכולם', listsHead1:'רשימות', listsHead2:'משפחתיות', newList:'+ רשימה חדשה',
+    groceryTitle:'רשימת קניות', grocerySub:'לשבת', errandsTitle:'סידורים', errandsSub:'השבוע',
+    setKicker:'התאמה אישית', setHead:'הגדרות', profile:'פרופיל', profileName:'מאיה אדלר', edit:'עריכה',
+    appearance:'מראה', theme:'ערכת נושא', connected:'שירותים מחוברים',
+    connectedSub:'HomeOS מרכז הכל במקום אחד — יומנים, דוא״ל, תמונות והבית החכם.',
+    notifications:'התראות',
+    nWeekly:'סיכום שבועי', nWeeklySub:'סיכום ביום ראשון בערב לשבוע הקרוב',
+    nQuiet:'שעות שקטות', nQuietSub:'השתקת התראות לא דחופות 21:00–07:00',
+    nLoc:'שיתוף מיקום עם המשפחה', nLocSub:'הצגת סטטוס “בבית / בחוץ” לבני הבית',
+    navConn:'חיבורים', firstRun:'התחלה',
+    connKicker:'הכל נכנס לכאן', connHead1:'ערוצים', connHead2:'מחוברים', connChannel:'WhatsApp', connStatus:'מחובר',
+    connDesc:'הבוט של HomeOS מקושר לקבוצת המשפחה. העבירו כל הודעה והיא הופכת אוטומטית לאירוע, תזכורת או פריט ברשימה.',
+    connHowTitle:'איך זה עובד', connStep1:'מעבירים הודעה לבוט', connStep2:'HomeOS מזהה תאריך, שעה ומי מעורב', connStep3:'הפריט נוחת ביום הנכון על הלוח',
+    connLinked:'בני בית מקושרים', connExample:'נחת לאחרונה',
+    connMsg:'הורים יקרים, אסיפת הורים ביום ראשון 28/6 בשעה 18:00 בגן רימון. נא לאשר.',
+    connCardTitle:'אסיפת הורים', connCardMeta:'ראשון, 28 ביוני · 18:00 · גן רימון', connCardWho:'אמא',
+    connAddBtn:'הוספת ערוץ', connScan:'סריקה ב-WhatsApp', connScanSub:'הגדרות ← מכשירים מקושרים',
+    addTitle:'משימה חדשה', fieldTitle:'כותרת', addPlaceholder:'למשל: לשלם חשבון חשמל', fieldWho:'למי', cancel:'ביטול', addSave:'הוספת משימה'
+  }
+};
+
+const TASKS = [
+  { id:'pickup', text:{en:'School pickup · 3pm',he:'איסוף מבית הספר · 15:00'} },
+  { id:'vet', text:{en:'Take Robi to the vet · 4pm',he:'לקחת את רובי לווטרינר · 16:00'} },
+  { id:'grocery', text:{en:'Order weekend groceries',he:'להזמין מצרכים לסוף השבוע'} },
+  { id:'laundry', text:{en:'Fold & put away laundry',he:'לקפל ולסדר כביסה'} }
+];
+const AGENDA = [
+  { wd:{en:'MON',he:'ב׳'}, num:'22', title:{en:'Vet appointment',he:'תור לווטרינר'}, meta:{en:'4:00pm · with Robi',he:'16:00 · עם רובי'}, pill:{en:'Today',he:'היום'}, pc:'green' },
+  { wd:{en:'TUE',he:'ג׳'}, num:'23', title:{en:'Ella · football practice',he:'אלה · אימון כדורגל'}, meta:{en:'5:30pm · school field',he:'17:30 · מגרש ביה״ס'} },
+  { wd:{en:'THU',he:'ה׳'}, num:'25', title:{en:'Parent–teacher evening',he:'אסיפת הורים'}, meta:{en:'6:00pm · both parents',he:'18:00 · שני ההורים'} },
+  { wd:{en:'SAT',he:'ש׳'}, num:'27', title:{en:'Grocery delivery',he:'משלוח מצרכים'}, meta:{en:'9:00am · 1-hour window',he:'09:00 · חלון של שעה'}, pill:{en:'Booked',he:'הוזמן'}, pc:'blue' }
+];
+const HOUSEHOLD = [
+  { initials:{en:'MA',he:'מא'}, color:'#1E9E6F', name:{en:'Maya',he:'מאיה'}, role:{en:'Parent · admin',he:'הורה · מנהלת'}, status:{en:'Home',he:'בבית'}, sc:'green' },
+  { initials:{en:'JO',he:'יו'}, color:'#3686D8', name:{en:'Jonah',he:'יונתן'}, role:{en:'Parent',he:'הורה'}, status:{en:'At work',he:'בעבודה'}, sc:'blue' },
+  { initials:{en:'EL',he:'אל'}, color:'#B57BD6', name:{en:'Ella',he:'אלה'}, role:{en:'Kid · 12',he:'ילדה · 12'}, status:{en:'At school',he:'בבית הספר'}, sc:'blue' },
+  { initials:{en:'NO',he:'נע'}, color:'#1E9E6F', name:{en:'Noam',he:'נעם'}, role:{en:'Kid · 8',he:'ילד · 8'}, status:{en:'Home',he:'בבית'}, sc:'green' },
+  { initials:{en:'SO',he:'סו'}, color:'#D9543F', name:{en:'Sofia',he:'סופיה'}, role:{en:'Nanny · Mon–Thu',he:'מטפלת · ב׳–ה׳'}, status:{en:'Off today',he:'חופש היום'}, sc:'gray' },
+  { initials:{en:'RO',he:'רו'}, color:'#C99A2E', name:{en:'Robi',he:'רובי'}, role:{en:'Dog',he:'כלב'}, status:{en:'Home',he:'בבית'}, sc:'green' }
+];
+const CELEB = [
+  { initials:{en:'RU',he:'רו'}, color:'#C99A2E', name:{en:'Grandma Ruth',he:'סבתא רות'}, meta:{en:'Jun 24 · Birthday',he:'24 ביוני · יום הולדת'}, pill:{en:'in 2 days',he:'בעוד יומיים'} },
+  { initials:{en:'M&J',he:'מי'}, color:'#1E9E6F', name:{en:'Maya & Jonah',he:'מאיה ויונתן'}, meta:{en:'Jun 28 · Anniversary · 14 yrs',he:'28 ביוני · יום נישואים · 14 שנה'} },
+  { initials:{en:'EL',he:'אל'}, color:'#B57BD6', name:{en:'Ella turns 13',he:'אלה בת 13'}, meta:{en:'Aug 03 · Birthday',he:'3 באוגוסט · יום הולדת'} }
+];
+const INGREDIENTS = [{en:'Tomatoes',he:'עגבניות'},{en:'Basil',he:'בזיליקום'},{en:'Parmesan',he:'פרמזן'}];
+const GROCERY = [
+  {id:'milk',text:{en:'Milk',he:'חלב'}},{id:'eggs',text:{en:'Eggs (dozen)',he:'ביצים (תריסר)'}},{id:'tom',text:{en:'Tomatoes',he:'עגבניות'}},
+  {id:'basil',text:{en:'Fresh basil',he:'בזיליקום טרי'}},{id:'dog',text:{en:'Dog food',he:'אוכל לכלב'}},{id:'bread',text:{en:'Sourdough bread',he:'לחם מחמצת'}}
+];
+const ERRANDS = [
+  {id:'post',text:{en:'Drop parcel at post office',he:'למסור חבילה בדואר'}},{id:'pharm',text:{en:'Pharmacy refill',he:'חידוש מרשם בבית מרקחת'}},
+  {id:'car',text:{en:'Book car service',he:'לקבוע טיפול לרכב'}},{id:'gift',text:{en:'Buy gift for Grandma Ruth',he:'לקנות מתנה לסבתא רות'}}
+];
+const WEEK = [
+  { wd:{en:'MON',he:'ב׳'}, num:'22', today:true, events:[{text:{en:'4pm Vet · Robi',he:'16:00 וטרינר · רובי'}, c:'green'}] },
+  { wd:{en:'TUE',he:'ג׳'}, num:'23', events:[{text:{en:'5:30pm Ella football',he:'17:30 כדורגל אלה'}, c:'blue'}] },
+  { wd:{en:'WED',he:'ד׳'}, num:'24', events:[{text:{en:'Grandma Ruth 🎂',he:'סבתא רות 🎂'}, c:'amber'}] },
+  { wd:{en:'THU',he:'ה׳'}, num:'25', events:[{text:{en:'6pm Parent–teacher',he:'18:00 אסיפת הורים'}, c:'blue'}] },
+  { wd:{en:'FRI',he:'ו׳'}, num:'26', events:[] },
+  { wd:{en:'SAT',he:'ש׳'}, num:'27', events:[{text:{en:'9am Grocery drop',he:'09:00 משלוח מצרכים'}, c:'blue'}] },
+  { wd:{en:'SUN',he:'א׳'}, num:'28', events:[{text:{en:'Anniversary · 14y',he:'יום נישואים · 14 שנה'}, c:'violet'}] }
+];
+
+const EVSTYLE = {
+  green:'background:rgba(30,158,111,.13);color:#147A55',
+  blue:'background:rgba(54,134,216,.14);color:#2E6FB8',
+  amber:'background:rgba(201,154,46,.16);color:#9A7416',
+  violet:'background:rgba(181,123,214,.18);color:#8B4FB0',
+  gray:'background:rgba(163,158,146,.2);color:var(--ink-soft)'
+};
+
+const OB = [
+  { art:'HomeOS', kind:'intro', title:{en:'A calm home for your plans',he:'בית רגוע לכל התוכניות'}, body:{en:'HomeOS turns the messages your family forwards into one calm, shared board.',he:'HomeOS הופך הודעות שהמשפחה מעבירה ללוח אחד — רגוע, משותף וברור.'}, cta:{en:'Get started',he:'בואו נתחיל'} },
+  { art:'⌘', kind:'connect', title:{en:'Connect your family chat',he:'חברו את צ׳אט המשפחה'}, body:{en:'Scan the code or save the number. Anything you forward shows up on the board.',he:'סרקו את הקוד או שמרו את המספר. כל מה שתעבירו יופיע על הלוח.'}, cta:{en:'Continue',he:'המשך'} },
+  { art:'✦', kind:'invite', title:{en:'Add your family',he:'הוסיפו את המשפחה'}, body:{en:'Everyone gets their own color, so it’s always clear whose plan is whose.',he:'לכל אחד צבע משלו — כך תמיד ברור של מי כל דבר.'}, cta:{en:'Continue',he:'המשך'} },
+  { art:'✓', kind:'done', title:{en:'You’re all set',he:'הכל מוכן'}, body:{en:'Forward any message to HomeOS and it lands on your board.',he:'העבירו כל הודעה ל-HomeOS והיא תנחת על הלוח.'}, cta:{en:'Open HomeOS',he:'פתחו את HomeOS'} }
+];
+
+class Component extends DCLogic {
+  state = { theme: this.props.defaultTheme || 'light', lang: this.props.defaultLang || 'he', nav: 'home', done: { pickup:true, milk:true, eggs:true }, sw:{ weekly:true, quiet:false, location:true }, onboard:false, obStep:0, addOpen:false, draft:'', draftWho:null, extraTasks:[] };
+
+  componentDidMount(){ this.applyView(); }
+  componentDidUpdate(){ this.applyView(); }
+  applyView(){
+    const el = this.rootEl; if(!el) return;
+    const tmap = this.state.theme === 'dark' ? DARK : LIGHT;
+    for(const k in tmap) el.style.setProperty(k, tmap[k]);
+    const fmap = FONTS[this.state.lang] || FONTS.he;
+    for(const k in fmap) el.style.setProperty(k, fmap[k]);
+    if(this.props.accentColor) el.style.setProperty('--accent', this.props.accentColor);
+    el.setAttribute('dir', this.state.lang === 'he' ? 'rtl' : 'ltr');
+  }
+  setTheme(t){ this.setState({ theme: t }); }
+  setLang(l){ this.setState({ lang: l }); }
+  toggleDone(id){ this.setState(s => ({ done: { ...s.done, [id]: !s.done[id] } })); }
+  toggleSw(k){ this.setState(s => ({ sw: { ...s.sw, [k]: !s.sw[k] } })); }
+
+  renderVals(){
+    const L = this.state.lang;
+    const t = {}; const src = T[L]; for(const k in src) t[k] = src[k];
+    const segT = (key) => "border:none;cursor:pointer;border-radius:8px;padding:6px 13px;font:600 12.5px var(--font-sans);transition:all .15s;" + (this.state.theme === key ? "background:var(--seg-active);color:var(--seg-active-text)" : "background:transparent;color:var(--ink-faint)");
+    const segL = (key) => "border:none;cursor:pointer;border-radius:8px;padding:6px 13px;font:600 12.5px var(--font-sans);transition:all .15s;" + (this.state.lang === key ? "background:var(--seg-active);color:var(--seg-active-text)" : "background:transparent;color:var(--ink-faint)");
+    const navS = (key) => "width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;transition:all .15s;" + (this.state.nav === key ? "background:var(--nav-active);color:var(--accent)" : "background:transparent;color:var(--glyph)");
+    const mkList = (arr) => arr.map(d => {
+      const done = !!this.state.done[d.id];
+      return { text:(typeof d.text==='string'?d.text:d.text[L]), mark: done?'✓':'', toggle:()=>this.toggleDone(d.id),
+        boxStyle: done ? "width:18px;height:18px;border-radius:6px;flex:none;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px" : "width:18px;height:18px;border-radius:6px;flex:none;border:2px solid var(--check-border);box-sizing:border-box",
+        labelStyle: done ? "font-size:13.5px;color:var(--ink-faint);text-decoration:line-through" : "font-size:13.5px;color:var(--ink-2)" };
+    });
+    const swTrack = (on) => "width:44px;height:25px;border-radius:999px;background:"+(on?'var(--accent)':'var(--card-muted)')+";border:1px solid var(--card-border);cursor:pointer;display:flex;align-items:center;padding:2px;transition:background .15s;flex:none";
+    const swKnob = (on) => "width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s;transform:translateX("+(on? (L==='he'?'-19px':'19px') :'0')+")";
+
+    const _all = TASKS.concat(this.state.extraTasks);
+    const left = _all.length - _all.filter(d=>this.state.done[d.id]).length;
+    const tasksLeft = L==='he' ? (left+' משימות נותרו היום') : (left+' tasks left today');
+    const ob0 = OB[this.state.obStep] || OB[0];
+    const dotS = (i) => 'width:7px;height:7px;border-radius:999px;display:inline-block;background:'+(i===this.state.obStep?'var(--accent)':'var(--check-border)');
+
+    return {
+      root: el => { this.rootEl = el; },
+      t, lang:L,
+      heBtn: segL('he'), enBtn: segL('en'), paperBtn: segT('light'), nightBtn: segT('dark'),
+      navHome: navS('home'), navCal: navS('cal'), navPeople: navS('people'), navLists: navS('lists'), navSettings: navS('settings'),
+      goHome:()=>this.setState({nav:'home'}), goCal:()=>this.setState({nav:'cal'}), goPeople:()=>this.setState({nav:'people'}), goLists:()=>this.setState({nav:'lists'}), goSettings:()=>this.setState({nav:'settings'}),
+      setHe:()=>this.setLang('he'), setEn:()=>this.setLang('en'), setPaper:()=>this.setTheme('light'), setNight:()=>this.setTheme('dark'),
+      isHome:this.state.nav==='home', isCal:this.state.nav==='cal', isPeople:this.state.nav==='people', isLists:this.state.nav==='lists', isSettings:this.state.nav==='settings',
+      navConn: navS('conn'), goConn:()=>this.setState({nav:'conn'}), isConn:this.state.nav==='conn',
+      onboard:this.state.onboard,
+      addOpen:this.state.addOpen, draft:this.state.draft,
+      openAdd:()=>this.setState({addOpen:true,draft:''}),
+      closeAdd:()=>this.setState({addOpen:false}),
+      onDraft:(e)=>this.setState({draft:e.target.value}),
+      saveTask:()=>{ const txt=(this.state.draft||'').trim(); if(!txt){ this.setState({addOpen:false}); return; } const id='x'+Date.now(); this.setState(s=>({ extraTasks:[...s.extraTasks,{id,text:txt}], addOpen:false, draft:'', draftWho:null })); },
+      whoChips: HOUSEHOLD.slice(0,4).map(m=>({ name:m.name[L], color:m.color, pick:()=>this.setState({draftWho:m.color}), style:"display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 13px;font:600 13px var(--font-sans);cursor:pointer;color:var(--ink-2);border:1.5px solid "+(this.state.draftWho===m.color?m.color:'var(--check-border)')+";background:"+(this.state.draftWho===m.color?'var(--card-muted)':'transparent') })),
+      startOnboard:()=>this.setState({onboard:true,obStep:0}), exitOnboard:()=>this.setState({onboard:false,obStep:0}),
+      obNext:()=>{ const s=this.state.obStep; if(s>=OB.length-1) this.setState({onboard:false,obStep:0}); else this.setState({obStep:s+1}); },
+      obBack:()=>this.setState({obStep:Math.max(0,this.state.obStep-1)}),
+      ob:{ art:ob0.art, title:ob0.title[L], body:ob0.body[L], cta:ob0.cta[L], isConnect:ob0.kind==='connect', isInvite:ob0.kind==='invite', canBack:this.state.obStep>0, backLabel:(L==='he'?'חזרה':'Back'), dot0:dotS(0), dot1:dotS(1), dot2:dotS(2), dot3:dotS(3) },
+      tasks: mkList(TASKS.concat(this.state.extraTasks)), grocery: mkList(GROCERY), errands: mkList(ERRANDS), tasksLeft,
+      agenda: AGENDA.map(a=>({ wd:a.wd[L], num:a.num, title:a.title[L], meta:a.meta[L], hasPill:!!a.pill, pill:a.pill?a.pill[L]:'', pillStyle:a.pc?EVSTYLE[a.pc]:'' })),
+      household: HOUSEHOLD.map(m=>({ initials:m.initials[L], color:m.color, name:m.name[L], role:m.role[L], status:m.status[L], statusStyle:EVSTYLE[m.sc] })),
+      celebrations: CELEB.map(c=>({ initials:c.initials[L], color:c.color, name:c.name[L], meta:c.meta[L], hasPill:!!c.pill, pill:c.pill?c.pill[L]:'' })),
+      ingredients: INGREDIENTS.map(i=>i[L]),
+      week: WEEK.map(d=>({ wd:d.wd[L], num:d.num, numStyle: d.today ? "width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px" : "font-weight:700;font-size:13px;color:var(--ink)", events:d.events.map(ev=>({ text:ev.text[L], style:EVSTYLE[ev.c] })) })),
+      swWeeklyTrack: swTrack(this.state.sw.weekly), swWeeklyKnob: swKnob(this.state.sw.weekly), toggleWeekly:()=>this.toggleSw('weekly'),
+      swQuietTrack: swTrack(this.state.sw.quiet), swQuietKnob: swKnob(this.state.sw.quiet), toggleQuiet:()=>this.toggleSw('quiet'),
+      swLocTrack: swTrack(this.state.sw.location), swLocKnob: swKnob(this.state.sw.location), toggleLoc:()=>this.toggleSw('location'),
+      noop:()=>{}
+    };
+  }
+}
+</script>
+</body>
+</html>
+
