@@ -1,9 +1,9 @@
 import type { ParsedEvent } from "@homeos/shared";
-import { Modal } from "@shared/ui";
+import { Dialog } from "@shared/ui";
 import { AddItemForm } from "./AddItemForm";
 import { useAddEventController } from "./use-add-event";
 
-export interface AddEventModalProps {
+export interface AddEventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Optional notification fired with the validated event after it persists (analytics/tests). */
@@ -11,26 +11,25 @@ export interface AddEventModalProps {
 }
 
 /**
- * The web AddEvent surface: the shared AddItemForm inside a centered {@link Modal} (Radix Dialog).
- * Identical persistence behavior to the phone {@link AddEventSheet} — both share
- * {@link useAddEventController} (the create mutation + close/reset) and AddItemForm (the form) — and
- * differ only in the container chrome (centered modal vs bottom sheet).
+ * The one AddEvent host (#184) — the shared AddItemForm inside the responsive {@link Dialog} (bottom
+ * sheet on phones, centered modal ≥md). Replaces the old surface-split AddEventModal + AddEventSheet;
+ * the persistence wiring (useAddEventController → POST /events) and the form are reused verbatim.
  */
-export function AddEventModal({ open, onOpenChange, onCreate }: AddEventModalProps) {
+export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogProps) {
   const { submitting, isError, submit, close } = useAddEventController(onOpenChange, onCreate);
 
   return (
-    <Modal
+    <Dialog
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       title="הוספה ללוח"
     >
       <AddItemForm submitting={submitting} onSubmit={submit} onCancel={close} />
       {isError && (
-        <p role="alert" className="mt-3 text-[13px] text-red-600">
+        <p role="alert" className="mt-3 text-[13px] text-coral">
           לא הצלחנו לשמור. נסו שוב.
         </p>
       )}
-    </Modal>
+    </Dialog>
   );
 }

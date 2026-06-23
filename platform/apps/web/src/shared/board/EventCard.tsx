@@ -44,10 +44,10 @@ export interface EventCardProps extends HTMLAttributes<HTMLElement> {
   /** Show the event's own time. TimeSpine sets false (the grid column owns the time). Default true. */
   showTime?: boolean;
   /**
-   * #153 — when provided, the card becomes an interactive `<button>` that opens the event-detail drawer
-   * (mirrors PersonChip's display→button polymorphism). Omitted ⇒ the card stays a pure, inert `<div>`.
-   * This is the KIOSK-EXCLUSION mechanism: `TabletBoard` never passes it, so the no-auth tablet has no
-   * way to open the drawer (which reveals `source_text` = other people's words) — the #153 security line.
+   * When provided, the card becomes an interactive `<button>` that opens the event-detail drawer (mirrors
+   * PersonChip's display→button polymorphism); omitted ⇒ the card stays a pure, inert `<div>`. This is a
+   * PRESENTATIONAL contract — a card is interactive only where a screen wires a detail host — not a
+   * security boundary (#184: the ambient surface this once gated no longer exists).
    */
   onOpenDetail?: (event: SavedEvent) => void;
 }
@@ -120,8 +120,8 @@ export function EventCard({
     </>
   );
 
-  // #153 — interactive only when given onOpenDetail: a real <button> (free keyboard/Enter/Space + role),
-  // following PersonChip's display→button precedent. The kiosk omits the prop, so its cards stay inert.
+  // Interactive only when given onOpenDetail: a real <button> (free keyboard/Enter/Space + role),
+  // following PersonChip's display→button precedent. Omitted ⇒ inert <div> (presentational contract).
   if (onOpenDetail) {
     return (
       <button

@@ -1,4 +1,4 @@
-import { AddEventModal } from "@features/add-event";
+import { AddEventDialog } from "@features/add-event";
 import { PersonAvatar } from "@shared/board";
 import { useTheme } from "@shared/theme";
 import { IconButton } from "@shared/ui";
@@ -76,7 +76,7 @@ export function AppShell() {
       </div>
 
       <BottomNav className="flex md:hidden" />
-      <AddEventModal open={addOpen} onOpenChange={setAddOpen} />
+      <AddEventDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );
 }

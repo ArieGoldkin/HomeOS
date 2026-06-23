@@ -1,4 +1,4 @@
-import { AddEventModal } from "@features/add-event";
+import { AddEventDialog } from "@features/add-event";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { PersonAvatar } from "@shared/board";
 import { useDayEvents, useNow } from "@shared/hooks";
@@ -89,8 +89,8 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
         </Card>
       </div>
 
-      <AddEventModal open={addOpen} onOpenChange={setAddOpen} />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
+      <AddEventDialog open={addOpen} onOpenChange={setAddOpen} />
+      <EventDetailDrawer event={selected} onClose={closeDetail} />
     </div>
   );
 }
