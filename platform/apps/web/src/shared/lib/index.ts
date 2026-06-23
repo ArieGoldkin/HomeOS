@@ -18,3 +18,4 @@ export {
   type DayPeekItem,
   partitionDay,
 } from "./day-events";
+export { greetingHe, hebDateLong } from "./greeting";
