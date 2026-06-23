@@ -17,7 +17,7 @@ const INVITE = "+ הזמנת בן בית";
 describe("FamilyView (People, data-connected)", () => {
   it("renders the household header + a data table of the known roster", async () => {
     render(wrap(<FamilyView />));
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("הבית");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("בני הבית");
     await waitFor(() => expect(screen.getByText("אבא")).toBeInTheDocument());
     for (const name of ["אמא", "יואב", "נועה"]) {
       expect(screen.getByText(name)).toBeInTheDocument();

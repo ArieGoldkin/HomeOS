@@ -98,29 +98,42 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="grid grid-cols-[1.7fr_1fr_1fr] border-[var(--line)] border-b px-5 py-3 font-mono text-[11px] text-muted-foreground uppercase tracking-[0.05em]">
-          <span>שם</span>
-          <span>סטטוס</span>
-          <span>תפקיד</span>
-        </div>
-        {members.map((name, i) => (
-          <div
-            key={name}
-            className={cn(
-              "grid grid-cols-[1.7fr_1fr_1fr] items-center px-5 py-3",
-              i < members.length - 1 && "border-[var(--line)] border-b",
-            )}
-          >
-            <span className="flex items-center gap-3">
-              <PersonAvatar name={name} size={30} />
-              <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">{name}</span>
-            </span>
-            <span>
-              <StatusPill tone="active">פעיל</StatusPill>
-            </span>
-            <span className="text-[13px] text-ink-soft">{roleOf(name)}</span>
-          </div>
-        ))}
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-[var(--line)] border-b">
+              <th className="w-1/2 px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
+                שם
+              </th>
+              <th className="px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
+                סטטוס
+              </th>
+              <th className="px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
+                תפקיד
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((name, i) => (
+              <tr
+                key={name}
+                className={cn(i < members.length - 1 && "border-[var(--line)] border-b")}
+              >
+                <td className="px-5 py-3">
+                  <span className="flex items-center gap-3">
+                    <PersonAvatar name={name} size={30} />
+                    <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">
+                      {name}
+                    </span>
+                  </span>
+                </td>
+                <td className="px-5 py-3">
+                  <StatusPill tone="active">פעיל</StatusPill>
+                </td>
+                <td className="px-5 py-3 text-[13px] text-ink-soft">{roleOf(name)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Card>
     </div>
   );
