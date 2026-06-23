@@ -1,6 +1,7 @@
 // Group barrel for shared/ui — low-level cross-surface primitives.
 // Public API only; never `export *`. Consumers import from "@shared/ui".
 export { Button, type ButtonProps } from "./Button";
+export { Card, type CardProps } from "./Card";
 export { Field, type FieldProps } from "./Field";
 export { IconButton, type IconButtonProps } from "./IconButton";
 export { Modal, type ModalProps } from "./Modal";
@@ -11,3 +12,5 @@ export {
 } from "./SegmentedControl";
 export { Sheet, type SheetProps } from "./Sheet";
 export { Skeleton, type SkeletonProps } from "./Skeleton";
+export { StatusPill, type StatusPillProps } from "./StatusPill";
+export { Switch, type SwitchProps } from "./Switch";
