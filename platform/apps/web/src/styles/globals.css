@@ -112,10 +112,16 @@
   --sidebar-border: var(--rail-border);
   --sidebar-ring: var(--ring);
 
-  /* fonts: UNCHANGED in this issue (still Rubik) — the new stack is issue #171/A2 */
-  --font-sans: "Rubik", system-ui, -apple-system, sans-serif;
-  --font-serif: "Frank Ruhl Libre", Georgia, "Times New Roman", serif; /* per-component only */
+  /* fonts (#171) — Hebrew-first 3-role stack (self-hosted variable faces, loaded in main.tsx).
+   * --font-accent is the emphasis serif (ONE phrase per heading), UPRIGHT for Hebrew via
+   * --accent-style: normal. The [lang="en"] block below swaps to Schibsted + Newsreader italic
+   * (the EN toggle UI is deferred — this only wires the plumbing). */
+  --font-sans: "Heebo Variable", "Heebo", system-ui, -apple-system, sans-serif;
+  --font-serif: "Frank Ruhl Libre Variable", "Frank Ruhl Libre", Georgia, serif; /* = the accent face */
+  --font-accent: var(--font-serif);
+  --font-mono: "Spline Sans Mono Variable", "Spline Sans Mono", ui-monospace, monospace;
   --font-display: var(--font-sans);
+  --accent-style: normal;                          /* Hebrew serif is upright; [lang=en] flips to italic */
 
   /* -- SIGNATURE TOKENS shadcn never ships -- */
   --line: #EFEAE0;                                /* the editorial divider line (lighter than --border) */
@@ -134,6 +140,18 @@
 
   /* motion duration knob (keyframes below) */
   --dur: 440ms;
+}
+
+/* ----------------------------------------------------------------------------
+ * 1b. LANGUAGE FONT SWAP — English (LTR) uses Schibsted Grotesk + Newsreader italic.
+ *     Default app is <html lang="he"> (Heebo + Frank Ruhl upright); this block is
+ *     dormant until the EN toggle ships (#deferred). dir/lang are switched together.
+ * -------------------------------------------------------------------------- */
+:where([lang="en"]) {
+  --font-sans: "Schibsted Grotesk Variable", "Schibsted Grotesk", system-ui, -apple-system, sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, serif;
+  --font-accent: var(--font-serif);
+  --accent-style: italic;                          /* English accent serif is italic */
 }
 
 /* ----------------------------------------------------------------------------
@@ -277,6 +295,7 @@
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
   --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
 
   /* discrete radius scale (sm 8 / md 14 / lg 20 / xl 28; card = 18 via --radius-card) */
   --radius-sm: 0.5rem;    /* 8 */
@@ -350,6 +369,14 @@
   /* the editorial divider — the primary structural element (used INSTEAD of boxed cards) */
   .hairline {
     border-color: var(--hairline);
+  }
+
+  /* the emphasis serif — reserved for ONE phrase per heading (e.g. the name in
+   * "Good morning, Maya"). Upright for Hebrew, italic for English (via --accent-style).
+   * Never body, never more than once per heading (anti-slop discipline). */
+  .font-accent {
+    font-family: var(--font-accent);
+    font-style: var(--accent-style);
   }
 
   /* signature: the hairline rule that DRAWS IN along --draw-origin (right→left under RTL) when a
