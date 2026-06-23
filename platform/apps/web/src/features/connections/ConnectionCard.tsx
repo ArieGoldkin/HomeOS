@@ -24,7 +24,7 @@ export function ConnectionCard({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-[var(--radius)] border border-border bg-card p-4",
+        "flex items-center gap-3 rounded-[var(--radius)] border border-[var(--line)] bg-card p-4",
         className,
       )}
     >
@@ -35,7 +35,7 @@ export function ConnectionCard({
         G
       </span>
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-[15px] text-foreground">{name}</p>
+        <p className="font-medium text-[15px] text-[color:var(--ink)]">{name}</p>
         {description && <p className="truncate text-[13px] text-muted-foreground">{description}</p>}
       </div>
       {connected ? (

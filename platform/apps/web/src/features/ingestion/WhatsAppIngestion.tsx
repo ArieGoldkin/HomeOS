@@ -1,5 +1,6 @@
 import type { SavedEvent } from "@homeos/shared";
 import { EventCard } from "@shared/board";
+import { Card } from "@shared/ui";
 import { WhatsAppBubble } from "./WhatsAppBubble";
 
 /** The board event the forwarded message becomes — the "→ board" half of the demo. */
@@ -17,23 +18,26 @@ const PREVIEW: SavedEvent = {
 };
 
 /**
- * Educational "how it works" surface: forward a Hebrew WhatsApp message → it becomes a board event.
- * Shows a mock WhatsApp chat (user-forwarded message + bot confirmation, in literal WA colors) flowing
- * into the resulting EventCard, plus the privacy footnote (forward-only — no other chats are read).
- * Presentational only — no data fetching.
+ * The "How it works" card (#182, re-skin of #98) — embeddable inside the Connections screen: forward a
+ * Hebrew WhatsApp message → it becomes a board event. A mock WhatsApp chat (literal WA colors via
+ * WhatsAppBubble — never recolored) flows into the resulting EventCard, with the forward-only privacy
+ * footnote kept verbatim (the red line). Presentational only — no data fetching.
  */
 export function WhatsAppIngestion() {
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 p-6" data-testid="wa-ingestion">
-      <header className="text-center">
-        <h1 className="font-display font-bold text-[22px] text-foreground">איך זה עובד</h1>
-        <p className="mt-1 text-[14px] text-muted-foreground">
+    <Card className="flex flex-col gap-4 p-[18px]" data-testid="wa-ingestion">
+      <div>
+        <span className="font-semibold text-[14.5px] text-[color:var(--ink)]">איך זה עובד</span>
+        <p className="mt-1 text-[13px] text-muted-foreground">
           מעבירים הודעה בוואטסאפ — היא הופכת לאירוע על הלוח.
         </p>
-      </header>
+      </div>
 
       {/* Mock WhatsApp chat (literal WA palette via WhatsAppBubble) */}
-      <div className="flex flex-col gap-2 rounded-[20px] p-4" style={{ background: "#0b141a" }}>
+      <div
+        className="flex flex-col gap-2 rounded-[var(--radius)] p-4"
+        style={{ background: "#0b141a" }}
+      >
         <WhatsAppBubble variant="user">↪ תזכורת: אסיפת הורים מחר ב-17:00 בגן רימון</WhatsAppBubble>
         <WhatsAppBubble variant="bot" delayMs={150}>
           הוספתי ליומן ✓ אסיפת הורים · מחר · 17:00 — גן רימון
@@ -42,8 +46,8 @@ export function WhatsAppIngestion() {
 
       {/* → the resulting board event */}
       <div className="flex flex-col gap-2">
-        <p className="text-center text-[13px] text-muted-foreground">↓ וזה מה שנוחת על הלוח</p>
-        <div className="rounded-[var(--radius)] border border-border bg-card p-4">
+        <p className="text-center text-[12.5px] text-muted-foreground">↓ וזה מה שנוחת על הלוח</p>
+        <div className="rounded-[var(--radius)] border border-[var(--line)] bg-card-muted p-4">
           <EventCard event={PREVIEW} surface="web" />
         </div>
       </div>
@@ -54,6 +58,6 @@ export function WhatsAppIngestion() {
       >
         🔒 רק הודעות שאתם מעבירים יזום ל-HomeOS נקראות — שום צ'אט אחר לא נסרק. זה קו פרטיות אדום.
       </p>
-    </div>
+    </Card>
   );
 }
