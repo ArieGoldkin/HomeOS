@@ -1,12 +1,11 @@
 import { AppShell, ListsPlaceholder } from "@app/shell";
 import { ConnectionsView } from "@features/connections";
-import { DayView } from "@features/day-view";
+import { TodayScreen } from "@features/day-view";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { FamilyView } from "@features/family";
 import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
 import { WebWeekView } from "@features/week-view";
-import { useDayEvents, useNow } from "@shared/hooks";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
@@ -45,30 +44,11 @@ function RootLayout() {
 
 // getRouteApi reads search by route id from React context, so it works with any router built from the
 // tree (prod or a per-test memory router) without holding a module-level route reference.
+// Thin route wrapper: read the validated ?date= and hand it to the Today screen composition.
 const todayApi = getRouteApi("/app/today");
-function TodayScreen() {
+function TodayRoute() {
   const { date } = todayApi.useSearch();
-  const now = useNow();
-  const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(
-    coerceDateIso(date),
-    now,
-  );
-  // The detail drawer (source_text) is safe on the single authenticated app; #153 kiosk-exclusion is moot.
-  const { selected, openDetail, closeDetail } = useEventDetail();
-  return (
-    <>
-      <DayView
-        status={status}
-        timed={timed}
-        untimed={untimed}
-        tomorrow={tomorrow}
-        nowTime={nowTime}
-        moreCount={moreCount}
-        onOpenDetail={openDetail}
-      />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
-    </>
-  );
+  return <TodayScreen dateIso={coerceDateIso(date)} />;
 }
 
 const calendarApi = getRouteApi("/app/calendar");
@@ -124,7 +104,7 @@ function buildRouteTree() {
     getParentRoute: () => appRoute,
     path: "/today",
     validateSearch: validateDateSearch,
-    component: TodayScreen,
+    component: TodayRoute,
   });
 
   const calendarRoute = createRoute({
