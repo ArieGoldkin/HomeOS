@@ -1,4 +1,4 @@
-import { SectionHeader } from "@shared/board";
+import { Card } from "@shared/ui";
 import type { ReactNode } from "react";
 
 export interface SettingsListProps {
@@ -9,16 +9,17 @@ export interface SettingsListProps {
 }
 
 /**
- * A labeled group of `SettingsRow`s inside a `bg-card` rounded container with
- * hairline dividers between rows. Title is rendered via `SectionHeader` (muted eyebrow).
+ * A labeled group of `SettingsRow`s inside the shared `Card` (#183 re-skin) with editorial hairline
+ * dividers (`--line`) between rows. The title uses the Modern section-label idiom (matching Today /
+ * People / Connections) rather than the old muted eyebrow.
  */
 export function SettingsList({ title, children }: SettingsListProps) {
   return (
-    <section className="flex flex-col gap-2">
-      {title && <SectionHeader className="px-1">{title}</SectionHeader>}
-      <div className="bg-card rounded-[var(--radius)] divide-y divide-border overflow-hidden">
-        {children}
-      </div>
+    <section className="flex flex-col gap-2.5">
+      {title && (
+        <span className="px-1 font-semibold text-[14.5px] text-[color:var(--ink)]">{title}</span>
+      )}
+      <Card className="divide-y divide-[var(--line)] overflow-hidden">{children}</Card>
     </section>
   );
 }
