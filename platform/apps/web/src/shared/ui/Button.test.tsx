@@ -32,6 +32,13 @@ describe("Button", () => {
     expect(btn.className).not.toMatch(/bg-primary/);
   });
 
+  it("variant=ink uses the ink (foreground) fill on a paper label", () => {
+    render(<Button variant="ink">צור</Button>);
+    const btn = screen.getByRole("button");
+    expect(btn.className).toContain("bg-foreground");
+    expect(btn.className).toContain("text-background");
+  });
+
   it("fires onClick when clicked", async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
