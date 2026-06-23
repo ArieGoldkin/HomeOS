@@ -1,14 +1,12 @@
-import { PhoneShell, PhoneToday } from "@app/phone";
-import { TabletBoard } from "@app/tablet";
-import { WebShell } from "@app/web";
+import { AppShell, ListsPlaceholder } from "@app/shell";
 import { ConnectionsView } from "@features/connections";
+import { DayView } from "@features/day-view";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { FamilyView } from "@features/family";
-import { WhatsAppIngestion } from "@features/ingestion";
-import { MessagesView } from "@features/messages";
 import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
-import { WebWeekView, WeekView } from "@features/week-view";
+import { WebWeekView } from "@features/week-view";
+import { useDayEvents, useNow } from "@shared/hooks";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
@@ -24,9 +22,9 @@ import { useEffect } from "react";
 import { TokensView } from "./dev/TokensView";
 
 /**
- * `?date=YYYY-MM-DD` for the day/week screens. Optional in/out so navigation (Links/redirects) needn't
- * pass it; a malformed value is dropped. Screens default an absent date to today themselves. Shares the
- * one ISO_DATE_RE shape guard with coerceDateIso (the screen-boundary coercion) — one source of truth.
+ * `?date=YYYY-MM-DD` for the today/calendar screens. Optional in/out so navigation (Links/redirects)
+ * needn't pass it; a malformed value is dropped. Screens default an absent date to today. Shares the one
+ * ISO_DATE_RE shape guard with coerceDateIso (the screen-boundary coercion) — one source of truth.
  */
 function validateDateSearch(search: { date?: string }): { date?: string } {
   const raw = search.date;
@@ -36,7 +34,7 @@ function validateDateSearch(search: { date?: string }): { date?: string } {
 function RootLayout() {
   useEffect(() => {
     // RTL Hebrew is set in index.html; enforce defensively + set the RTL-aware draw origin that the
-    // RuleBar/draw-rule motion reads. (Moved here from App when the router landed.)
+    // RuleBar/draw-rule motion reads. (Theme — data-theme — is owned by the ThemeProvider, #172.)
     const html = document.documentElement;
     html.setAttribute("dir", "rtl");
     html.setAttribute("lang", "he");
@@ -47,56 +45,25 @@ function RootLayout() {
 
 // getRouteApi reads search by route id from React context, so it works with any router built from the
 // tree (prod or a per-test memory router) without holding a module-level route reference.
-const todayApi = getRouteApi("/phone/today");
-function PhoneTodayScreen() {
+const todayApi = getRouteApi("/app/today");
+function TodayScreen() {
   const { date } = todayApi.useSearch();
-  // #153 — phone hosts the detail drawer in a bottom Sheet; the kiosk (TabletBoard) never wires this.
+  const now = useNow();
+  const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(
+    coerceDateIso(date),
+    now,
+  );
+  // The detail drawer (source_text) is safe on the single authenticated app; #153 kiosk-exclusion is moot.
   const { selected, openDetail, closeDetail } = useEventDetail();
   return (
     <>
-      <PhoneToday dateIso={coerceDateIso(date)} onOpenDetail={openDetail} />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="phone" />
-    </>
-  );
-}
-
-const weekApi = getRouteApi("/phone/week");
-function PhoneWeekScreen() {
-  const { date } = weekApi.useSearch();
-  const navigate = useNavigate();
-  return (
-    <WeekView
-      dateIso={coerceDateIso(date)}
-      onSelectDate={(d) => navigate({ to: "/phone/today", search: { date: d } })}
-    />
-  );
-}
-
-// Web screens reuse the SAME data-connected views as phone (PhoneToday) plus the web-specific WebWeekView
-// (7-column grid) and a 2-column FamilyView — surface differences are layout/density only.
-const webTodayApi = getRouteApi("/web/today");
-function WebTodayScreen() {
-  const { date } = webTodayApi.useSearch();
-  // #153 — web hosts the detail drawer in a centered Modal (same data view as phone, different host).
-  const { selected, openDetail, closeDetail } = useEventDetail();
-  return (
-    <>
-      <PhoneToday dateIso={coerceDateIso(date)} onOpenDetail={openDetail} />
-      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
-    </>
-  );
-}
-
-const webWeekApi = getRouteApi("/web/week");
-function WebWeekScreen() {
-  const { date } = webWeekApi.useSearch();
-  const navigate = useNavigate();
-  const { selected, openDetail, closeDetail } = useEventDetail();
-  return (
-    <>
-      <WebWeekView
-        dateIso={coerceDateIso(date)}
-        onSelectDate={(d) => navigate({ to: "/web/today", search: { date: d } })}
+      <DayView
+        status={status}
+        timed={timed}
+        untimed={untimed}
+        tomorrow={tomorrow}
+        nowTime={nowTime}
+        moreCount={moreCount}
         onOpenDetail={openDetail}
       />
       <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
@@ -104,28 +71,99 @@ function WebWeekScreen() {
   );
 }
 
-function WebFamilyScreen() {
-  return <FamilyView columns={2} />;
+const calendarApi = getRouteApi("/app/calendar");
+function CalendarScreen() {
+  const { date } = calendarApi.useSearch();
+  const navigate = useNavigate();
+  const { selected, openDetail, closeDetail } = useEventDetail();
+  return (
+    <>
+      <WebWeekView
+        dateIso={coerceDateIso(date)}
+        onSelectDate={(d) => navigate({ to: "/today", search: { date: d } })}
+        onOpenDetail={openDetail}
+      />
+      <EventDetailDrawer event={selected} onClose={closeDetail} surface="web" />
+    </>
+  );
 }
 
-// First-run onboarding (standalone, no shell). onDone enters the web board.
+// First-run onboarding (standalone, no shell chrome). onDone enters the board at /today.
 function WelcomeScreen() {
   const navigate = useNavigate();
-  return <Onboarding onDone={() => navigate({ to: "/web/today" })} />;
+  return <Onboarding onDone={() => navigate({ to: "/today" })} />;
 }
 
 /**
  * Build a FRESH route tree. Each router must own its own tree — createRouter mutates the tree it's
  * given, so sharing one across the prod router and per-test routers leaks state between them.
+ *
+ * ONE responsive app: a pathless layout route (AppShell chrome) hosts the flat screens; `/` redirects
+ * to `/today`. The old `/`-kiosk, `/phone/*`, and `/web/*` trees are gone.
  */
 function buildRouteTree() {
   const rootRoute = createRootRoute({ component: RootLayout });
 
-  // `/` stays the ambient kitchen-tablet board — unchanged URL + behavior.
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: TabletBoard,
+    beforeLoad: () => {
+      throw redirect({ to: "/today" });
+    },
+  });
+
+  // The app shell (icon rail + header) wraps every screen via <Outlet/>. Pathless so children own the
+  // flat top-level paths.
+  const appRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    id: "app",
+    component: AppShell,
+  });
+
+  const todayRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/today",
+    validateSearch: validateDateSearch,
+    component: TodayScreen,
+  });
+
+  const calendarRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/calendar",
+    validateSearch: validateDateSearch,
+    component: CalendarScreen,
+  });
+
+  const peopleRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/people",
+    component: FamilyView,
+  });
+
+  const connectionsRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/connections",
+    component: ConnectionsView,
+  });
+
+  const settingsRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/settings",
+    component: SettingsView,
+  });
+
+  // Lists is a deferred net-new surface — a routed placeholder so the rail item isn't a dead link.
+  const listsRoute = createRoute({
+    getParentRoute: () => appRoute,
+    path: "/lists",
+    component: ListsPlaceholder,
+  });
+
+  // Standalone routes (no shell chrome): first-run onboarding + the dev token gallery.
+  const welcomeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/welcome",
+    component: WelcomeScreen,
   });
 
   const tokensRoute = createRoute({
@@ -134,135 +172,18 @@ function buildRouteTree() {
     component: TokensView,
   });
 
-  // `/phone` is a layout route: PhoneShell chrome (bottom nav) wraps each screen via <Outlet/>.
-  const phoneRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/phone",
-    component: PhoneShell,
-  });
-
-  const phoneIndexRoute = createRoute({
-    getParentRoute: () => phoneRoute,
-    path: "/",
-    beforeLoad: () => {
-      throw redirect({ to: "/phone/today" });
-    },
-  });
-
-  const phoneTodayRoute = createRoute({
-    getParentRoute: () => phoneRoute,
-    path: "today",
-    validateSearch: validateDateSearch,
-    component: PhoneTodayScreen,
-  });
-
-  const phoneWeekRoute = createRoute({
-    getParentRoute: () => phoneRoute,
-    path: "week",
-    validateSearch: validateDateSearch,
-    component: PhoneWeekScreen,
-  });
-
-  const phoneFamilyRoute = createRoute({
-    getParentRoute: () => phoneRoute,
-    path: "family",
-    component: FamilyView,
-  });
-
-  const phoneSettingsRoute = createRoute({
-    getParentRoute: () => phoneRoute,
-    path: "settings",
-    component: SettingsView,
-  });
-
-  // `/web` is a layout route: WebShell chrome (sidebar nav + top-bar Add) wraps each screen via <Outlet/>.
-  const webRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/web",
-    component: WebShell,
-  });
-
-  const webIndexRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "/",
-    beforeLoad: () => {
-      throw redirect({ to: "/web/today" });
-    },
-  });
-
-  const webTodayRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "today",
-    validateSearch: validateDateSearch,
-    component: WebTodayScreen,
-  });
-
-  const webWeekRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "week",
-    validateSearch: validateDateSearch,
-    component: WebWeekScreen,
-  });
-
-  const webFamilyRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "family",
-    component: WebFamilyScreen,
-  });
-
-  const webConnectionsRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "connections",
-    component: ConnectionsView,
-  });
-
-  // #135 — the raw inbound-message feed. WEB-ONLY (under WebShell); never added to the tablet kiosk.
-  const webMessagesRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "messages",
-    component: MessagesView,
-  });
-
-  const webSettingsRoute = createRoute({
-    getParentRoute: () => webRoute,
-    path: "settings",
-    component: SettingsView,
-  });
-
-  // Standalone marketing surfaces (no shell chrome): first-run onboarding + the how-it-works demo.
-  const welcomeRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/welcome",
-    component: WelcomeScreen,
-  });
-
-  const ingestionRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/ingestion",
-    component: WhatsAppIngestion,
-  });
-
   return rootRoute.addChildren([
     indexRoute,
-    tokensRoute,
-    phoneRoute.addChildren([
-      phoneIndexRoute,
-      phoneTodayRoute,
-      phoneWeekRoute,
-      phoneFamilyRoute,
-      phoneSettingsRoute,
-    ]),
-    webRoute.addChildren([
-      webIndexRoute,
-      webTodayRoute,
-      webWeekRoute,
-      webFamilyRoute,
-      webConnectionsRoute,
-      webMessagesRoute,
-      webSettingsRoute,
+    appRoute.addChildren([
+      todayRoute,
+      calendarRoute,
+      peopleRoute,
+      connectionsRoute,
+      settingsRoute,
+      listsRoute,
     ]),
     welcomeRoute,
-    ingestionRoute,
+    tokensRoute,
   ]);
 }
 
