@@ -12,13 +12,25 @@ function wrap(node: ReactNode) {
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
 }
 
-describe("FamilyView (data-connected)", () => {
-  it("renders the known family roster", async () => {
+const INVITE = "+ הזמנת בן בית";
+
+describe("FamilyView (People, data-connected)", () => {
+  it("renders the household header + a data table of the known roster", async () => {
     render(wrap(<FamilyView />));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("הבית");
     await waitFor(() => expect(screen.getByText("אבא")).toBeInTheDocument());
-    expect(screen.getByText("אמא")).toBeInTheDocument();
-    expect(screen.getByText("יואב")).toBeInTheDocument();
-    expect(screen.getByText("נועה")).toBeInTheDocument();
+    for (const name of ["אמא", "יואב", "נועה"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+    for (const col of ["שם", "סטטוס", "תפקיד"]) {
+      expect(screen.getByText(col)).toBeInTheDocument();
+    }
+    expect(screen.getAllByText("הורה").length).toBeGreaterThanOrEqual(2); // אבא + אמא
+  });
+
+  it("shows the household-count stat chip", async () => {
+    render(wrap(<FamilyView />));
+    await waitFor(() => expect(screen.getByText(/בני בית/)).toBeInTheDocument());
   });
 
   it("derives a new assignee from events into the roster", async () => {
@@ -44,13 +56,12 @@ describe("FamilyView (data-connected)", () => {
     );
     render(wrap(<FamilyView />));
     await waitFor(() => expect(screen.getByText("סבתא")).toBeInTheDocument());
-    // known roster still present alongside the derived name
     expect(screen.getByText("אבא")).toBeInTheDocument();
   });
 
-  it("shows the add-member button", async () => {
+  it("shows the invite button", async () => {
     render(wrap(<FamilyView />));
-    await waitFor(() => expect(screen.getByText("הוספת בן משפחה")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: INVITE })).toBeInTheDocument();
   });
 
   it("shows the error message when the events request fails", async () => {
@@ -59,11 +70,10 @@ describe("FamilyView (data-connected)", () => {
     await waitFor(() => expect(screen.getByText(/שגיאה בטעינת הרשימה/)).toBeInTheDocument());
   });
 
-  it("fires onAddMember when the add-member button is clicked", async () => {
+  it("fires onAddMember when the invite button is clicked", async () => {
     const onAddMember = vi.fn();
     render(wrap(<FamilyView onAddMember={onAddMember} />));
-    const button = await screen.findByRole("button", { name: "הוספת בן משפחה" });
-    await userEvent.click(button);
+    await userEvent.click(screen.getByRole("button", { name: INVITE }));
     expect(onAddMember).toHaveBeenCalledOnce();
   });
 });

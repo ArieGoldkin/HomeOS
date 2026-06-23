@@ -318,6 +318,10 @@
 
   --color-glyph: var(--glyph);
   --color-rail: var(--rail);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
 
   --font-sans: var(--font-sans);
   --font-serif: var(--font-serif);
