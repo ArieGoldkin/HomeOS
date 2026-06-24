@@ -17,5 +17,8 @@ export {
   type DayPartition,
   type DayPeekItem,
   partitionDay,
+  prioritizeUntimed,
+  type RankedUntimedItem,
+  type UntimedBucket,
 } from "./day-events";
 export { greetingHe, hebDateLong } from "./greeting";

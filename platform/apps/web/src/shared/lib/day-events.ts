@@ -32,6 +32,58 @@ export function partitionDay(
   return { timed, untimed, tomorrow };
 }
 
+/**
+ * #20 — why an untimed item ranks where it does (the "explainable" signal). `overdue` = an open TASK
+ * carried forward from a past day; `today` = an open item for the selected day; `done` = completed (sunk).
+ * The bucket IS the primary sort key, so exposing it is free — a future UI can render an "overdue" chip
+ * without re-deriving anything.
+ */
+export type UntimedBucket = "overdue" | "today" | "done";
+
+export interface RankedUntimedItem {
+  event: SavedEvent;
+  bucket: UntimedBucket;
+}
+
+/**
+ * #20 — deterministic ordering of the day's untimed "anytime" list. NOT a scoring engine: a fixed rule
+ * the board renders top-first. Order = overdue-open tasks (carried forward, oldest first) → the selected
+ * day's open items → done (sunk). Pure and time-relative only via the injected `todayIso` (anchor the
+ * caller computes in Asia/Jerusalem) — no clock here, so it's trivially unit-testable.
+ *
+ * Carry-forward is deliberately narrow: only `kind === "task"` rows that are still open and dated BEFORE
+ * today, and ONLY when the selected day IS today (a past/future day shows just its own items). Events and
+ * reminders never carry (a past meeting isn't a to-do); a past task that's already done never carries.
+ *
+ * An overdue task that originally had a TIME demotes here into the anytime rail (its past time is no longer
+ * meaningful — it's just a pending to-do now). It is intentionally NOT re-injected into today's timed spine,
+ * which is today-only; the alternative (a `time == null` guard) would make overdue timed tasks vanish.
+ */
+export function prioritizeUntimed(
+  todayUntimed: SavedEvent[],
+  allEvents: SavedEvent[],
+  selectedIso: string,
+  todayIso: string,
+): RankedUntimedItem[] {
+  const isDone = (e: SavedEvent) => e.status === "done";
+  const byTitle = (a: SavedEvent, b: SavedEvent) => a.title_he.localeCompare(b.title_he);
+
+  const overdue =
+    selectedIso === todayIso
+      ? allEvents
+          .filter((e) => e.kind === "task" && !isDone(e) && e.date_iso < todayIso)
+          .sort((a, b) => a.date_iso.localeCompare(b.date_iso) || byTitle(a, b))
+      : [];
+  const open = todayUntimed.filter((e) => !isDone(e));
+  const done = todayUntimed.filter(isDone).sort(byTitle);
+
+  return [
+    ...overdue.map((event): RankedUntimedItem => ({ event, bucket: "overdue" })),
+    ...open.map((event): RankedUntimedItem => ({ event, bucket: "today" })),
+    ...done.map((event): RankedUntimedItem => ({ event, bucket: "done" })),
+  ];
+}
+
 export interface CuratedTimed {
   shown: SavedEvent[];
   moreCount: number;
