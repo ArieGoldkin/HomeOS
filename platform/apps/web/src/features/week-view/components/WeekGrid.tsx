@@ -30,6 +30,8 @@ export function WeekGrid({ days, onSelectDate, onOpenDetail, className }: WeekGr
           dateIso={d.dateIso}
           weekdayLabel={d.weekdayLabel}
           dayLabel={d.dayLabel}
+          hebrewDate={d.hebrewDate}
+          holidays={d.holidays}
           events={d.events}
           isToday={d.isToday}
           onSelect={onSelectDate}

@@ -3,7 +3,7 @@ import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import type { SavedEvent } from "@homeos/shared";
 import { PersonAvatar } from "@shared/board";
 import { useDayEvents, useNow, useToggleEventStatus } from "@shared/hooks";
-import { greetingHe, hebDateLong } from "@shared/lib";
+import { greetingHe, hebDateLong, hebrewDateLabel, holidaysOn } from "@shared/lib";
 import { Button, Card, SectionLabel } from "@shared/ui";
 import { useState } from "react";
 import { DayView } from "./DayView";
@@ -38,11 +38,16 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
     toggleStatus.mutate({ id: event.id, status: event.status === "done" ? "open" : "done" });
   };
 
+  // #25 — Hebrew calendar date + any Israeli holiday for the displayed day.
+  const hebrewDate = hebrewDateLabel(dateIso);
+  const holidays = holidaysOn(dateIso);
+
   return (
     <div className="flex flex-col gap-7">
       <header>
         <div className="font-mono text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
           {hebDateLong(now)}
+          {hebrewDate && ` · ${hebrewDate}`}
         </div>
         <h1 className="mt-2 font-display font-extrabold text-[34px] text-[color:var(--ink)] leading-[1.05] tracking-tight">
           {greetingHe(now)},{" "}
@@ -54,6 +59,15 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
             <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
             {tasksLeft} משימות היום
           </span>
+          {holidays.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 font-semibold text-[13px] text-primary"
+            >
+              <span aria-hidden="true">✦</span>
+              {name}
+            </span>
+          ))}
           <Button
             variant="ink"
             className="min-h-0 rounded-full px-4 py-2 text-[13px]"

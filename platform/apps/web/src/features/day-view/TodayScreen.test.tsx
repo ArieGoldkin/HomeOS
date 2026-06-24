@@ -44,6 +44,12 @@ describe("TodayScreen", () => {
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
   });
 
+  // #25 — the header shows the Hebrew date + an Israeli holiday chip for the displayed day.
+  it("shows a holiday chip + Hebrew date for a holiday day", async () => {
+    render(wrap(<TodayScreen dateIso="2026-05-22" />)); // Shavuot 5786
+    await waitFor(() => expect(screen.getByText("שבועות")).toBeInTheDocument());
+  });
+
   // #19 — the done-toggle is wired end-to-end: an untimed task renders a checkbox whose click PATCHes
   // /events/:id with the flipped status.
   it("toggles a task done via the checkbox (PATCH /events/:id)", async () => {

@@ -8,6 +8,9 @@ export interface WeekDay {
   events: SavedEvent[];
   isToday: boolean;
   isSelected: boolean;
+  /** #25 — Hebrew calendar date + Israeli holiday name(s) for this day. */
+  hebrewDate: string;
+  holidays: string[];
 }
 
 export interface WeekListProps {
@@ -33,6 +36,8 @@ export function WeekList({ days, onSelectDate }: WeekListProps) {
           dateIso={day.dateIso}
           weekdayLabel={day.weekdayLabel}
           dayLabel={day.dayLabel}
+          hebrewDate={day.hebrewDate}
+          holidays={day.holidays}
           events={day.events}
           isToday={day.isToday}
           isSelected={day.isSelected}

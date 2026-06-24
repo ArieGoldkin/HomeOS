@@ -12,6 +12,10 @@ export interface DayRowProps {
   weekdayLabel: string;
   /** Day-of-month number as a string, e.g. "21". */
   dayLabel: string;
+  /** #25 — Hebrew calendar date, e.g. "19 חשון". */
+  hebrewDate?: string;
+  /** #25 — major Israeli holiday name(s) on this day (Hebrew). */
+  holidays?: string[];
   /** Events on this day. */
   events: SavedEvent[];
   /** Whether this day is today — applies ocean accent + "היום" hint. */
@@ -30,6 +34,8 @@ export function DayRow({
   dateIso,
   weekdayLabel,
   dayLabel,
+  hebrewDate,
+  holidays,
   events,
   isToday = false,
   isSelected = false,
@@ -68,6 +74,17 @@ export function DayRow({
         >
           {dayLabel}
         </span>
+        {hebrewDate && (
+          <span className="text-[12px] text-muted-foreground shrink-0">{hebrewDate}</span>
+        )}
+        {holidays && holidays.length > 0 && (
+          <span
+            title={holidays.join(", ")}
+            className="truncate font-medium text-[12px] text-primary"
+          >
+            {holidays.join(" · ")}
+          </span>
+        )}
       </span>
 
       {/* End side: pips or em-dash */}

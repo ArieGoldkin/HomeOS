@@ -32,6 +32,23 @@ describe("DayRow", () => {
     expect(screen.getByText("21")).toBeInTheDocument();
   });
 
+  // #25 — Hebrew date + holiday render when supplied.
+  it("renders the Hebrew date and holiday name", () => {
+    render(
+      <DayRow
+        dateIso="2026-05-22"
+        weekdayLabel="שישי"
+        dayLabel="22"
+        hebrewDate="ו בסיון"
+        holidays={["שבועות"]}
+        events={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("ו בסיון")).toBeInTheDocument();
+    expect(screen.getByText("שבועות")).toBeInTheDocument();
+  });
+
   it("renders one pip per event", () => {
     const events = [makeEvent(1, "אמא"), makeEvent(2, "אבא"), makeEvent(3)];
     render(

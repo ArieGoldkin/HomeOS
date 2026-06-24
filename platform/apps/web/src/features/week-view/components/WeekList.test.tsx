@@ -18,6 +18,8 @@ function makeDays(baseIso: string): WeekDay[] {
       events: [] as SavedEvent[],
       isToday: false,
       isSelected: false,
+      hebrewDate: "",
+      holidays: [] as string[],
     };
   });
 }

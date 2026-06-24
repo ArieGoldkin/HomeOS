@@ -19,6 +19,7 @@
     "@fontsource-variable/newsreader": "^5.2.10",
     "@fontsource-variable/schibsted-grotesk": "^5.2.8",
     "@fontsource-variable/spline-sans-mono": "^5.2.8",
+    "@hebcal/core": "^6.6.0",
     "@homeos/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
     "@radix-ui/react-dialog": "^1.1.17",

@@ -69,6 +69,9 @@ importers:
       '@fontsource-variable/spline-sans-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@hebcal/core':
+        specifier: ^6.6.0
+        version: 6.6.0
       '@homeos/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -639,6 +642,17 @@ packages:
 
   '@fontsource-variable/spline-sans-mono@5.2.8':
     resolution: {integrity: sha512-Z1yYiEtP+8Gll5BJaR9dICK/ZTxoTWH+ZBH6rOTMWajPSOxwl7IZplkwX2J1QhMxqulhhdMrkRx6SkkLM+jLQw==}
+
+  '@hebcal/core@6.6.0':
+    resolution: {integrity: sha512-LNQ8XrmG0+F9ZiYMj40kK1/ISnGi3e2XZnktXk3PjEHV/PyHWzIbVuc/q+XnOQDwN98vxGOII3WskDtT0AvZ0g==}
+    engines: {node: '>= 18'}
+
+  '@hebcal/hdate@0.22.4':
+    resolution: {integrity: sha512-fIFf42tqufuHsy88allovSIZv8bGWIsJyy/r8A69/yX+9XtPK9u0NVsTK40RFoZlrCUWFVHQ0eTUpgiLlQCuzw==}
+
+  '@hebcal/noaa@0.12.1':
+    resolution: {integrity: sha512-pHx4gTYQzOkwSyPx3IrSZQfD+CCscDcLGA/Uae/49bE4uWA+KsI0x1A7hcpEzu9MJE0SX7SbLnj9g70Qb6zx5A==}
+    engines: {node: '>=18'}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -1994,6 +2008,10 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
+  quick-lru@7.3.0:
+    resolution: {integrity: sha512-k9lSsjl36EJdK7I06v7APZCbyGT2vMTsYSRX1Q2nbYmnkBqgUhRkAuzH08Ciotteu/PLJmIF2+tti7o3C/ts2g==}
+    engines: {node: '>=18'}
+
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
     peerDependencies:
@@ -2170,6 +2188,15 @@ packages:
   tapable@2.3.3:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
+
+  temporal-polyfill@1.0.1:
+    resolution: {integrity: sha512-N2SoI9olnW7BUsU8RosDphZQl9s+WJ8O7PoJMFCr/e5/1rFkVI4GNOWaSeySG+UoP04foPYsnLWbJmbXOiShZg==}
+
+  temporal-spec@1.0.0:
+    resolution: {integrity: sha512-00Ahj1e1ifaERTMOIIGpOCdOo9IEk2m6GGSMedsn9a2SIsGLdOTbmME1Htv6IM82b6VHrzSUTIVc7YHy6hdhFQ==}
+
+  temporal-utils@1.0.1:
+    resolution: {integrity: sha512-HAixuesxFQIUaQk3ptX2jhfO/FsOkgVkDDMawvp6n/fkB1q6BKfs3lURw9I+pK/2e2e/q/vrLrxmeqauBoyGMQ==}
 
   test-exclude@7.0.2:
     resolution: {integrity: sha512-u9E6A+ZDYdp7a4WnarkXPZOx8Ilz46+kby6p1yZ8zsGTz9gYa6FIS7lj2oezzNKmtdyyJNNmmXDppga5GB7kSw==}
@@ -2772,6 +2799,19 @@ snapshots:
   '@fontsource-variable/schibsted-grotesk@5.2.8': {}
 
   '@fontsource-variable/spline-sans-mono@5.2.8': {}
+
+  '@hebcal/core@6.6.0':
+    dependencies:
+      '@hebcal/hdate': 0.22.4
+      '@hebcal/noaa': 0.12.1
+      quick-lru: 7.3.0
+      temporal-polyfill: 1.0.1
+
+  '@hebcal/hdate@0.22.4': {}
+
+  '@hebcal/noaa@0.12.1':
+    dependencies:
+      temporal-polyfill: 1.0.1
 
   '@hono/node-server@1.19.14(hono@4.12.25)':
     dependencies:
@@ -3977,6 +4017,8 @@ snapshots:
 
   punycode@2.3.1: {}
 
+  quick-lru@7.3.0: {}
+
   react-dom@19.2.7(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -4160,6 +4202,15 @@ snapshots:
   tailwindcss@4.3.1: {}
 
   tapable@2.3.3: {}
+
+  temporal-polyfill@1.0.1:
+    dependencies:
+      temporal-spec: 1.0.0
+      temporal-utils: 1.0.1
+
+  temporal-spec@1.0.0: {}
+
+  temporal-utils@1.0.1: {}
 
   test-exclude@7.0.2:
     dependencies:
