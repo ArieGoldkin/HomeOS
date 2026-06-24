@@ -54,6 +54,10 @@ export interface RankedUntimedItem {
  * Carry-forward is deliberately narrow: only `kind === "task"` rows that are still open and dated BEFORE
  * today, and ONLY when the selected day IS today (a past/future day shows just its own items). Events and
  * reminders never carry (a past meeting isn't a to-do); a past task that's already done never carries.
+ *
+ * An overdue task that originally had a TIME demotes here into the anytime rail (its past time is no longer
+ * meaningful — it's just a pending to-do now). It is intentionally NOT re-injected into today's timed spine,
+ * which is today-only; the alternative (a `time == null` guard) would make overdue timed tasks vanish.
  */
 export function prioritizeUntimed(
   todayUntimed: SavedEvent[],

@@ -102,6 +102,18 @@ describe("prioritizeUntimed (#20)", () => {
     const ranked = prioritizeUntimed([], [doneOld], today, today);
     expect(ranked).toEqual([]); // done past task stays in the past
   });
+
+  it("demotes an overdue TIMED task into the anytime rail (its past time is moot)", () => {
+    const overdueTimed = task({
+      id: 40,
+      date_iso: "2026-06-19",
+      time: "14:00",
+      title_he: "תור שהוחמץ",
+    });
+    const ranked = prioritizeUntimed([], [overdueTimed], today, today);
+    expect(ranked.map((r) => r.event.id)).toEqual([40]); // carries forward despite having had a time
+    expect(ranked[0]?.bucket).toBe("overdue");
+  });
 });
 
 describe("curateTimed", () => {
