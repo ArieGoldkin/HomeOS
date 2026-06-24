@@ -5,6 +5,7 @@ export { Card, type CardProps } from "./Card";
 export { Dialog, type DialogProps } from "./Dialog";
 export { Field, type FieldProps } from "./Field";
 export { IconButton, type IconButtonProps } from "./IconButton";
+export { SectionLabel, type SectionLabelProps } from "./SectionLabel";
 export {
   SegmentedControl,
   type SegmentedControlProps,

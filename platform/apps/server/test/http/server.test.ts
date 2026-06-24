@@ -286,7 +286,7 @@ describe("GET /messages (raw inbound feed)", () => {
     expect(wrong.status).toBe(401);
   });
 
-  // THE privacy line: the kiosk bundle ships READ_TOKEN; it must NOT unlock the raw feed.
+  // THE privacy line: the family app ships READ_TOKEN; it must NOT unlock the raw feed.
   it("401 when presented the read token (the messages token is distinct, never aliased)", async () => {
     const { app } = makeApp({ readToken: READ_TOK, messagesToken: MSG_TOK });
     const res = await app.request("/messages", {

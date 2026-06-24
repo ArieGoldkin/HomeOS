@@ -3,7 +3,7 @@ import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import { PersonAvatar } from "@shared/board";
 import { useDayEvents, useNow } from "@shared/hooks";
 import { greetingHe, hebDateLong } from "@shared/lib";
-import { Button, Card } from "@shared/ui";
+import { Button, Card, SectionLabel } from "@shared/ui";
 import { useState } from "react";
 import { DayView } from "./DayView";
 
@@ -71,7 +71,7 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
 
         <Card className="p-[18px]">
           <div className="mb-3.5 flex items-center justify-between">
-            <span className="font-semibold text-[14.5px] text-[color:var(--ink)]">משק הבית</span>
+            <SectionLabel>משק הבית</SectionLabel>
             <span className="font-accent text-[14px] text-muted-foreground">
               {HOUSEHOLD.length} בני בית
             </span>

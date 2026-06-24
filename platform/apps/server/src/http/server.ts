@@ -20,7 +20,7 @@ export interface ServerDeps {
   inbound: InboundStore;
   /** Persist-then-process one inbound (handler + queue settle). Injected so the server stays thin. */
   process: (msg: InboundMessage) => Promise<void>;
-  /** Read model for GET /events (the dashboard/kiosk seam). */
+  /** Read model for GET /events (the family app's board read seam). */
   events: EventStore;
   /** #135 — family allowlist, used to FILTER the GET /messages feed: inbound_messages is persisted
    *  BEFORE the allowlist gate, so the raw table can hold non-family/spam text that must never be served. */
@@ -29,7 +29,7 @@ export interface ServerDeps {
   readToken?: string;
   /** #135 — Bearer token gating GET /messages (the raw inbound feed). Undefined ⇒ disabled (503). A
    *  DISTINCT credential from the read token — never falls back to it: the raw feed can carry other
-   *  people's words / pre-allowlist text, so the read-only kiosk (which holds READ_TOKEN) must not reach it. */
+   *  people's words / pre-allowlist text, so a client holding only READ_TOKEN must not reach it. */
   messagesToken?: string;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
@@ -93,7 +93,7 @@ export function createServer(deps: ServerDeps): Hono {
   // `google` is undefined (app-only deploys), exactly like the GET /events read seam.
   registerOAuthRoutes(app, deps.google);
 
-  // The read seam the dashboard + kitchen-tablet kiosk consume. Token-gated; the events are
+  // The read seam the family app consumes. Token-gated; the events are
   // returned in the shared SavedEvent[] shape (incl. assignee/recurrence), ordered by date.
   app.get("/events", (c) => {
     if (deps.readToken === undefined) return c.text("Read API disabled", 503);
@@ -107,9 +107,9 @@ export function createServer(deps: ServerDeps): Hono {
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),
-  // complementary to GET /events. Gated by a DISTINCT messages token (never the read token) so the
-  // no-auth kiosk can't fetch it, and ALLOWLIST-FILTERED because inbound_messages is persisted BEFORE
-  // the allowlist gate — the raw table can hold non-family/spam text that must never be served. The
+  // complementary to GET /events. Gated by a DISTINCT messages token (never the read token) so a
+  // read-token-only client can't fetch it, and ALLOWLIST-FILTERED because inbound_messages is persisted
+  // BEFORE the allowlist gate — the raw table can hold non-family/spam text that must never be served. The
   // filter is pushed into SQL (digit-normalized allowlist) so the cap applies to family rows, not to a
   // spam-padded window (F1). Each kept row maps to the served DTO (tenant-ready family_id).
   app.get("/messages", (c) => {
@@ -122,8 +122,8 @@ export function createServer(deps: ServerDeps): Hono {
     return c.json({ messages });
   });
 
-  // The web/phone write seam backing the client createEvent contract. Gated by a DISTINCT write token
-  // (never the read token) so the read-only kiosk can't mutate. A manual add has no WhatsApp message,
+  // The app's write seam backing the client createEvent contract. Gated by a DISTINCT write token
+  // (never the read token) so a read-only client can't mutate. A manual add has no WhatsApp message,
   // so synthesize a unique `web:<uuid>` key and reuse saveEvent verbatim (sourceProvider omitted →
   // source_provider null, calendar-pushable like a forward). Returns the SINGLE SavedEvent (bare row,
   // NOT {events}-wrapped) so the client's savedEventSchema.parse of one row succeeds.

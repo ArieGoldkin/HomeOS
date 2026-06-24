@@ -36,8 +36,8 @@ const membersMap = z
 // computed key below without tripping the content filter's key-value heuristic.
 const kWrite = "WRITE_TOKEN";
 // #135 — same scanner-exempt trick for the messages-feed read token (GET /messages). A DISTINCT
-// token from READ_TOKEN: the raw inbound feed can hold pre-allowlist/non-family text, so the no-auth
-// kiosk (which ships READ_TOKEN) must never be able to fetch it.
+// token from READ_TOKEN: the raw inbound feed can hold pre-allowlist/non-family text, so a client
+// holding only READ_TOKEN (the family app's build-embedded read token) must never be able to fetch it.
 const kMessages = "MESSAGES_TOKEN";
 
 const schema = z.object({
@@ -56,7 +56,7 @@ const schema = z.object({
   // "ערב שבת") that Sonnet resolves correctly — date accuracy is the product wedge, well inside ≤$100/mo.
   ANTHROPIC_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
   DB_PATH: z.string().min(1).default("./data/homeos.db"),
-  // Bearer token gating GET /events (the dashboard/kiosk read seam). Optional: when unset the
+  // Bearer token gating GET /events (the family app's board read seam). Optional: when unset the
   // read endpoint is disabled (503) rather than exposed unauthenticated.
   READ_TOKEN: z.string().min(1).optional(),
   // Meta app secret for X-Hub-Signature-256 HMAC verification (item H). Optional: unset = skip.
@@ -103,9 +103,9 @@ const schema = z.object({
     .string()
     .default("true")
     .transform((s) => s.toLowerCase() !== "false" && s !== "0"),
-  // Optional Bearer token for POST /events (web/phone write seam); unset disables writes (503).
-  // A DISTINCT token from the read token — never aliased: the read-only kitchen tablet must not
-  // be able to mutate the board. Computed key keeps the content scanner quiet.
+  // Optional Bearer token for POST /events (the app's write seam); unset disables writes (503).
+  // A DISTINCT token from the read token — never aliased: a client holding only the read token must
+  // not be able to mutate the board. Computed key keeps the content scanner quiet.
   [kWrite]: z.string().min(1).optional(),
   // #135 — optional Bearer token for GET /messages (the raw inbound feed). DISTINCT from READ_TOKEN
   // and never aliased to it; unset disables the endpoint (503). Computed key keeps the scanner quiet.

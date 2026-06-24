@@ -1,7 +1,7 @@
 import { WhatsAppBubble } from "@features/ingestion";
 import type { InboundMessageDTO, InboundOutcome } from "@homeos/shared";
 import { useMessages } from "@shared/hooks";
-import { Card, StatusPill, type StatusPillProps } from "@shared/ui";
+import { Card, SectionLabel, StatusPill, type StatusPillProps } from "@shared/ui";
 
 /**
  * "Recent ingestion" — the raw inbound-message feed (#135) folded into the Connections screen (#182).
@@ -69,7 +69,7 @@ export function RecentIngestion() {
   return (
     <Card className="flex flex-col gap-3.5 p-[18px]" data-testid="recent-ingestion">
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-[14.5px] text-[color:var(--ink)]">קליטה אחרונה</span>
+        <SectionLabel>קליטה אחרונה</SectionLabel>
         <span className="font-accent text-[13px] text-muted-foreground">מה שהבוט קיבל לאחרונה</span>
       </div>
 

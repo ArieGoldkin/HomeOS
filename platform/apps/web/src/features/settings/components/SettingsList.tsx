@@ -1,4 +1,4 @@
-import { Card } from "@shared/ui";
+import { Card, SectionLabel } from "@shared/ui";
 import type { ReactNode } from "react";
 
 export interface SettingsListProps {
@@ -16,9 +16,7 @@ export interface SettingsListProps {
 export function SettingsList({ title, children }: SettingsListProps) {
   return (
     <section className="flex flex-col gap-2.5">
-      {title && (
-        <span className="px-1 font-semibold text-[14.5px] text-[color:var(--ink)]">{title}</span>
-      )}
+      {title && <SectionLabel className="px-1">{title}</SectionLabel>}
       <Card className="divide-y divide-[var(--line)] overflow-hidden">{children}</Card>
     </section>
   );
