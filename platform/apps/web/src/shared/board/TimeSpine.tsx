@@ -11,6 +11,8 @@ export interface TimeSpineProps {
   density?: "compact" | "comfortable";
   /** Pass-through to each EventCard: when set, cards open the detail drawer; omitted ⇒ inert (presentational). */
   onOpenDetail?: (event: SavedEvent) => void;
+  /** #19 — pass-through: when set, a task card's checkbox toggles open/done. */
+  onToggleDone?: (event: SavedEvent) => void;
   className?: string;
 }
 
@@ -24,6 +26,7 @@ export function TimeSpine({
   nowTime = null,
   density = "comfortable",
   onOpenDetail,
+  onToggleDone,
   className,
 }: TimeSpineProps) {
   // localeCompare is a correct chronological sort here because the shared `timeHm` schema guarantees
@@ -58,7 +61,13 @@ export function TimeSpine({
             <span dir="ltr">{e.time}</span>
           </div>
           <div className={cn("border-border border-t", rowPad)}>
-            <EventCard event={e} showTime={false} density={density} onOpenDetail={onOpenDetail} />
+            <EventCard
+              event={e}
+              showTime={false}
+              density={density}
+              onOpenDetail={onOpenDetail}
+              onToggleDone={onToggleDone}
+            />
           </div>
         </Fragment>
       ))}

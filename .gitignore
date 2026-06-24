@@ -5,6 +5,7 @@
 .claude/context/
 .claude/continuity/
 .claude/feedback/
+.claude/settings.local.json
 
 # Dependencies
 node_modules/

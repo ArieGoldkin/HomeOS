@@ -126,4 +126,58 @@ describe("EventCard (canonical anti-slop spec)", () => {
       expect(onOpenDetail).toHaveBeenCalledWith(event);
     });
   });
+
+  // #19 — the done-toggle: an interactive checkbox on tasks; done-state styling on every surface.
+  describe("onToggleDone (task done-toggle)", () => {
+    it("renders the task marker as a role=checkbox button (aria-checked from status) only for tasks", () => {
+      const onToggleDone = vi.fn();
+      const event = make({ kind: "task", title_he: "לקנות חלב", status: "open" });
+      render(<EventCard event={event} onToggleDone={onToggleDone} />);
+      const box = screen.getByRole("checkbox");
+      expect(box).toHaveAttribute("aria-checked", "false");
+      fireEvent.click(box);
+      expect(onToggleDone).toHaveBeenCalledWith(event);
+    });
+
+    it("reflects aria-checked=true and strikes through the title when status is done", () => {
+      render(
+        <EventCard
+          event={make({ kind: "task", title_he: "כביסה", status: "done" })}
+          onToggleDone={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByText("כביסה").className).toMatch(/line-through/);
+    });
+
+    it("does NOT make a non-task into a checkbox (event ignores onToggleDone)", () => {
+      render(
+        <EventCard event={make({ kind: "event", title_he: "ישיבה" })} onToggleDone={vi.fn()} />,
+      );
+      expect(screen.queryByRole("checkbox")).toBeNull();
+    });
+
+    it("strikes through a done task even with no toggle handler (read-only surfaces)", () => {
+      render(<EventCard event={make({ kind: "task", title_he: "מטלה", status: "done" })} />);
+      expect(screen.getByText("מטלה").className).toMatch(/line-through/);
+    });
+
+    it("renders the checkbox and the detail button as SIBLINGS (no nested buttons) when both are set", () => {
+      render(
+        <EventCard
+          event={make({ kind: "task", title_he: "חלב" })}
+          onToggleDone={vi.fn()}
+          onOpenDetail={vi.fn()}
+        />,
+      );
+      const checkbox = screen.getByRole("checkbox");
+      // the detail button is the other button; neither contains the other
+      const detailBtn = screen
+        .getAllByRole("button")
+        .find((b) => b.getAttribute("aria-haspopup") === "dialog");
+      expect(detailBtn).toBeTruthy();
+      expect(checkbox.contains(detailBtn as Node)).toBe(false);
+      expect((detailBtn as HTMLElement).contains(checkbox)).toBe(false);
+    });
+  });
 });

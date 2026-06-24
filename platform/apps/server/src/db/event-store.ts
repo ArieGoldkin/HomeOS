@@ -1,8 +1,18 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { type ParsedEvent, parsedEventSchema, type SavedEventSource } from "@homeos/shared";
-import { ADD_EVENTS_SOURCE_PROVIDER, CREATE_EVENTS_TABLE, type EventRow } from "./schema.ts";
+import {
+  type EventStatus,
+  type ParsedEvent,
+  parsedEventSchema,
+  type SavedEventSource,
+} from "@homeos/shared";
+import {
+  ADD_EVENTS_SOURCE_PROVIDER,
+  ADD_EVENTS_STATUS,
+  CREATE_EVENTS_TABLE,
+  type EventRow,
+} from "./schema.ts";
 
 /** #86 — the fields a `שנה <ref>` / correction may change in place. A subset of ParsedEvent; merged
  *  onto the target row and re-validated (G20) before the write. */
@@ -41,6 +51,8 @@ export interface SavedEvent extends ParsedEvent {
   source?: SavedEventSource;
   /** #151 — the row's SQLite datetime, now part of the served contract (for the event-detail view). */
   created_at?: string;
+  /** #19 — open/done completion state; the server always populates it (legacy NULL rows → "open"). */
+  status?: EventStatus;
 }
 
 /** Persistence seam — handlers depend on this, not on the driver. */
@@ -97,6 +109,13 @@ export interface EventStore {
    */
   updateEvent(id: number, patch: EventPatch, familyId: string): SavedEvent | null;
   /**
+   * #19 — set a board row's open/done `status` (the task done-toggle). FAMILY-scoped (`source_provider
+   * IS NULL` only: a synced gcal/gmail row is never toggled), separate from `updateEvent` so the #86
+   * edit/destructive seam stays untouched. Returns the updated `SavedEvent`, or null if the target isn't
+   * a board row (synced / nonexistent) — no write happens. `familyId` is the reserved Phase-8 contract.
+   */
+  setEventStatus(id: number, status: EventStatus, familyId: string): SavedEvent | null;
+  /**
    * Slot dedup — an existing BOARD row (`source_provider IS NULL`) at the same `(date_iso, time)`,
    * excluding the caller's own `excludeWaMessageId` so a boot-replay of a message never collides with
    * the rows it already saved (those upsert on `(wa_message_id, seq)`). Returns the existing row or
@@ -146,6 +165,9 @@ function rowToSaved(row: EventRow): SavedEvent {
     // consumer's `new Date(...)` reads the right instant instead of mis-parsing the bare string as LOCAL.
     source: deriveSource(row.wa_message_id),
     created_at: `${row.created_at.replace(" ", "T")}Z`,
+    // #19 — the column is NOT NULL DEFAULT 'open', so a legacy row (migrated in) and every new row read
+    // back here as 'open'; narrow defensively to the enum (any non-'done' value → "open").
+    status: row.status === "done" ? "done" : "open",
   };
 }
 
@@ -187,6 +209,8 @@ export function createEventStore(dbPath: string): EventStore {
   // #61: ensure source_provider exists on a pre-existing events table (CREATE IF NOT EXISTS won't add it).
   const cols = db.prepare("PRAGMA table_info(events);").all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === "source_provider")) db.exec(ADD_EVENTS_SOURCE_PROVIDER);
+  // #19: same idempotent add for the open/done status column (DEFAULT 'open' backfills legacy rows).
+  if (!cols.some((c) => c.name === "status")) db.exec(ADD_EVENTS_STATUS);
 
   // Idempotent per (wa_message_id, seq): a re-processed inbound (boot-replay, Meta retry) returns
   // the existing row per event instead of inserting duplicates. The no-op DO UPDATE lets RETURNING
@@ -224,6 +248,11 @@ export function createEventStore(dbPath: string): EventStore {
            recurrence_freq = ?, recurrence_weekday = ?
      WHERE id = ? AND source_provider IS NULL
      RETURNING *;`,
+  );
+  // #19: board-scoped (source_provider IS NULL) status toggle. A no-match (synced row / bad id) RETURNs
+  // nothing → the method returns null, so a synced gcal/gmail row can never be toggled.
+  const setStatusStmt = db.prepare(
+    "UPDATE events SET status = ? WHERE id = ? AND source_provider IS NULL RETURNING *;",
   );
   // #85: date/time are "null OR matches" so the base statement handles any subset. The title clause is
   // built PER-CALL (variable word count, see findEventsByRef) — each word is an AND'd group of OR'd
@@ -363,6 +392,12 @@ export function createEventStore(dbPath: string): EventStore {
         id,
       ) as unknown as EventRow;
       return rowToSaved(updated);
+    },
+    setEventStatus(id, status, _familyId) {
+      // _familyId is the reserved Phase-8 contract; family-scope today is "board rows only" (the
+      // source_provider IS NULL in setStatusStmt). A synced/nonexistent row RETURNs nothing → null.
+      const row = setStatusStmt.get(status, id) as unknown as EventRow | undefined;
+      return row ? rowToSaved(row) : null;
     },
   };
 }

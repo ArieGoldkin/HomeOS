@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { server } from "../../test/msw/server";
 import { TodayScreen } from "./TodayScreen";
 
 function wrap(node: ReactNode) {
@@ -40,5 +42,38 @@ describe("TodayScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "+ משימה חדשה" }));
     // The AddEvent modal mounts a dialog when opened.
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
+
+  // #19 — the done-toggle is wired end-to-end: an untimed task renders a checkbox whose click PATCHes
+  // /events/:id with the flipped status.
+  it("toggles a task done via the checkbox (PATCH /events/:id)", async () => {
+    const task = {
+      id: 5,
+      kind: "task",
+      title_he: "לקנות חלב",
+      date_iso: "2026-06-21",
+      time: null,
+      location: null,
+      assignee: null,
+      recurrence: null,
+      source_text: "",
+      source_provider: null,
+      status: "open",
+    };
+    let patched: { id: string; status: string } | undefined;
+    server.use(
+      http.get("*/events", () => HttpResponse.json({ events: [task] })),
+      http.patch("*/events/:id", async ({ request, params }) => {
+        const body = (await request.json()) as { status: string };
+        patched = { id: String(params.id), status: body.status };
+        return HttpResponse.json({ ...task, status: body.status }, { status: 200 });
+      }),
+    );
+
+    render(wrap(<TodayScreen dateIso="2026-06-21" />));
+    await waitFor(() => expect(screen.getByText("לקנות חלב")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "סמן כבוצע" }));
+    await waitFor(() => expect(patched).toEqual({ id: "5", status: "done" }));
   });
 });

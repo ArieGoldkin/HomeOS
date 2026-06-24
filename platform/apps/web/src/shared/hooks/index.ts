@@ -4,4 +4,5 @@ export { eventsQueryKey, useEvents } from "./use-events";
 export { messagesQueryKey, useMessages } from "./use-messages";
 export { useNow } from "./use-now";
 export { usePrefersReducedMotion } from "./use-prefers-reduced-motion";
+export { useToggleEventStatus } from "./use-toggle-event-status";
 export { useWeekDays, type WeekDay, type WeekDays } from "./use-week-days";

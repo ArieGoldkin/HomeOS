@@ -1,4 +1,5 @@
 import {
+  type EventStatus,
   type ParsedEvent,
   type SavedEvent,
   savedEventSchema,
@@ -52,6 +53,28 @@ export async function createEvent(parsed: ParsedEvent): Promise<SavedEvent> {
   });
   if (!res.ok) {
     throw new Error(`POST /events failed (${res.status})`);
+  }
+  const data: unknown = await res.json();
+  return savedEventSchema.parse(data);
+}
+
+/**
+ * #19 — toggle a board task's open/done state via the server `PATCH /events/:id` write seam. Uses the
+ * write token (same authz as createEvent). Returns the updated single SavedEvent, parsed with
+ * `savedEventSchema` so shape drift fails loudly here. Throws `Error("PATCH /events/<id> failed (<status>)")`
+ * on any non-2xx (e.g. 404 when the row isn't a board row).
+ */
+export async function setEventStatus(id: number, status: EventStatus): Promise<SavedEvent> {
+  const res = await fetch(`${API_BASE}/events/${id}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${WRITE_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    throw new Error(`PATCH /events/${id} failed (${res.status})`);
   }
   const data: unknown = await res.json();
   return savedEventSchema.parse(data);

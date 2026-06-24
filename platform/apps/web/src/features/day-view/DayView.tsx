@@ -20,6 +20,8 @@ export interface DayViewProps {
   todayLabel?: string;
   /** #153 — when set, the day's EventCards open the detail drawer; omitted ⇒ inert (a read-only render). */
   onOpenDetail?: (event: SavedEvent) => void;
+  /** #19 — when set, task cards expose a checkbox that toggles open/done. */
+  onToggleDone?: (event: SavedEvent) => void;
   className?: string;
 }
 
@@ -39,6 +41,7 @@ export function DayView({
   moreCount = 0,
   todayLabel = "היום",
   onOpenDetail,
+  onToggleDone,
   className,
 }: DayViewProps) {
   if (status === "loading") {
@@ -76,7 +79,12 @@ export function DayView({
         {hasTimed && (
           <div className="min-w-0 @2xl/day:flex-1">
             <SectionHeader className="mb-3">{todayLabel}</SectionHeader>
-            <TimeSpine events={timed} nowTime={nowTime} onOpenDetail={onOpenDetail} />
+            <TimeSpine
+              events={timed}
+              nowTime={nowTime}
+              onOpenDetail={onOpenDetail}
+              onToggleDone={onToggleDone}
+            />
             {moreCount > 0 && (
               <p className="mt-3 text-[13px] text-muted-foreground">ועוד {moreCount}</p>
             )}
@@ -94,6 +102,7 @@ export function DayView({
             tasks={untimed}
             tomorrow={tomorrow}
             onOpenDetail={onOpenDetail}
+            onToggleDone={onToggleDone}
           />
         )}
       </div>

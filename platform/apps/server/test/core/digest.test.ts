@@ -54,6 +54,7 @@ describe("runDigestOnce", () => {
         searchEvents: vi.fn(() => []),
         findEventsInScope: vi.fn(() => []),
         updateEvent: vi.fn(() => null),
+        setEventStatus: vi.fn(() => null),
         findSlotConflict: vi.fn(() => null),
       },
       inbound: {

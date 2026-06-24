@@ -23,6 +23,7 @@ export const CREATE_EVENTS_TABLE = `
     seq                INTEGER NOT NULL DEFAULT 0,
     source_provider    TEXT,
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+    status             TEXT    NOT NULL DEFAULT 'open',
     UNIQUE(wa_message_id, seq)
   );
 `;
@@ -33,6 +34,15 @@ export const CREATE_EVENTS_TABLE = `
  * get it here. Nullable: forwarded/WhatsApp rows stay null; #17/#18 tag derived rows so disconnect purges them.
  */
 export const ADD_EVENTS_SOURCE_PROVIDER = "ALTER TABLE events ADD COLUMN source_provider TEXT;";
+
+/**
+ * #19 — idempotent migration: add the `status` column to a PRE-EXISTING events table (mirrors
+ * ADD_EVENTS_SOURCE_PROVIDER). Fresh DBs get it from the DDL above; older DBs get it here. `NOT NULL
+ * DEFAULT 'open'` is legal for SQLite ADD COLUMN precisely because the default backfills existing rows —
+ * so every legacy task lands as "open" with no data-migration step.
+ */
+export const ADD_EVENTS_STATUS =
+  "ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'open';";
 
 /**
  * Inbound queue: every webhook message is persisted here BEFORE the 200 ack, so a crash
@@ -79,6 +89,7 @@ export interface EventRow {
   seq: number;
   source_provider: string | null;
   created_at: string;
+  status: string;
 }
 
 export interface InboundRow {

@@ -18,6 +18,8 @@ export interface AnytimeSidebarProps {
   tomorrowLabel?: string;
   /** #153 — pass-through to the untimed task EventCards (the tomorrow PeekRows are previews, not openable). */
   onOpenDetail?: (event: SavedEvent) => void;
+  /** #19 — pass-through: when set, a task card's checkbox toggles open/done. */
+  onToggleDone?: (event: SavedEvent) => void;
   className?: string;
 }
 
@@ -32,6 +34,7 @@ export function AnytimeSidebar({
   tasksLabel = "משימות להיום",
   tomorrowLabel = "מחר",
   onOpenDetail,
+  onToggleDone,
   className,
 }: AnytimeSidebarProps) {
   return (
@@ -47,6 +50,7 @@ export function AnytimeSidebar({
                   showTime={false}
                   density="compact"
                   onOpenDetail={onOpenDetail}
+                  onToggleDone={onToggleDone}
                 />
               </div>
             ))}
