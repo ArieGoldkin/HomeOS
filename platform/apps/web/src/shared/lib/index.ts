@@ -21,5 +21,5 @@ export {
   type RankedUntimedItem,
   type UntimedBucket,
 } from "./day-events";
-export { greetingHe, hebDateLong } from "./greeting";
+export { greetingHe, hebDateFull, hebDateLong } from "./greeting";
 export { hebrewDateLabel, holidaysOn } from "./hebrew-calendar";

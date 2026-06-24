@@ -1,9 +1,17 @@
+import { hebDateFull } from "@shared/lib";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AddItemForm } from "./AddItemForm";
 
 describe("AddItemForm", () => {
+  // #206 — the native date input renders in the device locale; a Hebrew reading is mirrored beneath it.
+  it("shows the selected date as a Hebrew hint under the date field", () => {
+    render(<AddItemForm onSubmit={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("תאריך"), { target: { value: "2026-06-24" } });
+    expect(screen.getByText(hebDateFull("2026-06-24"))).toBeInTheDocument();
+  });
+
   it("rejects an invalid date_iso and does not emit", async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
