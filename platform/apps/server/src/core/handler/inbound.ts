@@ -151,13 +151,28 @@ export async function handleInbound(
       await applyCorrection(deps, msg, pending, today);
       return;
     }
+    // #207 — a fresh VERB-LED command (cancel/edit) takes precedence over the open thread: abort it and
+    // let the deterministic routes below handle the command, exactly as bare ביטול aborts (above).
+    // Without this, a "תבטל …" / "שנה …" typed while a clarify/disambiguation thread is open is swallowed
+    // as the thread's answer — the live bug where "תבטל את הגישה עם רות מחר" became a new event's title.
+    // Edge: a legit `ambiguous_title` answer that itself starts with a cancel/edit verb is now routed as a
+    // command — rare, and benign: G22's specific-ref + real-board-match guard yields a "not found" (the
+    // draft is dropped, nothing is deleted/edited), strictly better than the junk event this fixes.
+    const stripped = stripLeadingFiller(text);
+    const isVerbLedCommand = CANCEL_REF_RE.test(stripped) || EDIT_REF_RE.test(stripped);
     // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
     // (e.g. "לא נשכח את יום ההולדת ביום שישי") is a NEW forward, not a thread answer — abort the thread
     // and let it fall through to agent.run. A bare "לא יודע" (no schedule signal) is just a non-answer
     // → handleResume (→ rephrase / re-parse). Any other message is the thread's answer → handleResume.
-    if (/^לא[\s,]/u.test(text) && hasScheduleSignal(text)) {
+    const isNewForward = /^לא[\s,]/u.test(text) && hasScheduleSignal(text);
+    if (isVerbLedCommand || isNewForward) {
       deps.conversations?.resolve(pending.id);
-      log("non-correction 'לא' with a schedule signal → new forward", { from: msg.from });
+      log(
+        isVerbLedCommand
+          ? "verb-led command overrides open thread → route as command"
+          : "non-correction 'לא' with a schedule signal → new forward",
+        { from: msg.from },
+      );
     } else {
       await handleResume(deps, msg, pending);
       return;

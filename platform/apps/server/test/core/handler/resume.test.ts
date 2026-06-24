@@ -37,6 +37,37 @@ describe("handleInbound — #83 RESUME branch", () => {
     expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // resolved (single-use)
   });
 
+  // #207 — a fresh VERB-LED command (cancel/edit) while a thread is open must take precedence: it
+  // aborts the thread and routes as a command, never gets swallowed as the thread's answer. The live bug:
+  // "תבטל את הגישה עם רות מחר" sent during an open clarify was consumed as the title → a junk event named
+  // with the cancel sentence was created.
+  it("routes a verb-led cancel command as a CANCEL (not the thread answer) and creates no event", async () => {
+    const conversations = createConversationStore(":memory:");
+    seed(conversations, FUTURE); // a clarify thread is open
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "תבטל את הגישה עם רות מחר" }, deps);
+
+    expect(events.findEventsByRef).toHaveBeenCalled(); // the cancel route engaged
+    expect(events.saveEvent).not.toHaveBeenCalled(); // NOT swallowed as a clarify title → no junk event
+    expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // open thread aborted
+    expect(sendText.mock.calls[0]?.[1]).not.toContain("הוספתי"); // not an add-confirm
+  });
+
+  // #207 — symmetric to the cancel case: a verb-led EDIT command also overrides an open thread.
+  it("routes a verb-led edit command as an EDIT (not the thread answer) and creates no event", async () => {
+    const conversations = createConversationStore(":memory:");
+    seed(conversations, FUTURE);
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "שנה את הפגישה עם רות ל-18:00" }, deps);
+
+    expect(events.findEventsByRef).toHaveBeenCalled(); // the edit route engaged
+    expect(events.saveEvent).not.toHaveBeenCalled(); // not swallowed as a clarify answer
+    expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // open thread aborted
+    expect(sendText.mock.calls[0]?.[1]).not.toContain("הוספתי");
+  });
+
   it("a redelivered answer (thread already resolved) falls through to the normal parse", async () => {
     const conversations = createConversationStore(":memory:"); // no pending row
     const { deps, agent } = makeDeps({ conversations });
