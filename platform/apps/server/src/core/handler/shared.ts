@@ -161,7 +161,12 @@ export function stripLeadingFiller(text: string): string {
   return out;
 }
 export const TIME_RE = /(\d{1,2}):(\d{2})/u;
-export const CANCEL_NOT_FOUND_HE = "לא מצאתי אירוע כזה 🤷 נסו עם תאריך/שעה מדויקים";
+// #208 — a cancel/edit not-found. Earlier this said "נסו עם תאריך/שעה מדויקים", which invited a bare
+// date reply (e.g. "25.06") the bot has NO open thread to consume — so the reply fell through to the
+// parser and became a new-event clarify ("מה לרשום ככותרת?"). Guide the user to RE-SEND the whole
+// command (verb + date) in one message instead, which routes deterministically via CANCEL_REF_RE.
+export const CANCEL_NOT_FOUND_HE =
+  "לא מצאתי אירוע כזה 🤷 שלחו שוב את הביטול עם תאריך מדויק בהודעה אחת — למשל: בטל פגישה עם רות ב-25.6";
 export const CANCEL_WHICH_HE = "איזה מהם לבטל? השב/י במספרים (למשל 1 ו-2, או 'הכל'):";
 /** #161 — edit's own disambiguation prompt (לעדכן, not the cancel-specific לבטל); same multi-select invite. */
 export const EDIT_WHICH_HE = "איזה מהם לעדכן? השב/י במספרים (למשל 1 ו-2, או 'הכל'):";

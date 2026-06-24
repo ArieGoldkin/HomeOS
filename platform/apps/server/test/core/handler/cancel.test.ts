@@ -5,7 +5,7 @@ import {
   handleInbound,
   parseSelection,
 } from "../../../src/core/handler/index.ts";
-import { isAffirmative } from "../../../src/core/handler/shared.ts";
+import { CANCEL_NOT_FOUND_HE, isAffirmative } from "../../../src/core/handler/shared.ts";
 import {
   type ConversationStore,
   createConversationStore,
@@ -31,6 +31,15 @@ describe("handleInbound — #85 cancel by reference", () => {
     await handleInbound({ ...textMsg, text: "בטל את הפגישה ב-3:30" }, deps);
     expect(sendText).toHaveBeenCalledWith(textMsg.from, expect.stringContaining("לא מצאתי"));
     expect(events.deleteById).not.toHaveBeenCalled();
+  });
+
+  // #208 — the not-found prompt must guide RE-SENDING the full command (verb + date), not invite a bare
+  // date reply the bot can't consume (which used to become a new-event clarify). The reply flow is
+  // deterministic re-routing, not a stateful thread.
+  it("the not-found prompt guides a full re-send (verb + date), not a bare date reply", () => {
+    expect(CANCEL_NOT_FOUND_HE).toContain("לא מצאתי"); // still says not-found
+    expect(CANCEL_NOT_FOUND_HE).toContain("בטל"); // shows a full-command example (leads with the verb)
+    expect(CANCEL_NOT_FOUND_HE).not.toContain("נסו עם תאריך/שעה"); // dropped the bare-reply invitation
   });
 
   it("1 match → deletes that board row and confirms בוטל ✓", async () => {
