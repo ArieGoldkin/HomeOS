@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { greetingHe, hebDateLong } from "./greeting";
+import { greetingHe, hebDateFull, hebDateLong } from "./greeting";
 
 describe("greetingHe", () => {
   // Summer (IDT, UTC+3): the UTC hour + 3 = Jerusalem hour.
@@ -23,5 +23,20 @@ describe("hebDateLong", () => {
     expect(s).toContain("·");
     expect(s).toContain("יוני");
     expect(s).toContain("22");
+  });
+});
+
+describe("hebDateFull (#206)", () => {
+  it("formats a full Hebrew date (weekday, day month, year) for a valid ISO", () => {
+    const s = hebDateFull("2026-06-24");
+    expect(s).toContain("יום"); // leads with the weekday
+    expect(s).toContain("ביוני");
+    expect(s).toContain("2026");
+  });
+
+  it("returns '' for an empty, malformed, or shape-valid-but-unreal date", () => {
+    expect(hebDateFull("")).toBe("");
+    expect(hebDateFull("nope")).toBe("");
+    expect(hebDateFull("2026-13-45")).toBe(""); // passes the shape regex but is not a real day
   });
 });

@@ -1,6 +1,6 @@
 import { type EventKind, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { PersonChip } from "@shared/board";
-import { jerusalemTodayIso } from "@shared/lib";
+import { hebDateFull, jerusalemTodayIso } from "@shared/lib";
 import { Button, Field, SegmentedControl, type SegmentedOption } from "@shared/ui";
 import { useForm } from "react-hook-form";
 
@@ -68,6 +68,9 @@ export function AddItemForm({ onSubmit, onCancel, submitting }: AddItemFormProps
 
   const kind = watch("kind");
   const assignee = watch("assignee");
+  // #206 — the native <input type="date"> renders its value in the device locale (iOS Safari ignores
+  // lang="he"), so mirror the selected date as a Hebrew reading beneath the field.
+  const dateHint = hebDateFull(watch("date_iso"));
 
   const submit = handleSubmit((values) => {
     // Empty optional fields → null (the schema's nullable fields reject "").
@@ -113,14 +116,17 @@ export function AddItemForm({ onSubmit, onCancel, submitting }: AddItemFormProps
         error={errors.title_he?.message}
         {...register("title_he")}
       />
-      <Field
-        id="date_iso"
-        label="תאריך"
-        type="date"
-        numeric
-        error={errors.date_iso?.message}
-        {...register("date_iso")}
-      />
+      <div>
+        <Field
+          id="date_iso"
+          label="תאריך"
+          type="date"
+          numeric
+          error={errors.date_iso?.message}
+          {...register("date_iso")}
+        />
+        {dateHint && <p className="mt-1 text-[12px] text-muted-foreground">{dateHint}</p>}
+      </div>
       <Field
         id="time"
         label="שעה"
