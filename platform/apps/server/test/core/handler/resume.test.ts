@@ -37,6 +37,23 @@ describe("handleInbound — #83 RESUME branch", () => {
     expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // resolved (single-use)
   });
 
+  // #207 — a fresh VERB-LED command (cancel/edit) while a thread is open must take precedence: it
+  // aborts the thread and routes as a command, never gets swallowed as the thread's answer. The live bug:
+  // "תבטל את הגישה עם רות מחר" sent during an open clarify was consumed as the title → a junk event named
+  // with the cancel sentence was created.
+  it("routes a verb-led cancel command as a CANCEL (not the thread answer) and creates no event", async () => {
+    const conversations = createConversationStore(":memory:");
+    seed(conversations, FUTURE); // a clarify thread is open
+    const { deps, sendText, events } = makeDeps({ conversations });
+
+    await handleInbound({ ...textMsg, text: "תבטל את הגישה עם רות מחר" }, deps);
+
+    expect(events.findEventsByRef).toHaveBeenCalled(); // the cancel route engaged
+    expect(events.saveEvent).not.toHaveBeenCalled(); // NOT swallowed as a clarify title → no junk event
+    expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // open thread aborted
+    expect(sendText.mock.calls[0]?.[1]).not.toContain("הוספתי"); // not an add-confirm
+  });
+
   it("a redelivered answer (thread already resolved) falls through to the normal parse", async () => {
     const conversations = createConversationStore(":memory:"); // no pending row
     const { deps, agent } = makeDeps({ conversations });
