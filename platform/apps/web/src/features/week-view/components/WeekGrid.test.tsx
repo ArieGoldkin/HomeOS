@@ -12,6 +12,8 @@ const days: WeekDay[] = HE.map((label, i) => ({
   events: [] as SavedEvent[],
   isToday: i === 0,
   isSelected: false,
+  hebrewDate: "",
+  holidays: [] as string[],
 }));
 
 describe("WeekGrid", () => {

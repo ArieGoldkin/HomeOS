@@ -53,6 +53,22 @@ describe("DayColumn", () => {
     expect(screen.getByText("ראשון")).toHaveClass("text-primary");
   });
 
+  // #25 — Hebrew calendar date + holiday render when supplied.
+  it("renders the Hebrew date and any holiday name", () => {
+    render(
+      <DayColumn
+        dateIso="2026-05-22"
+        weekdayLabel="שישי"
+        dayLabel="22"
+        hebrewDate="ו בסיון"
+        holidays={["שבועות"]}
+        events={[]}
+      />,
+    );
+    expect(screen.getByText("ו בסיון")).toBeInTheDocument();
+    expect(screen.getByText("שבועות")).toBeInTheDocument();
+  });
+
   // #153 — onOpenDetail makes the day's EventCards open the drawer (the header button is always present;
   // the CARD becomes a button only when the handler is passed).
   it("threads onOpenDetail so an event card opens the drawer", async () => {

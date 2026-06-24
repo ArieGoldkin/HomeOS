@@ -1,7 +1,7 @@
 import type { SavedEvent } from "@homeos/shared";
+import type { WeekDay } from "@shared/hooks";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { WeekDay } from "./WeekList";
 import { WeekList } from "./WeekList";
 
 const HE_WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
@@ -18,6 +18,8 @@ function makeDays(baseIso: string): WeekDay[] {
       events: [] as SavedEvent[],
       isToday: false,
       isSelected: false,
+      hebrewDate: "",
+      holidays: [] as string[],
     };
   });
 }

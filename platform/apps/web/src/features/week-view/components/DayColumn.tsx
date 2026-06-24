@@ -9,6 +9,10 @@ export interface DayColumnProps {
   weekdayLabel: string;
   /** Day-of-month number as a string, e.g. "21". */
   dayLabel: string;
+  /** #25 — Hebrew calendar date, e.g. "19 חשון". */
+  hebrewDate?: string;
+  /** #25 — major Israeli holiday name(s) on this day (Hebrew). */
+  holidays?: string[];
   /** Events on this day. */
   events: SavedEvent[];
   /** Whether this day is today — applies the ocean accent + ring. */
@@ -28,6 +32,8 @@ export function DayColumn({
   dateIso,
   weekdayLabel,
   dayLabel,
+  hebrewDate,
+  holidays,
   events,
   isToday = false,
   onSelect,
@@ -60,6 +66,24 @@ export function DayColumn({
           {dayLabel}
         </span>
       </button>
+
+      {(hebrewDate || (holidays?.length ?? 0) > 0) && (
+        <div className="px-2 pb-1">
+          {hebrewDate && (
+            <div className="text-[10px] text-muted-foreground leading-tight">{hebrewDate}</div>
+          )}
+          {holidays?.map((name) => (
+            <div
+              key={name}
+              dir="rtl"
+              title={name}
+              className="truncate font-medium text-[11px] text-primary leading-tight"
+            >
+              {name}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-1 flex-col gap-1.5 px-1.5 pb-2">
         {events.length === 0 ? (

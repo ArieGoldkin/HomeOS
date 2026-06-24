@@ -1,5 +1,11 @@
 import type { SavedEvent } from "@homeos/shared";
-import { addDaysIso, jerusalemTodayIso, startOfWeekSundayIso } from "@shared/lib";
+import {
+  addDaysIso,
+  hebrewDateLabel,
+  holidaysOn,
+  jerusalemTodayIso,
+  startOfWeekSundayIso,
+} from "@shared/lib";
 import { useEvents } from "./use-events";
 import { useNow } from "./use-now";
 
@@ -14,6 +20,10 @@ export interface WeekDay {
   events: SavedEvent[];
   isToday: boolean;
   isSelected: boolean;
+  /** #25 — Hebrew calendar date, e.g. "19 חשון". */
+  hebrewDate: string;
+  /** #25 — major Israeli holiday name(s) on this day (Hebrew), `[]` if none. */
+  holidays: string[];
 }
 
 export interface WeekDays {
@@ -71,6 +81,8 @@ export function useWeekDays(dateIso: string): WeekDays {
     events: eventsByDate.get(day) ?? [],
     isToday: day === today,
     isSelected: day === dateIso,
+    hebrewDate: hebrewDateLabel(day),
+    holidays: holidaysOn(day),
   }));
 
   const status = isLoading ? "loading" : isError ? "error" : "ready";
