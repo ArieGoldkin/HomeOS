@@ -1,17 +1,5 @@
-import type { SavedEvent } from "@homeos/shared";
+import type { WeekDay } from "@shared/hooks";
 import { DayRow } from "./DayRow";
-
-export interface WeekDay {
-  dateIso: string;
-  weekdayLabel: string;
-  dayLabel: string;
-  events: SavedEvent[];
-  isToday: boolean;
-  isSelected: boolean;
-  /** #25 — Hebrew calendar date + Israeli holiday name(s) for this day. */
-  hebrewDate: string;
-  holidays: string[];
-}
 
 export interface WeekListProps {
   /** The 7 days of the week, Sunday → Saturday. */

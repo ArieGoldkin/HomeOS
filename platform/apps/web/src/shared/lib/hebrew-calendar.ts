@@ -10,10 +10,11 @@ import { flags, HDate, HebrewCalendar } from "@hebcal/core";
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-// What counts as a "holiday" worth showing a family: major festivals (CHAG), modern Israeli days
-// (Independence/Memorial/Holocaust), major fasts (Yom Kippur, Tish'a B'Av), and Chanukah — but NOT the
-// liturgical noise `getHolidaysOnDate` can also surface (Rosh Chodesh, minor fasts, parsha, omer, molad).
-const MAJOR_MASK = flags.CHAG | flags.MODERN_HOLIDAY | flags.MAJOR_FAST | flags.CHANUKAH_CANDLES;
+// What counts as a "holiday" worth showing an Israeli family: major festivals (CHAG), modern days
+// (Independence/Memorial/Holocaust), major fasts (Yom Kippur, Tish'a B'Av), and the rabbinic holidays a
+// family actually marks — Purim, Chanukah, Tu BiShvat, Lag BaOmer (MINOR_HOLIDAY). Deliberately EXCLUDES
+// the liturgical noise `getHolidaysOnDate` also surfaces (Rosh Chodesh, minor fasts, parsha, omer, molad).
+const MAJOR_MASK = flags.CHAG | flags.MODERN_HOLIDAY | flags.MAJOR_FAST | flags.MINOR_HOLIDAY;
 
 /** Build an HDate from a civil ISO date using its Y/M/D components (NOT `new Date(iso)`, which is UTC and
  *  could shift the day under a non-UTC locale). Returns null on a malformed string. */
@@ -36,7 +37,17 @@ export function holidaysOn(iso: string): string[] {
   const hd = hdateFromIso(iso);
   if (!hd) return [];
   const events = HebrewCalendar.getHolidaysOnDate(hd, true) ?? [];
-  return events
-    .filter((e) => (e.getFlags() & MAJOR_MASK) !== 0 && (e.getFlags() & flags.EREV) === 0)
-    .map((e) => e.render("he-x-NoNikud"));
+  return (
+    events
+      .filter((e) => {
+        const f = e.getFlags();
+        if ((f & MAJOR_MASK) === 0) return false;
+        // Drop holiday EVES (Erev Pesach, etc.) — EXCEPT Chanukah night 1, which hebcal tags EREV
+        // (candle-lighting starts at night) but IS the start of the holiday, not a pre-festival eve.
+        return (f & flags.EREV) === 0 || (f & flags.CHANUKAH_CANDLES) !== 0;
+      })
+      // Rosh Hashana is the one event hebcal renders WITH a year ("ראש השנה 5786"); strip the trailing
+      // year so every chip reads consistently (no other holiday name ends in digits).
+      .map((e) => e.render("he-x-NoNikud").replace(/\s+\d{3,4}$/u, ""))
+  );
 }
