@@ -1,6 +1,6 @@
 import type { SavedEvent } from "@homeos/shared";
 import { describe, expect, it } from "vitest";
-import { curateTimed, partitionDay } from "./day-events";
+import { curateTimed, partitionDay, prioritizeUntimed } from "./day-events";
 
 const ev = (over: Partial<SavedEvent>): SavedEvent => ({
   kind: "event",
@@ -50,6 +50,57 @@ describe("partitionDay", () => {
       tomorrow,
     );
     expect(timed.map((e) => e.title_he)).toEqual(["א", "ב"]);
+  });
+});
+
+describe("prioritizeUntimed (#20)", () => {
+  // today = 2026-06-20. Untimed items for the selected day are passed as `todayUntimed`; overdue is
+  // gleaned from the full list. tags: overdue → today → done.
+  const task = (over: Partial<SavedEvent>): SavedEvent =>
+    ev({ kind: "task", time: null, status: "open", ...over });
+
+  it("sinks done items below open ones (selected day = today)", () => {
+    const untimed = [
+      task({ id: 1, title_he: "פתוחה", status: "open" }),
+      task({ id: 2, title_he: "בוצעה", status: "done" }),
+    ];
+    const ranked = prioritizeUntimed(untimed, untimed, today, today);
+    expect(ranked.map((r) => r.bucket)).toEqual(["today", "done"]);
+    expect(ranked.map((r) => r.event.id)).toEqual([1, 2]);
+  });
+
+  it("carries overdue OPEN TASKS forward to the top, oldest first (today view only)", () => {
+    const overdueOld = task({ id: 10, date_iso: "2026-06-18", title_he: "ישנה" });
+    const overdueNew = task({ id: 11, date_iso: "2026-06-19", title_he: "אתמול" });
+    const todayOpen = task({ id: 1, date_iso: today, title_he: "היום" });
+    const all = [todayOpen, overdueNew, overdueOld];
+    const ranked = prioritizeUntimed([todayOpen], all, today, today);
+    expect(ranked.map((r) => r.bucket)).toEqual(["overdue", "overdue", "today"]);
+    expect(ranked.map((r) => r.event.id)).toEqual([10, 11, 1]); // oldest overdue first
+  });
+
+  it("does NOT carry overdue when the selected day is not today", () => {
+    const overdue = task({ id: 10, date_iso: "2026-06-18", title_he: "ישנה" });
+    const dayOpen = task({ id: 1, date_iso: today, title_he: "היום" });
+    // selected = today (2026-06-20) but the real anchor is a later day → today's items are not "today"
+    const ranked = prioritizeUntimed([dayOpen], [dayOpen, overdue], today, "2026-06-25");
+    expect(ranked.map((r) => r.event.id)).toEqual([1]); // no carry-forward
+    expect(ranked.every((r) => r.bucket === "today")).toBe(true);
+  });
+
+  it("never carries a past EVENT or REMINDER — only tasks", () => {
+    const pastEvent = ev({ id: 20, kind: "event", time: null, date_iso: "2026-06-18" });
+    const pastReminder = ev({ id: 21, kind: "reminder", time: null, date_iso: "2026-06-18" });
+    const pastTask = task({ id: 22, date_iso: "2026-06-18", title_he: "משימה ישנה" });
+    const ranked = prioritizeUntimed([], [pastEvent, pastReminder, pastTask], today, today);
+    expect(ranked.map((r) => r.event.id)).toEqual([22]); // only the task carries
+    expect(ranked[0]?.bucket).toBe("overdue");
+  });
+
+  it("never carries a past task that is already done", () => {
+    const doneOld = task({ id: 30, date_iso: "2026-06-18", status: "done" });
+    const ranked = prioritizeUntimed([], [doneOld], today, today);
+    expect(ranked).toEqual([]); // done past task stays in the past
   });
 });
 

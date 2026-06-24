@@ -47,6 +47,29 @@ describe("useDayEvents", () => {
     expect(result.current.untimed.map((e) => e.title_he)).toContain("תור לרופא");
   });
 
+  it("carries an overdue open task onto today's untimed list, ranked first (#20)", async () => {
+    const base = {
+      kind: "task" as const,
+      time: null,
+      location: null,
+      assignee: null,
+      recurrence: null,
+      source_text: "",
+      source_provider: null,
+      status: "open" as const,
+    };
+    const overdue = { ...base, id: 99, title_he: "מטלה ישנה", date_iso: "2026-06-19" };
+    const todayTask = { ...base, id: 1, title_he: "מטלת היום", date_iso: "2026-06-21" };
+    server.use(http.get("*/events", () => HttpResponse.json({ events: [todayTask, overdue] })));
+
+    const { result } = renderHook(() => useDayEvents("2026-06-21", new Date()), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    // overdue task carried to the top, then the day's own task
+    expect(result.current.untimed.map((e) => e.title_he)).toEqual(["מטלה ישנה", "מטלת היום"]);
+  });
+
   it("reports the error status when /events fails", async () => {
     server.use(http.get("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
     const { result } = renderHook(() => useDayEvents("2026-06-21", new Date()), {
