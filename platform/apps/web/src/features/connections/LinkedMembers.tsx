@@ -1,5 +1,5 @@
 import { PersonAvatar } from "@shared/board";
-import { Card } from "@shared/ui";
+import { Card, SectionLabel } from "@shared/ui";
 
 // The household whose forwards are allowlisted — a placeholder roster (mirrors FamilyView's KNOWN_ROSTER
 // / TodayScreen's HOUSEHOLD) until a real identity/allowlist model is server-backed (deferred).
@@ -14,7 +14,7 @@ export function LinkedMembers() {
   return (
     <Card className="flex flex-col gap-3.5 p-[18px]" data-testid="linked-members">
       <div className="flex items-center justify-between">
-        <span className="font-semibold text-[14.5px] text-[color:var(--ink)]">בני בית מחוברים</span>
+        <SectionLabel>בני בית מחוברים</SectionLabel>
         <span className="font-accent text-[13px] text-muted-foreground">
           {LINKED_MEMBERS.length} מעבירים ללוח
         </span>

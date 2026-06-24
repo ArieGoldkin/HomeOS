@@ -1,6 +1,6 @@
 import type { SavedEvent } from "@homeos/shared";
 import { EventCard } from "@shared/board";
-import { Card } from "@shared/ui";
+import { Card, SectionLabel } from "@shared/ui";
 import { WhatsAppBubble } from "./WhatsAppBubble";
 
 /** The board event the forwarded message becomes — the "→ board" half of the demo. */
@@ -27,7 +27,7 @@ export function WhatsAppIngestion() {
   return (
     <Card className="flex flex-col gap-4 p-[18px]" data-testid="wa-ingestion">
       <div>
-        <span className="font-semibold text-[14.5px] text-[color:var(--ink)]">איך זה עובד</span>
+        <SectionLabel>איך זה עובד</SectionLabel>
         <p className="mt-1 text-[13px] text-muted-foreground">
           מעבירים הודעה בוואטסאפ — היא הופכת לאירוע על הלוח.
         </p>

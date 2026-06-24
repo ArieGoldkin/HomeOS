@@ -24,7 +24,7 @@ describe("router (one responsive app)", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("redirects / to /today (the kiosk root is gone)", async () => {
+  it("redirects / to /today (the old root is gone)", async () => {
     renderAt("/");
     await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
   });

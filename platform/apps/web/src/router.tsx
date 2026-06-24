@@ -74,7 +74,7 @@ function WelcomeScreen() {
  * given, so sharing one across the prod router and per-test routers leaks state between them.
  *
  * ONE responsive app: a pathless layout route (AppShell chrome) hosts the flat screens; `/` redirects
- * to `/today`. The old `/`-kiosk, `/phone/*`, and `/web/*` trees are gone.
+ * to `/today`. The old `/`, `/phone/*`, and `/web/*` route trees are gone.
  */
 function buildRouteTree() {
   const rootRoute = createRootRoute({ component: RootLayout });

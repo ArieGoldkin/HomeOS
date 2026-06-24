@@ -36,11 +36,11 @@ Forwarded message text lands in two places, both bounded by design (data-minimiz
 | `GET`  | `/health`  | Liveness (`{ "status": "ok" }`)                                       |
 | `GET`  | `/webhook` | Meta verification handshake — echoes `hub.challenge` if token matches   |
 | `POST` | `/webhook` | Inbound messages — **acks 200 immediately**, then parses/persists async |
-| `GET`  | `/events`  | Board read seam (dashboard/kiosk). Bearer `READ_TOKEN`; returns `{ events }`. 503 if unset |
+| `GET`  | `/events`  | Board read seam (the family app). Bearer `READ_TOKEN`; returns `{ events }`. 503 if unset |
 | `POST` | `/events`  | Board write seam (web/phone add). Bearer `WRITE_TOKEN`; body = a `ParsedEvent` → the single created `SavedEvent` (201). 503 if unset |
 
-> **`WRITE_TOKEN` is a DISTINCT credential from `READ_TOKEN`** (never aliased) so the read-only kitchen
-> tablet can't mutate the board — both optional, unset ⇒ that seam returns 503. For local dev set
+> **`WRITE_TOKEN` is a DISTINCT credential from `READ_TOKEN`** (never aliased) so a read-only client
+> can't mutate the board — both optional, unset ⇒ that seam returns 503. For local dev set
 > `WRITE_TOKEN` (server) **and** `VITE_HOMEOS_WRITE_TOKEN` (web app) to the same string so the AddEvent
 > form persists; the web client's `?? READ_TOKEN` fallback is a dev convenience the server does not honor.
 

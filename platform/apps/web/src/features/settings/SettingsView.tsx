@@ -1,6 +1,6 @@
 import { ConnectionCard } from "@features/connections";
 import { type Theme, useTheme } from "@shared/theme";
-import { SegmentedControl, type SegmentedOption, Switch } from "@shared/ui";
+import { SectionLabel, SegmentedControl, type SegmentedOption, Switch } from "@shared/ui";
 import { useState } from "react";
 import { ProfileCard } from "./components/ProfileCard";
 import { SettingsList } from "./components/SettingsList";
@@ -66,9 +66,7 @@ export function SettingsView() {
       </SettingsList>
 
       <section className="flex flex-col gap-2.5">
-        <span className="px-1 font-semibold text-[14.5px] text-[color:var(--ink)]">
-          שירותים מחוברים
-        </span>
+        <SectionLabel className="px-1">שירותים מחוברים</SectionLabel>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <ConnectionCard name="Google Calendar" description="אירועים מהיומן ישירות ללוח" />
           <ConnectionCard name="Gmail" description="זיהוי אירועים ממיילים מהגן ובית הספר" />

@@ -88,7 +88,7 @@ export type NeedsClarification = z.infer<typeof needsClarificationSchema>;
 
 /**
  * The contract: the structured shape Claude extracts from a forwarded Hebrew message, produced
- * by the server/agent and consumed by the dashboard + kiosk. Dates are anchored to
+ * by the server/agent and consumed by the family app's board. Dates are anchored to
  * Asia/Jerusalem upstream; `time`/`location`/`assignee`/`recurrence` are null when absent.
  * `assignee` is the family member it's for/assigned to (a name for now; a richer member model
  * comes with the multi-user work). New nullable fields default to null so the contract stays
@@ -192,8 +192,8 @@ export type InboundOutcome = z.infer<typeof inboundOutcomeSchema>;
  * `family_id` is tenant-ready NOW (default `"default"`) so D3 (#136, the real `family_id` column) is
  * purely additive — the served shape doesn't change when the column lands. The text fields are the
  * VERBATIM forwarded message (other people's words, persisted BEFORE the allowlist gate), so this feed is
- * allowlist-filtered server-side and the no-auth tablet kiosk must never reach it (a separate
- * `MESSAGES_TOKEN` the kiosk bundle never ships).
+ * allowlist-filtered server-side and a client holding only the board read token must never reach it (a
+ * separate `MESSAGES_TOKEN`, a higher privilege the family app's read-only board surfaces never carry).
  */
 export const inboundMessageSchema = z.object({
   wa_message_id: z.string(),

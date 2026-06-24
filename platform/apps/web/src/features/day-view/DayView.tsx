@@ -18,7 +18,7 @@ export interface DayViewProps {
   /** How many timed events were curated away (drives the "+N more" cue). */
   moreCount?: number;
   todayLabel?: string;
-  /** #153 — when set, the day's EventCards open the detail drawer; omitted ⇒ inert (the tablet kiosk). */
+  /** #153 — when set, the day's EventCards open the detail drawer; omitted ⇒ inert (a read-only render). */
   onOpenDetail?: (event: SavedEvent) => void;
   className?: string;
 }

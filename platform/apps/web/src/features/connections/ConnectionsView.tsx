@@ -1,4 +1,5 @@
 import { WhatsAppIngestion } from "@features/ingestion";
+import { SectionLabel } from "@shared/ui";
 import { ConnectionCard } from "./ConnectionCard";
 import { LinkedMembers } from "./LinkedMembers";
 import { RecentIngestion } from "./RecentIngestion";
@@ -8,8 +9,8 @@ import { WhatsAppChannelCard } from "./WhatsAppChannelCard";
  * The Connections screen (#182) — the single home for how events reach the board: the WhatsApp channel
  * hero, the "how it works" forward→board demo, the recent-ingestion feed (behind the distinct messages
  * token), the linked household members, and the connected-service tiles. Composed in the Modern screen
- * idiom (kicker + display heading + Card sections); the kiosk-era /ingestion and /messages routes are
- * gone — this is the one authenticated surface for all of it.
+ * idiom (kicker + display heading + Card sections); the legacy /ingestion and /messages routes are
+ * gone — this is the one app surface for all of it.
  */
 export function ConnectionsView() {
   return (
@@ -34,7 +35,7 @@ export function ConnectionsView() {
       <LinkedMembers />
 
       <section className="flex flex-col gap-3">
-        <h2 className="font-semibold text-[14.5px] text-[color:var(--ink)]">שירותים מחוברים</h2>
+        <SectionLabel>שירותים מחוברים</SectionLabel>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <ConnectionCard name="Google Calendar" description="אירועים מהיומן ישירות ללוח" />
           <ConnectionCard name="Gmail" description="זיהוי אירועים ממיילים מהגן ובית הספר" />
