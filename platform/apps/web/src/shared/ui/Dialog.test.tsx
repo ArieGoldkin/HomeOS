@@ -15,6 +15,20 @@ describe("Dialog (the unified responsive host)", () => {
     expect(screen.getByText("תוכן")).toBeInTheDocument();
   });
 
+  // #205 — the content panel must use the OPAQUE focused-overlay surface (--popover), not the
+  // ambient-card token (--card), which is translucent-by-design in dark mode (for glass board cards) and
+  // let the page bleed through the dialog. jsdom can't resolve CSS vars, so we pin the surface class.
+  it("uses the opaque popover surface, not the translucent card token", () => {
+    render(
+      <Dialog open onOpenChange={() => {}} title="הוספה ללוח">
+        <p>תוכן</p>
+      </Dialog>,
+    );
+    const panel = screen.getByRole("dialog");
+    expect(panel).toHaveClass("bg-popover");
+    expect(panel).not.toHaveClass("bg-card");
+  });
+
   it("renders nothing when closed", () => {
     render(
       <Dialog open={false} onOpenChange={() => {}} title="הוספה ללוח">
