@@ -40,7 +40,10 @@ export function Dialog({ open, onOpenChange, title, children, className }: Dialo
             "dialog-pop fixed inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[var(--radius-lg)]",
             // desktop (md+): centered modal
             "md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:w-[calc(100%-2rem)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[var(--radius-lg)]",
-            "bg-card shadow-float",
+            // #205 — the OPAQUE focused-overlay surface. NOT bg-card: in dark mode --card is translucent
+            // by design (glass board cards via --card-blur), and a dialog has no backdrop-blur, so bg-card
+            // let the board bleed through. --popover is near-solid in both themes (light #FFF, dark .94).
+            "bg-popover text-popover-foreground shadow-float",
             "max-h-[85vh] overflow-y-auto p-5",
             "focus:outline-none",
             className,
