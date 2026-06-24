@@ -135,6 +135,7 @@ describe("EventCard (canonical anti-slop spec)", () => {
       render(<EventCard event={event} onToggleDone={onToggleDone} />);
       const box = screen.getByRole("checkbox");
       expect(box).toHaveAttribute("aria-checked", "false");
+      expect(box).toHaveAccessibleName(/לקנות חלב/); // F1 — name includes the task title (distinct per task)
       fireEvent.click(box);
       expect(onToggleDone).toHaveBeenCalledWith(event);
     });

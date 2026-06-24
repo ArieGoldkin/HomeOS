@@ -152,7 +152,8 @@ export function EventCard({
           type="button"
           role="checkbox"
           aria-checked={isDone}
-          aria-label={isDone ? "בטל סימון בוצע" : "סמן כבוצע"}
+          // F1 — include the title so each checkbox has a DISTINCT accessible name on a multi-task board.
+          aria-label={`${isDone ? "בטל סימון בוצע" : "סמן כבוצע"}: ${event.title_he}`}
           onClick={() => onToggleDone(event)}
           // -m-2 p-2 grows the tap target to ~31px without shifting the layout; the visual box stays 15px.
           className="-m-2 mt-0 shrink-0 cursor-pointer rounded-md p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

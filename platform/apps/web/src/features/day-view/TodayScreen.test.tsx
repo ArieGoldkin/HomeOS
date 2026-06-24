@@ -73,7 +73,7 @@ describe("TodayScreen", () => {
     render(wrap(<TodayScreen dateIso="2026-06-21" />));
     await waitFor(() => expect(screen.getByText("לקנות חלב")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "סמן כבוצע" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /סמן כבוצע/ }));
     await waitFor(() => expect(patched).toEqual({ id: "5", status: "done" }));
   });
 });
