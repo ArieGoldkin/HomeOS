@@ -155,6 +155,9 @@ export async function handleInbound(
     // let the deterministic routes below handle the command, exactly as bare ביטול aborts (above).
     // Without this, a "תבטל …" / "שנה …" typed while a clarify/disambiguation thread is open is swallowed
     // as the thread's answer — the live bug where "תבטל את הגישה עם רות מחר" became a new event's title.
+    // Edge: a legit `ambiguous_title` answer that itself starts with a cancel/edit verb is now routed as a
+    // command — rare, and benign: G22's specific-ref + real-board-match guard yields a "not found" (the
+    // draft is dropped, nothing is deleted/edited), strictly better than the junk event this fixes.
     const stripped = stripLeadingFiller(text);
     const isVerbLedCommand = CANCEL_REF_RE.test(stripped) || EDIT_REF_RE.test(stripped);
     // #86 false-positive guard: a "לא …" that ISN'T a field correction but DOES carry a date/time
