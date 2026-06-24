@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { type SavedEvent, savedEventSchema, savedEventsResponseSchema } from "../src/index.ts";
+import {
+  eventStatusPatchSchema,
+  type SavedEvent,
+  savedEventSchema,
+  savedEventsResponseSchema,
+} from "../src/index.ts";
 
 // Fixtures mirror the server's rowToSaved() output (apps/server/src/db/event-store.ts):
 // a SavedEvent is a ParsedEvent + a numeric `id` + a nullable `source_provider`. #151 adds an optional
@@ -84,6 +89,31 @@ describe("savedEventSchema (the served GET /events row)", () => {
       expect(savedEventSchema.parse({ ...forwardedRow, source }).source).toBe(source);
     }
     expect(() => savedEventSchema.parse({ ...forwardedRow, source: "sms" })).toThrow();
+  });
+
+  // #19 — status is server-owned + optional (like source/created_at): older rows stay valid, a present
+  // value is validated. The server always populates it; the UI treats absence as "open".
+  it("is valid without status (optional → older rows default to open in the UI)", () => {
+    expect(savedEventSchema.parse(forwardedRow).status).toBeUndefined();
+  });
+
+  it("parses each valid status and rejects an unknown one", () => {
+    for (const status of ["open", "done"] as const) {
+      expect(savedEventSchema.parse({ ...forwardedRow, status }).status).toBe(status);
+    }
+    expect(() => savedEventSchema.parse({ ...forwardedRow, status: "pending" })).toThrow();
+  });
+});
+
+describe("eventStatusPatchSchema (the PATCH /events/:id body, #19)", () => {
+  it("parses a valid open/done patch", () => {
+    expect(eventStatusPatchSchema.parse({ status: "done" }).status).toBe("done");
+    expect(eventStatusPatchSchema.parse({ status: "open" }).status).toBe("open");
+  });
+
+  it("rejects an unknown status and a missing status", () => {
+    expect(() => eventStatusPatchSchema.parse({ status: "archived" })).toThrow();
+    expect(() => eventStatusPatchSchema.parse({})).toThrow();
   });
 });
 

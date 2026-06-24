@@ -88,6 +88,7 @@ export function makeDeps(
     updateEvent: vi.fn(
       (_id: number, _patch: EventPatch, _familyId: string): SavedEvent | null => null,
     ),
+    setEventStatus: vi.fn((): SavedEvent | null => null),
     findSlotConflict: vi.fn((): SavedEvent | null => null),
   };
   // The handler depends on the agent; run() returns persisted SavedEvent[], a {clarify} arm (#84), or

@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
+import { eventStatusPatchSchema, type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
@@ -145,6 +145,30 @@ export function createServer(deps: ServerDeps): Hono {
       waMessageId: `web:${randomUUID()}`,
     });
     return c.json(saved, 201);
+  });
+
+  // #19 — the open/done toggle for a board task. The ONLY REST mutation of an existing row (title/date
+  // edits stay handler-level over WhatsApp, #86). Gated by the SAME write token as POST /events (a board
+  // mutation from the authenticated app). 404 when setEventStatus returns null — the row is synced
+  // (source_provider not null, never toggled) or doesn't exist. Returns the updated single SavedEvent.
+  app.patch("/events/:id", async (c) => {
+    if (deps.writeToken === undefined) return c.text("Write API disabled", 503);
+    if (!bearerMatches(c.req.header("authorization"), deps.writeToken)) {
+      return c.text("Unauthorized", 401);
+    }
+    const id = Number(c.req.param("id"));
+    if (!Number.isInteger(id) || id <= 0) return c.text("Invalid id", 400);
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.text("Invalid JSON", 400);
+    }
+    const parsed = eventStatusPatchSchema.safeParse(body);
+    if (!parsed.success) return c.text("Invalid status", 400);
+    const saved = deps.events.setEventStatus(id, parsed.data.status, FAMILY_ID);
+    if (saved === null) return c.text("Not found", 404);
+    return c.json(saved, 200);
   });
 
   app.get("/webhook", (c) => {

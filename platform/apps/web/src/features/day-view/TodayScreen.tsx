@@ -1,7 +1,8 @@
 import { AddEventDialog } from "@features/add-event";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
+import type { SavedEvent } from "@homeos/shared";
 import { PersonAvatar } from "@shared/board";
-import { useDayEvents, useNow } from "@shared/hooks";
+import { useDayEvents, useNow, useToggleEventStatus } from "@shared/hooks";
 import { greetingHe, hebDateLong } from "@shared/lib";
 import { Button, Card, SectionLabel } from "@shared/ui";
 import { useState } from "react";
@@ -27,8 +28,15 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
   const now = useNow();
   const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(dateIso, now);
   const { selected, openDetail, closeDetail } = useEventDetail();
+  const toggleStatus = useToggleEventStatus();
   const [addOpen, setAddOpen] = useState(false);
-  const tasksLeft = untimed.length;
+  // #19 — "X משימות היום" counts OPEN items only; a completed task drops out of the count.
+  const tasksLeft = untimed.filter((e) => e.status !== "done").length;
+
+  // #19 — flip a board task's open↔done. Derives the next status from the row's current one.
+  const handleToggleDone = (event: SavedEvent) => {
+    toggleStatus.mutate({ id: event.id, status: event.status === "done" ? "open" : "done" });
+  };
 
   return (
     <div className="flex flex-col gap-7">
@@ -66,6 +74,7 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
             nowTime={nowTime}
             moreCount={moreCount}
             onOpenDetail={openDetail}
+            onToggleDone={handleToggleDone}
           />
         </Card>
 

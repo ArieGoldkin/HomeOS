@@ -454,6 +454,52 @@ describe("updateEvent (#86 edit in place)", () => {
   });
 });
 
+describe("setEventStatus (#19 task done-toggle)", () => {
+  it("defaults a newly-saved row to status 'open'", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.new" });
+    expect(saved.status).toBe("open");
+    expect(store.listEvents()[0]?.status).toBe("open");
+  });
+
+  it("toggles a board row open→done→open and persists each change", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.t" });
+    const done = store.setEventStatus(saved.id, "done", FAMILY_ID);
+    expect(done?.status).toBe("done");
+    expect(store.listEvents()[0]?.status).toBe("done"); // persisted
+
+    const reopened = store.setEventStatus(saved.id, "open", FAMILY_ID);
+    expect(reopened?.status).toBe("open");
+    expect(store.listEvents()[0]?.status).toBe("open");
+  });
+
+  it("never toggles a 'google' row (returns null, no write)", () => {
+    const store = createEventStore(":memory:");
+    const g = store.saveEvent(event, {
+      fromPhone: "9725",
+      waMessageId: "g",
+      sourceProvider: "google",
+    });
+    expect(store.setEventStatus(g.id, "done", FAMILY_ID)).toBeNull();
+    expect(store.listEvents()[0]?.status).toBe("open"); // untouched
+  });
+
+  it("returns null for a nonexistent id", () => {
+    const store = createEventStore(":memory:");
+    expect(store.setEventStatus(999, "done", FAMILY_ID)).toBeNull();
+  });
+
+  it("leaves status untouched across a #86 metadata edit", () => {
+    const store = createEventStore(":memory:");
+    const saved = store.saveEvent(event, { fromPhone: "9725", waMessageId: "wamid.e" });
+    store.setEventStatus(saved.id, "done", FAMILY_ID);
+    store.updateEvent(saved.id, { time: "09:00" }, FAMILY_ID); // edit must not reopen
+    expect(store.listEvents()[0]?.status).toBe("done");
+    expect(store.listEvents()[0]?.time).toBe("09:00");
+  });
+});
+
 describe("findSlotConflict (slot dedup)", () => {
   // event = 2026-06-20 18:30
   const slot = (excludeWaMessageId: string) => ({

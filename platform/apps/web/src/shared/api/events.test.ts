@@ -1,8 +1,9 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { sampleEvents } from "../../test/msw/handlers";
 import { server } from "../../test/msw/server";
-import { createEvent, fetchEvents } from "./events";
+import { createEvent, fetchEvents, setEventStatus } from "./events";
 
 /** A valid ParsedEvent fixture — source_text is required by parsedEventSchema. */
 const parsedFixture: ParsedEvent = {
@@ -76,5 +77,33 @@ describe("createEvent", () => {
       http.post("*/events", () => HttpResponse.json({ title_he: "broken" }, { status: 201 })),
     );
     await expect(createEvent(parsedFixture)).rejects.toThrow();
+  });
+});
+
+describe("setEventStatus (#19)", () => {
+  it("PATCHes the status and returns the parsed SavedEvent", async () => {
+    const saved = await setEventStatus(1, "done");
+    expect(saved.id).toBe(1);
+    expect(saved.status).toBe("done");
+  });
+
+  it("sends the status in the request body", async () => {
+    let captured: unknown;
+    server.use(
+      http.patch("*/events/:id", async ({ request, params }) => {
+        captured = await request.json();
+        return HttpResponse.json(
+          { ...sampleEvents[0], id: Number(params.id), status: "done" },
+          { status: 200 },
+        );
+      }),
+    );
+    await setEventStatus(1, "done");
+    expect(captured).toEqual({ status: "done" });
+  });
+
+  it("throws on a 404 (row isn't a board row)", async () => {
+    server.use(http.patch("*/events/:id", () => new HttpResponse("Not found", { status: 404 })));
+    await expect(setEventStatus(999, "done")).rejects.toThrow(/PATCH \/events\/999 failed \(404\)/);
   });
 });

@@ -87,4 +87,20 @@ export const handlers = [
     const body = (await request.json()) as Record<string, unknown>;
     return HttpResponse.json({ ...body, id: 999, source_provider: null }, { status: 201 });
   }),
+
+  /**
+   * #19 — Bearer-gated PATCH /events/:id status toggle. Returns sampleEvents[0] with the patched status
+   * and the path id, mirroring the server's updated-SavedEvent response.
+   */
+  http.patch("*/events/:id", async ({ request, params }) => {
+    const auth = request.headers.get("authorization");
+    if (!auth?.startsWith("Bearer")) {
+      return new HttpResponse("Unauthorized", { status: 401 });
+    }
+    const body = (await request.json()) as { status: string };
+    return HttpResponse.json(
+      { ...sampleEvents[0], id: Number(params.id), status: body.status },
+      { status: 200 },
+    );
+  }),
 ];

@@ -135,6 +135,17 @@ export const savedEventSourceSchema = z.enum(SAVED_EVENT_SOURCES);
 export type SavedEventSource = z.infer<typeof savedEventSourceSchema>;
 
 /**
+ * #19 — a board item's completion state. A TASK toggles open↔done. This is BOARD STATE the family sets,
+ * NOT a parsed field: it lives on the served/stored row (like `source`/`created_at`/`source_provider`),
+ * never on {@link parsedEventSchema} — so the model never authors it and `POST /events` can't create a
+ * row "done". The column is universal (every row has one, defaulting open); only the `task` kind surfaces
+ * the toggle in the UI.
+ */
+export const EVENT_STATUSES = ["open", "done"] as const;
+export const eventStatusSchema = z.enum(EVENT_STATUSES);
+export type EventStatus = z.infer<typeof eventStatusSchema>;
+
+/**
  * The shape the server SERVES from `GET /events` (one row): a {@link ParsedEvent} plus the DB-assigned
  * `id` and the `source_provider` that `event-store.ts`'s `rowToSaved` attaches (`source_provider` is
  * null for forwarded WhatsApp events, a provider name like `"google"` for gcal/gmail-derived rows). This
@@ -152,6 +163,10 @@ export const savedEventSchema = parsedEventSchema.extend({
   source_provider: z.string().nullable(),
   source: savedEventSourceSchema.optional(),
   created_at: z.string().optional(),
+  // #19 — open/done completion state. `.optional()` (like source/created_at): the server always populates
+  // it (defaulting legacy NULL rows to "open"), older fixtures/payloads stay valid, and the UI treats
+  // absence as "open".
+  status: eventStatusSchema.optional(),
 });
 export type SavedEvent = z.infer<typeof savedEventSchema>;
 
@@ -163,6 +178,15 @@ export const savedEventsResponseSchema = z.object({
   events: z.array(savedEventSchema),
 });
 export type SavedEventsResponse = z.infer<typeof savedEventsResponseSchema>;
+
+/**
+ * #19 — the body of `PATCH /events/:id`: the ONLY board-state mutation a client may apply to an existing
+ * row (the open/done toggle). Deliberately minimal — NOT a ParsedEvent patch (title/date/location edits
+ * are handler-level over WhatsApp, #86) — so the authenticated web surface can flip done-state without
+ * forking the mutation path. Validated server-side: an unknown field is stripped, a bad status → 400.
+ */
+export const eventStatusPatchSchema = z.object({ status: eventStatusSchema });
+export type EventStatusPatch = z.infer<typeof eventStatusPatchSchema>;
 
 /**
  * #135 [D2] — the disposition recorded for an inbound message at its terminal handler branch. Finer than

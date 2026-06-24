@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import type { SavedEvent } from "@homeos/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
@@ -113,6 +114,10 @@ function makeApp(
     searchEvents: vi.fn(() => []),
     findEventsInScope: vi.fn(() => []),
     updateEvent: vi.fn(() => null),
+    setEventStatus: vi.fn(
+      (id: number, status: string): SavedEvent | null =>
+        ({ ...sampleEvents[0], id, status }) as unknown as SavedEvent,
+    ),
     findSlotConflict: vi.fn(() => null),
   };
   const deps: ServerDeps = {
@@ -406,6 +411,75 @@ describe("POST /events (write seam)", () => {
     });
     expect(metaArg).toMatchObject({ fromPhone: "web" });
     expect(String(metaArg.waMessageId)).toMatch(/^web:/); // synthetic + unique per request
+  });
+});
+
+describe("PATCH /events/:id (status toggle, #19)", () => {
+  const TOK = { write: "w-tok", read: "r-tok" };
+
+  function writeApp(opts: { withRead?: boolean } = {}) {
+    const o: { readToken?: string; writeToken?: string } = {};
+    o.writeToken = TOK.write;
+    if (opts.withRead) o.readToken = TOK.read;
+    return makeApp(o);
+  }
+
+  const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+  function patchStatus(
+    app: ReturnType<typeof makeApp>["app"],
+    id: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+  ) {
+    return app.request(`/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  }
+
+  it("returns 503 when no write token is configured", async () => {
+    const { app, events } = makeApp({});
+    expect((await patchStatus(app, "7", { status: "done" }, auth("x"))).status).toBe(503);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 without a token, with the wrong one, or with the read token", async () => {
+    const { app, events } = writeApp({ withRead: true });
+    expect((await patchStatus(app, "7", { status: "done" })).status).toBe(401);
+    expect((await patchStatus(app, "7", { status: "done" }, auth("nope"))).status).toBe(401);
+    expect((await patchStatus(app, "7", { status: "done" }, auth(TOK.read))).status).toBe(401);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 on a non-integer id", async () => {
+    const { app, events } = writeApp();
+    expect((await patchStatus(app, "abc", { status: "done" }, auth(TOK.write))).status).toBe(400);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 on an invalid status body and on malformed JSON", async () => {
+    const { app, events } = writeApp();
+    expect((await patchStatus(app, "7", { status: "archived" }, auth(TOK.write))).status).toBe(400);
+    expect((await patchStatus(app, "7", "{not json", auth(TOK.write))).status).toBe(400);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the row isn't a board row (setEventStatus → null)", async () => {
+    const { app, events } = writeApp();
+    events.setEventStatus.mockReturnValueOnce(null);
+    expect((await patchStatus(app, "999", { status: "done" }, auth(TOK.write))).status).toBe(404);
+  });
+
+  it("toggles a board row and returns the updated single SavedEvent (200)", async () => {
+    const { app, events } = writeApp();
+    const res = await patchStatus(app, "7", { status: "done" }, auth(TOK.write));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown> & { events?: unknown };
+    expect(body.events).toBeUndefined(); // a bare row, not the {events} envelope
+    expect(body).toMatchObject({ id: 7, status: "done" });
+    expect(events.setEventStatus).toHaveBeenCalledWith(7, "done", "default");
   });
 });
 
