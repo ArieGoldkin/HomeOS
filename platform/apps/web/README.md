@@ -6,7 +6,7 @@ paper surfaces, a living-green primary, and a bounded blue/violet/coral/spark ac
 `docs/design/DESIGN.md`). Stack: React 19 + Vite + TypeScript (strict) + Tailwind v4/shadcn tokens +
 TanStack Router/Query + Vitest.
 
-> The old no-auth kitchen-tablet **kiosk** is retired. The `/`, `/phone/*`, and `/web/*` route trees
+> The old no-auth kitchen-tablet surface is retired. The `/`, `/phone/*`, and `/web/*` route trees
 > collapsed into this single authenticated app rooted at `/today`, served same-origin from the server.
 > Tokens are family-shared and build-embedded — **not** real per-user auth (deferred).
 
