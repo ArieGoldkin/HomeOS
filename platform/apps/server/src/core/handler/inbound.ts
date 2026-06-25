@@ -51,10 +51,12 @@ import { runSyncIntent } from "./sync.ts";
  * Dedupe + durability now live in the inbound queue (the message is persisted before the
  * ack and de-duped on wa_message_id); `processInbound` wraps this and settles the row.
  *
- * #135 — returns the FINER terminal {@link InboundOutcome} for the messages feed: each parse-path
- * branch returns its disposition (refused/rate_limited/text_only/rephrase/clarified/parsed); command
- * paths (ביטול/sync/cancel/edit/resume) return `undefined` → `outcome` stays null. `processInbound`
- * threads this into `markDone`. A thrown TransientError leaves the row pending (no outcome recorded).
+ * #135/#159 — returns the FINER terminal {@link InboundOutcome} for the messages feed: each parse-path
+ * branch returns its disposition (refused/rate_limited/text_only/rephrase/clarified/parsed) AND each
+ * command path returns its route-level disposition (aborted/edited/resumed/cancelled/synced) so the feed
+ * shows what the bot DID instead of a blank pill. `undefined` remains only where there's genuinely no
+ * disposition (a "connect Google first" reply on an unconnected sync). `processInbound` threads this into
+ * `markDone`. A thrown TransientError leaves the row pending (no outcome recorded).
  */
 export async function handleInbound(
   msg: InboundMessage,
@@ -144,12 +146,12 @@ export async function handleInbound(
       deps.conversations?.resolve(pending.id);
       log("aborted open thread via ביטול", { from: msg.from, id: pending.id });
       await deps.sendText(msg.from, ABORT_THREAD_HE);
-      return;
+      return "aborted";
     }
     // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
     if (CORRECTION_RE.test(text)) {
       await applyCorrection(deps, msg, pending, today);
-      return;
+      return "edited";
     }
     // #207 — a fresh VERB-LED command (cancel/edit) takes precedence over the open thread: abort it and
     // let the deterministic routes below handle the command, exactly as bare ביטול aborts (above).
@@ -175,7 +177,7 @@ export async function handleInbound(
       );
     } else {
       await handleResume(deps, msg, pending);
-      return;
+      return "resumed";
     }
   }
 
@@ -186,7 +188,7 @@ export async function handleInbound(
     const removed = deps.events.deleteLastFromSender(msg.from);
     log("cancel", { from: msg.from, removed });
     await deps.sendText(msg.from, cancelReply(removed));
-    return;
+    return "cancelled";
   }
 
   // Gmail sync (#72): a bare "סנכרן מייל" pulls the family's recent matching emails onto the board.
@@ -208,7 +210,7 @@ export async function handleInbound(
       events: deps.events,
       google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
     });
-    return;
+    return "synced";
   }
 
   // Calendar sync (#18): a bare "סנכרן יומן" pulls the family's upcoming Google Calendar events onto the
@@ -229,7 +231,7 @@ export async function handleInbound(
       events: deps.events,
       calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
     });
-    return;
+    return "synced";
   }
 
   // Strip a leading conversational filler ("טוב"/"אוקיי"…) for the deterministic verb-led commands so
@@ -245,7 +247,7 @@ export async function handleInbound(
   // "בטל…" deletes nothing unless a real board event matches (state-not-content, G22).
   if (CANCEL_REF_RE.test(command)) {
     await routeCancelByRef(deps, msg, command, today);
-    return;
+    return "cancelled";
   }
 
   // #86 EXPLICIT EDIT: "שנה/ערוך/תקן/עדכן <ref> ל-<field>" — deterministic (NO model call). Needs a
@@ -253,7 +255,7 @@ export async function handleInbound(
   // N>1 (numbered kind='edit' thread holding the patch). Same family/state-not-content guards as cancel.
   if (EDIT_REF_RE.test(command)) {
     await routeEditByRef(deps, msg, command, today);
-    return;
+    return "edited";
   }
 
   // Slot-dedup sink (opt-in): the extract tool pushes an existing board row here instead of re-adding a

@@ -18,6 +18,12 @@ const OUTCOME_META: Record<InboundOutcome, { label: string; tone: StatusPillProp
   rephrase: { label: "לא הובן", tone: "archived" }, // no-op (was an identical slate)
   rate_limited: { label: "מעבר למכסה", tone: "archived" }, // no-op (was an identical slate)
   text_only: { label: "לא טקסט", tone: "archived" }, // no-op (was an identical slate)
+  // #159 — command-path dispositions, so a cancel/edit/sync/resume row reads its action, not a blank.
+  cancelled: { label: "בוטל", tone: "archived" }, // an item was cancelled / an undo
+  edited: { label: "עודכן", tone: "archived" }, // an edit / in-place correction
+  synced: { label: "סונכרן", tone: "active" }, // pulled events from Gmail / Calendar → green like parsed
+  aborted: { label: "שיחה בוטלה", tone: "archived" }, // an open thread closed by ביטול
+  resumed: { label: "המשך שיחה", tone: "archived" }, // a reply answered an open clarify/confirm thread
 };
 
 /** Media-type placeholder for a non-text message (which has null text + no event). */
@@ -39,8 +45,9 @@ const dateTimeFmt = new Intl.DateTimeFormat("he-IL", {
 });
 
 function OutcomePill({ outcome }: { outcome: InboundOutcome | null }) {
-  if (outcome === null) return null;
-  const meta = OUTCOME_META[outcome];
+  // #159 — a null/unknown disposition (a pre-#135 historical row, or one still settling) renders a neutral
+  // marker, NOT a blank, so "we don't know what happened" reads differently from "nothing happened".
+  const meta = outcome ? OUTCOME_META[outcome] : { label: "—", tone: "archived" as const };
   return (
     <StatusPill tone={meta.tone} data-testid="outcome-pill">
       {meta.label}

@@ -26,7 +26,7 @@ describe("processInbound (queue settle)", () => {
   });
 
   // #135 — the finer disposition the handler reached is threaded into markDone for the messages feed.
-  it("records the terminal outcome per branch (refused / text_only / rephrase / command=null)", async () => {
+  it("records the terminal outcome per branch (refused / text_only / rephrase / command)", async () => {
     // refused — a non-allowlisted sender
     const refused = makeDeps();
     const ri = makeInbound();
@@ -51,14 +51,14 @@ describe("processInbound (queue settle)", () => {
     await processInbound(textMsg, { ...reph.deps, inbound: pi } as ProcessDeps);
     expect(pi.markDone).toHaveBeenCalledWith("wamid.1", "rephrase");
 
-    // command (bare ביטול undo) — done, but no parse disposition → null outcome (undefined arg)
+    // command (bare ביטול undo) — #159: now carries a "cancelled" disposition (no longer a blank pill)
     const cmd = makeDeps();
     const ci = makeInbound();
     await processInbound({ ...textMsg, text: "ביטול" }, {
       ...cmd.deps,
       inbound: ci,
     } as ProcessDeps);
-    expect(ci.markDone).toHaveBeenCalledWith("wamid.1", undefined);
+    expect(ci.markDone).toHaveBeenCalledWith("wamid.1", "cancelled");
   });
 
   it("marks the row failed (not done) when handling throws a non-transient error", async () => {

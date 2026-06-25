@@ -28,6 +28,34 @@ describe("RecentIngestion (data-connected feed, distinct messages token)", () =>
     expect(screen.getByText("לא טקסט")).toBeInTheDocument();
   });
 
+  it("renders a command-path disposition and a neutral marker for an unknown one (#159)", async () => {
+    const row = (over: Record<string, unknown>) => ({
+      wa_message_id: "x",
+      from_phone: "972500000001",
+      type: "text",
+      text: "…",
+      status: "done",
+      received_at: "2026-06-22T09:00:00Z",
+      processed_at: "2026-06-22T09:00:01Z",
+      family_id: "default",
+      ...over,
+    });
+    server.use(
+      http.get("*/messages", () =>
+        HttpResponse.json({
+          messages: [
+            row({ wa_message_id: "c.1", text: "בטל את אסיפת ההורים", outcome: "cancelled" }),
+            row({ wa_message_id: "h.1", text: "הודעה היסטורית", outcome: null }), // pre-#135 row
+          ],
+        }),
+      ),
+    );
+    render(wrap(<RecentIngestion />));
+    await waitFor(() => expect(screen.getByText("בטל את אסיפת ההורים")).toBeInTheDocument());
+    expect(screen.getByText("בוטל")).toBeInTheDocument(); // command pill, not a blank
+    expect(screen.getByText("—")).toBeInTheDocument(); // historical null → neutral marker, not blank
+  });
+
   it("shows an empty state when there are no messages", async () => {
     server.use(http.get("*/messages", () => HttpResponse.json({ messages: [] })));
     render(wrap(<RecentIngestion />));

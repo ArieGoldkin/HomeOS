@@ -192,8 +192,13 @@ export type EventStatusPatch = z.infer<typeof eventStatusPatchSchema>;
  * #135 [D2] — the disposition recorded for an inbound message at its terminal handler branch. Finer than
  * the queue's coarse `status` (pending|done|failed): a `done` row could be a parsed event, a clarify
  * question, an unparseable→rephrase, an allowlist refusal, a rate-limit, or a text-only reply — all
- * indistinguishable by `status` alone. Null when the message took a non-parse path (a command like
- * ביטול/סנכרן/cancel/edit, or a still-pending/failed row). The web feed renders it as an outcome pill.
+ * indistinguishable by `status` alone.
+ *
+ * #159 — extended to the COMMAND paths so the feed shows what the bot DID, not a blank pill: `cancelled`
+ * (cancel-by-ref / bare-ביטול undo), `edited` (edit-by-ref / in-place correction), `synced` (mail/calendar
+ * sync), `aborted` (an open thread closed by ביטול), `resumed` (a reply that answered an open clarify /
+ * disambiguation / confirm thread). Null now means only a row with no recorded disposition — a historical
+ * row from before #135, or a still-pending/failed one — which the web renders as a neutral marker.
  */
 export const INBOUND_OUTCOMES = [
   "parsed",
@@ -202,6 +207,11 @@ export const INBOUND_OUTCOMES = [
   "refused",
   "rate_limited",
   "text_only",
+  "cancelled",
+  "edited",
+  "synced",
+  "aborted",
+  "resumed",
 ] as const;
 export const inboundOutcomeSchema = z.enum(INBOUND_OUTCOMES);
 export type InboundOutcome = z.infer<typeof inboundOutcomeSchema>;

@@ -46,8 +46,9 @@ describe("handleInbound — #83 RESUME branch", () => {
     seed(conversations, FUTURE); // a clarify thread is open
     const { deps, sendText, events } = makeDeps({ conversations });
 
-    await handleInbound({ ...textMsg, text: "תבטל את הגישה עם רות מחר" }, deps);
+    const out = await handleInbound({ ...textMsg, text: "תבטל את הגישה עם רות מחר" }, deps);
 
+    expect(out).toBe("cancelled"); // #159 — routed as a cancel command, recorded for the feed
     expect(events.findEventsByRef).toHaveBeenCalled(); // the cancel route engaged
     expect(events.saveEvent).not.toHaveBeenCalled(); // NOT swallowed as a clarify title → no junk event
     expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // open thread aborted
@@ -60,12 +61,27 @@ describe("handleInbound — #83 RESUME branch", () => {
     seed(conversations, FUTURE);
     const { deps, sendText, events } = makeDeps({ conversations });
 
-    await handleInbound({ ...textMsg, text: "שנה את הפגישה עם רות ל-18:00" }, deps);
+    const out = await handleInbound({ ...textMsg, text: "שנה את הפגישה עם רות ל-18:00" }, deps);
 
+    expect(out).toBe("edited"); // #159 — routed as an edit command, recorded for the feed
     expect(events.findEventsByRef).toHaveBeenCalled(); // the edit route engaged
     expect(events.saveEvent).not.toHaveBeenCalled(); // not swallowed as a clarify answer
     expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // open thread aborted
     expect(sendText.mock.calls[0]?.[1]).not.toContain("הוספתי");
+  });
+
+  // #159: a bare "ביטול" while a thread is open is the escape hatch — it ABORTS the thread (resolve, no
+  // undo) and is recorded as the "aborted" disposition so the feed shows the thread was closed.
+  it("records 'aborted' when a bare ביטול closes an open thread", async () => {
+    const conversations = createConversationStore(":memory:");
+    seed(conversations, FUTURE);
+    const { deps, agent } = makeDeps({ conversations });
+
+    const out = await handleInbound({ ...textMsg, text: "ביטול" }, deps);
+
+    expect(out).toBe("aborted");
+    expect(agent.run).not.toHaveBeenCalled(); // the escape hatch never re-parses
+    expect(conversations.getPending(textMsg.from, NOW_SQLITE)).toBeNull(); // thread resolved
   });
 
   it("a redelivered answer (thread already resolved) falls through to the normal parse", async () => {
@@ -110,8 +126,8 @@ describe("handleInbound — #83 RESUME branch", () => {
 
     await processInbound(textMsg, { ...deps, inbound } as unknown as ProcessDeps);
 
-    // #135 — a resume is a command path (not a fresh parse), so the outcome is null (undefined arg).
-    expect(inbound.markDone).toHaveBeenCalledWith("wamid.1", undefined);
+    // #135/#159 — a resume answers an open thread; recorded as the "resumed" disposition for the feed.
+    expect(inbound.markDone).toHaveBeenCalledWith("wamid.1", "resumed");
     expect(agent.run).not.toHaveBeenCalled();
   });
 });
