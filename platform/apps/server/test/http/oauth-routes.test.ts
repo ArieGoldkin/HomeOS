@@ -1,10 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import type { GoogleOAuthSettings } from "../../src/config.ts";
 import { createCredentialStore } from "../../src/db/credential-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 import { GOOGLE_SCOPES, type GoogleOAuthClient } from "../../src/google/oauth.ts";
-import { type GoogleOAuthDeps, registerOAuthRoutes } from "../../src/http/oauth-routes.ts";
+import {
+  buildGoogleDeps,
+  gateMatches,
+  type GoogleOAuthDeps,
+  registerOAuthRoutes,
+} from "../../src/http/oauth-routes.ts";
 
 const ADMIN = "admin-tok";
 const NEW_ACCESS = "access-new";
@@ -185,5 +191,66 @@ describe("POST /disconnect/google", () => {
   it("401s without the admin bearer", async () => {
     const { app } = harness();
     expect((await app.request("/disconnect/google", { method: "POST" })).status).toBe(401);
+  });
+});
+
+describe("gateMatches — dual-token gate (#107)", () => {
+  const SETUP = "setup-tok";
+  const deps = { setupToken: SETUP, adminToken: ADMIN } as GoogleOAuthDeps;
+
+  it("true for a valid SETUP_TOKEN bearer", () => {
+    expect(gateMatches(`Bearer ${SETUP}`, deps)).toBe(true);
+  });
+
+  it("true for a valid ADMIN_TOKEN bearer (the curl escape hatch)", () => {
+    expect(gateMatches(`Bearer ${ADMIN}`, deps)).toBe(true);
+  });
+
+  it("false for an absent or wrong bearer", () => {
+    expect(gateMatches(undefined, deps)).toBe(false);
+    expect(gateMatches("Bearer nope", deps)).toBe(false);
+  });
+
+  it("false when SETUP_TOKEN is unset and the bearer isn't the admin token", () => {
+    expect(gateMatches("Bearer nope", { adminToken: ADMIN } as GoogleOAuthDeps)).toBe(false);
+  });
+
+  it("an empty-value bearer never passes when SETUP_TOKEN is unset", () => {
+    // "Bearer " (trailing space, empty value) must NOT match an absent setup token.
+    expect(gateMatches("Bearer ", { adminToken: ADMIN } as GoogleOAuthDeps)).toBe(false);
+  });
+});
+
+describe("buildGoogleDeps — threads the self-serve optionals (#106)", () => {
+  const ENC = Buffer.alloc(32, 1);
+  const baseSettings: GoogleOAuthSettings = {
+    clientId: "gcid",
+    clientSecret: CSEC,
+    redirectUri: "https://example.test/oauth/google/callback",
+    encKey: ENC,
+    adminToken: ADMIN,
+  };
+  const events = { deleteByProvider: vi.fn(() => 0) };
+
+  it("derives webReturnUrl from webBaseUrl and threads setupToken / allowedEmail / readToken", () => {
+    const settings: GoogleOAuthSettings = {
+      ...baseSettings,
+      setupToken: "setup-tok",
+      webBaseUrl: "https://homeos-production-83a4.up.railway.app",
+      allowedEmail: "parent@example.com",
+    };
+    const deps = buildGoogleDeps(settings, ":memory:", events, "read-tok");
+    expect(deps.setupToken).toBe("setup-tok");
+    expect(deps.allowedEmail).toBe("parent@example.com");
+    expect(deps.readToken).toBe("read-tok");
+    expect(deps.webReturnUrl).toBe("https://homeos-production-83a4.up.railway.app/connections");
+  });
+
+  it("leaves webReturnUrl undefined when webBaseUrl is unset (admin-only mode)", () => {
+    const deps = buildGoogleDeps(baseSettings, ":memory:", events);
+    expect(deps.webReturnUrl).toBeUndefined();
+    expect(deps.setupToken).toBeUndefined();
+    expect(deps.allowedEmail).toBeUndefined();
+    expect(deps.readToken).toBeUndefined();
   });
 });

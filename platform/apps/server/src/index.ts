@@ -59,7 +59,7 @@ const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 // 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
 // so the routes ship dark (503). The credential store opens its own connection on the same DB file.
 const googleDeps = config.google
-  ? buildGoogleDeps(config.google, config.dbPath, events, log)
+  ? buildGoogleDeps(config.google, config.dbPath, events, config.readToken, log)
   : undefined;
 
 // 📧 Gmail tool deps (#72): reuse googleDeps' oauth client + credential store (getValidAccessToken),

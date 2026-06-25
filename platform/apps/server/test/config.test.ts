@@ -148,3 +148,93 @@ describe("loadConfig", () => {
     ).toThrowError(/GOOGLE_TOKEN_ENC_KEY/);
   });
 });
+
+// #106 — self-serve OAuth adds three OPTIONAL bundle vars (SETUP_TOKEN, WEB_BASE_URL,
+// ALLOWED_GOOGLE_EMAIL). The five required vars stay required; none present ⇒ ships dark; required
+// present + these absent ⇒ admin-only mode preserved (the new fields read undefined).
+const kSetup = "SETUP_TOKEN";
+const SETUP32_B64 = Buffer.alloc(32, 7).toString("base64"); // a valid ≥32-byte SETUP_TOKEN
+const ALLOWED_ORIGIN_URL = "https://homeos-production-83a4.up.railway.app/connections";
+
+describe("loadConfig — self-serve OAuth optionals (#106)", () => {
+  it("ships dark: no GOOGLE_* ⇒ config.google undefined (unchanged)", () => {
+    expect(loadConfig(base).google).toBeUndefined();
+  });
+
+  it("admin-only mode preserved: required set, the 3 optionals absent ⇒ fields undefined", () => {
+    const g = loadConfig({ ...base, ...googleEnv }).google;
+    expect(g).toBeDefined();
+    expect(g?.setupToken).toBeUndefined();
+    expect(g?.webBaseUrl).toBeUndefined();
+    expect(g?.allowedEmail).toBeUndefined();
+  });
+
+  it("builds the optionals when set (valid distinct ≥32-byte SETUP_TOKEN, allowlisted https origin)", () => {
+    const g = loadConfig({
+      ...base,
+      ...googleEnv,
+      [kSetup]: SETUP32_B64,
+      WEB_BASE_URL: "https://homeos-production-83a4.up.railway.app",
+      ALLOWED_GOOGLE_EMAIL: "parent@example.com",
+    }).google;
+    expect(g?.setupToken).toBe(SETUP32_B64);
+    expect(g?.webBaseUrl).toBe("https://homeos-production-83a4.up.railway.app");
+    expect(g?.allowedEmail).toBe("parent@example.com");
+  });
+
+  it("rejects a SETUP_TOKEN with < 32 decoded bytes of entropy", () => {
+    expect(() =>
+      loadConfig({ ...base, ...googleEnv, [kSetup]: Buffer.alloc(16, 7).toString("base64") }),
+    ).toThrowError(/SETUP_TOKEN/);
+  });
+
+  it("rejects a SETUP_TOKEN equal to READ_TOKEN", () => {
+    expect(() =>
+      loadConfig({ ...base, ...googleEnv, READ_TOKEN: SETUP32_B64, [kSetup]: SETUP32_B64 }),
+    ).toThrowError(/SETUP_TOKEN/);
+  });
+
+  it("rejects a SETUP_TOKEN equal to ADMIN_TOKEN", () => {
+    expect(() =>
+      loadConfig({ ...base, ...googleEnv, [kAdmin]: SETUP32_B64, [kSetup]: SETUP32_B64 }),
+    ).toThrowError(/SETUP_TOKEN/);
+  });
+
+  it("accepts a valid distinct ≥32-byte SETUP_TOKEN", () => {
+    const g = loadConfig({ ...base, ...googleEnv, [kSetup]: SETUP32_B64 }).google;
+    expect(g?.setupToken).toBe(SETUP32_B64);
+  });
+
+  it("rejects a WEB_BASE_URL that is not absolute", () => {
+    expect(() => loadConfig({ ...base, ...googleEnv, WEB_BASE_URL: "/connections" })).toThrowError(
+      /WEB_BASE_URL/,
+    );
+  });
+
+  it("rejects a non-https WEB_BASE_URL", () => {
+    expect(() =>
+      loadConfig({
+        ...base,
+        ...googleEnv,
+        WEB_BASE_URL: "http://homeos-production-83a4.up.railway.app",
+      }),
+    ).toThrowError(/WEB_BASE_URL/);
+  });
+
+  it("rejects a valid-https WEB_BASE_URL whose origin is not on the allowlist", () => {
+    expect(() =>
+      loadConfig({ ...base, ...googleEnv, WEB_BASE_URL: "https://evil.example.com" }),
+    ).toThrowError(/WEB_BASE_URL/);
+  });
+
+  it("accepts an allowlisted https WEB_BASE_URL origin", () => {
+    const g = loadConfig({
+      ...base,
+      ...googleEnv,
+      WEB_BASE_URL: "https://homeos-production-83a4.up.railway.app",
+    }).google;
+    expect(g?.webBaseUrl).toBe("https://homeos-production-83a4.up.railway.app");
+    // the allowlist URL fixture lives under the same origin the deps thread the return URL from
+    expect(new URL(ALLOWED_ORIGIN_URL).origin).toBe(g?.webBaseUrl);
+  });
+});

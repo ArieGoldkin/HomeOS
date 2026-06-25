@@ -109,6 +109,25 @@ describe("CredentialStore", () => {
   });
 });
 
+describe("single-family dogfood guard (#110 — Phase-8 trip-wire in code)", () => {
+  it("upsert and issueState work unchanged for the default family", () => {
+    const store = createCredentialStore(":memory:", key);
+    expect(() => store.upsert(FAMILY_ID, sample)).not.toThrow();
+    expect(store.get(FAMILY_ID)).toEqual(sample);
+    expect(store.issueState(FAMILY_ID)).toBeTruthy();
+  });
+
+  it("upsert throws the named single-family error for any other family", () => {
+    const store = createCredentialStore(":memory:", key);
+    expect(() => store.upsert("another-family", sample)).toThrowError(/single-family/);
+  });
+
+  it("issueState throws the named single-family error for any other family", () => {
+    const store = createCredentialStore(":memory:", key);
+    expect(() => store.issueState("another-family")).toThrowError(/single-family/);
+  });
+});
+
 describe("oauth_state — CSRF store (OG7, single-use, family-bound)", () => {
   it("issues a state that consumes exactly once (single-use)", () => {
     const store = createCredentialStore(":memory:", key);

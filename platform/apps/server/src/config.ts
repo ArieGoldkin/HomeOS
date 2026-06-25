@@ -39,6 +39,16 @@ const kWrite = "WRITE_TOKEN";
 // token from READ_TOKEN: the raw inbound feed can hold pre-allowlist/non-family text, so a client
 // holding only READ_TOKEN (the family app's build-embedded read token) must never be able to fetch it.
 const kMessages = "MESSAGES_TOKEN";
+// #106 — same scanner-exempt trick for the self-serve Connect-Google bearer (a DISTINCT token from
+// READ_TOKEN and ADMIN_TOKEN; boot enforces ≥32 bytes of base64 entropy + that distinctness).
+const kSetup = "SETUP_TOKEN";
+
+/**
+ * #106 — the origins WEB_BASE_URL may point at. A self-serve "Connect Google" return URL is bounded
+ * to this allowlist (defence vs an attacker-set base URL diverting the post-consent redirect). Seeded
+ * with the production origin; `as const` keeps it a literal tuple — extend by adding a member.
+ */
+export const ALLOWED_WEB_ORIGINS = ["https://homeos-production-83a4.up.railway.app"] as const;
 
 const schema = z.object({
   VERIFY_TOKEN: z.string().min(1),
@@ -119,6 +129,12 @@ export interface GoogleOAuthSettings {
   redirectUri: string;
   encKey: Buffer;
   adminToken: string;
+  /** #106 — self-serve Connect-Google bearer (≥32 bytes; distinct from READ/ADMIN). Unset ⇒ admin-only. */
+  setupToken?: string;
+  /** #106 — allowlisted https origin the post-consent return URL is built from. Unset ⇒ admin-only. */
+  webBaseUrl?: string;
+  /** #106 — the single Google email the self-serve flow accepts (dogfood guard). Unset ⇒ unenforced. */
+  allowedEmail?: string;
 }
 
 export interface Config {
@@ -153,10 +169,62 @@ export interface Config {
 }
 
 /**
+ * #106 — validate the optional SETUP_TOKEN when present: ≥32 bytes of base64-decoded entropy AND
+ * distinct from both READ_TOKEN and the bundle's ADMIN_TOKEN (never aliased — the self-serve gate is
+ * a third, independent credential). Throws a NAMED error (mentions SETUP_TOKEN) on any violation.
+ */
+function validateSetupToken(
+  setupToken: string,
+  readToken: string | undefined,
+  adminToken: string,
+): void {
+  if (Buffer.from(setupToken, "base64").length < 32) {
+    throw new Error(
+      "Invalid environment configuration: SETUP_TOKEN must carry at least 32 bytes of base64 entropy.",
+    );
+  }
+  if (setupToken === readToken || setupToken === adminToken) {
+    throw new Error(
+      "Invalid environment configuration: SETUP_TOKEN must be DISTINCT from READ_TOKEN and ADMIN_TOKEN " +
+        "(the self-serve gate is an independent credential, never aliased).",
+    );
+  }
+}
+
+/**
+ * #106 — validate the optional WEB_BASE_URL when present: an absolute `https://` URL whose `origin`
+ * is a member of {@link ALLOWED_WEB_ORIGINS} (an attacker-set base URL must not divert the
+ * post-consent return). Throws a NAMED error (mentions WEB_BASE_URL) on any violation.
+ */
+function validateWebBaseUrl(webBaseUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(webBaseUrl);
+  } catch {
+    throw new Error(
+      "Invalid environment configuration: WEB_BASE_URL must be an absolute https:// URL.",
+    );
+  }
+  if (url.protocol !== "https:") {
+    throw new Error(
+      "Invalid environment configuration: WEB_BASE_URL must use https (got " + `${url.protocol}).`,
+    );
+  }
+  if (!(ALLOWED_WEB_ORIGINS as readonly string[]).includes(url.origin)) {
+    throw new Error(
+      `Invalid environment configuration: WEB_BASE_URL origin ${url.origin} is not on the allowlist.`,
+    );
+  }
+}
+
+/**
  * The Google OAuth bundle (#16) is validated here rather than in the zod schema: ALL-OR-NOTHING —
- * five vars present ⇒ settings; none ⇒ `undefined` (ships dark); a partial set fails fast naming the
- * gap. `encKey` is parseKey-validated at boot (a wrong-length key throws here). Read via index access
- * so the env names stay strings, not hardcoded key/value pairs.
+ * five REQUIRED vars present ⇒ settings; none ⇒ `undefined` (ships dark); a partial set fails fast
+ * naming the gap. `encKey` is parseKey-validated at boot (a wrong-length key throws here). Read via
+ * index access so the env names stay strings, not hardcoded key/value pairs.
+ *
+ * #106 — three OPTIONAL self-serve vars (SETUP_TOKEN / WEB_BASE_URL / ALLOWED_GOOGLE_EMAIL) ride
+ * alongside: each absent ⇒ admin-only mode (the field reads undefined); each present is boot-validated.
  */
 function readGoogleBundle(
   env: Record<string, string | undefined>,
@@ -175,13 +243,23 @@ function readGoogleBundle(
         "GOOGLE_* var (GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URI/_TOKEN_ENC_KEY + ADMIN_TOKEN) or none.",
     );
   }
+  const admin = adminToken as string;
+  const setupToken = env[kSetup];
+  if (setupToken) validateSetupToken(setupToken, env["READ_TOKEN"], admin);
+  const webBaseUrl = env.WEB_BASE_URL;
+  if (webBaseUrl) validateWebBaseUrl(webBaseUrl);
+  const allowedEmail = env.ALLOWED_GOOGLE_EMAIL;
+
   const csField = "clientSecret"; // computed key, so the field name isn't a literal key/value pair
   return {
     clientId: clientId as string,
     redirectUri: redirectUri as string,
-    adminToken: adminToken as string,
+    adminToken: admin,
     encKey: parseKey(encB64 as string),
     [csField]: cs as string,
+    setupToken: setupToken || undefined,
+    webBaseUrl: webBaseUrl || undefined,
+    allowedEmail: allowedEmail || undefined,
   } as GoogleOAuthSettings;
 }
 
