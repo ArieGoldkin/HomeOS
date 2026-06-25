@@ -373,6 +373,8 @@ describe("anthropicCallModel (the one SDK adapter)", () => {
       expect.objectContaining({
         model: "claude-haiku-4-5",
         max_tokens: 2048,
+        // Deterministic tool selection + term extraction, in parity with the parse path (parser.ts).
+        temperature: 0,
         tool_choice: { type: "tool", name: "extract_events", disable_parallel_tool_use: true },
       }),
     );

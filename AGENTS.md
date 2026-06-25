@@ -10,7 +10,7 @@ shared.
 **M2 built — forward → parse → confirm.** The pnpm monorepo under `platform/` holds `@homeos/server`
 (WhatsApp webhook → Claude structured-output parse → SQLite → Hebrew confirm) and `@homeos/shared`
 (the `ParsedEvent` contract). 45 tests, strict typecheck, no live network/Claude in tests. Parsing
-defaults to `claude-haiku-4-5` (swappable via `ANTHROPIC_MODEL`); storage uses Node's built-in
+defaults to `claude-sonnet-4-6` (swappable via `ANTHROPIC_MODEL`); storage uses Node's built-in
 `node:sqlite`. Remaining: the manual Demo 2 smoke test (see `platform/apps/server/README.md`) and,
 next, **M2b** (voice notes via `mlx_whisper`). M1 (echo bot) and the research/strategy phase are complete.
 

@@ -176,7 +176,9 @@ end-to-end is Demo 2.
 - **`node:sqlite`** (Node's built-in driver) instead of `better-sqlite3` + Drizzle — no native build
   step (better-sqlite3 had no Node 24 prebuilt binary). Drizzle can be layered behind `EventStore` later.
 - **Zod v4** (`zod/v4`) for the shared schema — required by `@anthropic-ai/sdk`'s `zodOutputFormat`.
-- **Haiku 4.5** is the default parsing model (`ANTHROPIC_MODEL`), chosen for cost; swappable per the env.
+- **Sonnet 4.6** is the default parsing model (`ANTHROPIC_MODEL`), chosen for Hebrew relative-date
+  accuracy (Haiku mis-resolved weekday idioms in the golden eval — date accuracy is the product wedge,
+  and Sonnet stays well inside ≤$100/mo at family volume); swappable per the env.
 
 ## Deferred (deliberate scope cuts)
 

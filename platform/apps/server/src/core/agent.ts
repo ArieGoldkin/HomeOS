@@ -288,6 +288,11 @@ export function anthropicCallModel(client: Anthropic, model: string, maxTokens =
     const res = await client.messages.create({
       model,
       max_tokens: maxTokens,
+      // Deterministic decoding, in parity with the parse path (parser.ts anthropicRawParse). The agent
+      // only ever emits structured tool calls (no prose, by design), so creative sampling buys nothing
+      // and only adds variance to WHICH tool fires and the titleHint/text args it extracts — temp 0
+      // makes tool selection + resolve-term extraction reproducible and tightens eval stability.
+      temperature: 0,
       system: req.system,
       messages: req.messages as Anthropic.MessageParam[],
       tools: req.tools as unknown as Anthropic.Tool[],

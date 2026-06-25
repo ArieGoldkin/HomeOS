@@ -44,7 +44,7 @@ pnpm dev           # start the server (WhatsApp + Claude setup: apps/server/READ
 
 ## Stack
 
-Node ≥22 via **tsx** (no build step) · **Hono** · **`@anthropic-ai/sdk`** (model `claude-haiku-4-5`,
+Node ≥22 via **tsx** (no build step) · **Hono** · **`@anthropic-ai/sdk`** (model `claude-sonnet-4-6`,
 swappable via `ANTHROPIC_MODEL`) · **`node:sqlite`** behind an `EventStore` interface · **zod/v4**
 (shared schema) · **Vitest** · **pnpm** workspaces.
 **Web** (`apps/web`): **React 19** · **Vite** · **Tailwind v4** (CSS-first `@theme`, tokens in `styles/globals.css`) ·
