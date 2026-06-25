@@ -3,6 +3,7 @@ import { TransientError } from "../../src/core/errors.ts";
 import type { StoredCredential } from "../../src/db/credential-store.ts";
 import {
   buildGoogleAuthUrl,
+  fetchUserInfoEmail,
   type GoogleOAuthClient,
   GoogleOAuthError,
   getValidAccessToken,
@@ -34,6 +35,8 @@ const errJson = (status: number, body: unknown) =>
 
 // The shape our client passes as fetch's 2nd arg — typed so mock.calls[i] inspection is strict-clean.
 type Init = { method: string; headers: Record<string, string>; body: string };
+// The Gmail-profile GET passes a headers-only init (no body) — #109.
+type GetInit = { method: string; headers: Record<string, string> };
 
 const tokenBody = {
   [AT]: NEW_ACCESS,
@@ -132,6 +135,50 @@ describe("httpGoogleOAuthClient", () => {
   });
 });
 
+describe("fetchUserInfoEmail (#109 — account-pin)", () => {
+  it("GETs the Gmail profile with a Bearer token and returns emailAddress", async () => {
+    const fetchImpl = vi.fn((_url: string, _init: GetInit) =>
+      Promise.resolve(okJson({ emailAddress: "parent@example.com", messagesTotal: 7 })),
+    );
+    const email = await fetchUserInfoEmail("acc-tok", fetchImpl as unknown as typeof fetch);
+    expect(email).toBe("parent@example.com");
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("https://gmail.googleapis.com/gmail/v1/users/me/profile");
+    expect(init.headers.Authorization).toBe("Bearer acc-tok");
+  });
+
+  it("throws TransientError on a non-ok response", async () => {
+    const fetchImpl = vi.fn(async () => errJson(503, { error: "backend_error" }));
+    await expect(
+      fetchUserInfoEmail("acc-tok", fetchImpl as unknown as typeof fetch),
+    ).rejects.toBeInstanceOf(TransientError);
+  });
+
+  it("wraps a network-level failure as TransientError", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("ECONNRESET");
+    });
+    await expect(
+      fetchUserInfoEmail("acc-tok", fetchImpl as unknown as typeof fetch),
+    ).rejects.toBeInstanceOf(TransientError);
+  });
+});
+
+describe("httpGoogleOAuthClient.getEmail (#109 — injectable seam)", () => {
+  it("delegates to the Gmail profile endpoint and returns the email", async () => {
+    const fetchImpl = vi.fn((_url: string, _init: GetInit) =>
+      Promise.resolve(okJson({ emailAddress: "fam@example.test" })),
+    );
+    const email = await httpGoogleOAuthClient(cfg, fetchImpl as unknown as typeof fetch).getEmail(
+      "acc-tok",
+    );
+    expect(email).toBe("fam@example.test");
+    expect(fetchImpl.mock.calls[0]![0]).toBe(
+      "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+    );
+  });
+});
+
 describe("getValidAccessToken — refresh-on-demand (AC5)", () => {
   const cred: StoredCredential = {
     refreshToken: REFRESH,
@@ -144,6 +191,7 @@ describe("getValidAccessToken — refresh-on-demand (AC5)", () => {
     exchangeCode: vi.fn(),
     refresh: vi.fn(),
     revoke: vi.fn(),
+    getEmail: vi.fn(),
     ...over,
   });
 

@@ -1,3 +1,4 @@
+import { CONNECT_OUTCOMES, type ConnectOutcome } from "@homeos/shared";
 import type { Context, Hono } from "hono";
 import type { GoogleOAuthSettings } from "../config.ts";
 import { sqliteUtc } from "../core/time.ts";
@@ -11,6 +12,7 @@ import {
   type GoogleOAuthClient,
   httpGoogleOAuthClient,
 } from "../google/oauth.ts";
+import { createRateLimiter, mismatchDelay, type RateLimiter } from "./rate-limit.ts";
 import { bearerMatches } from "./server.ts";
 
 /**
@@ -35,6 +37,8 @@ export interface GoogleOAuthDeps {
   webReturnUrl?: string;
   /** #106 — the single Google email the self-serve flow accepts (dogfood guard; #108 enforces it). */
   allowedEmail?: string;
+  /** #108 — per-IP rate limiter for the self-serve connect-url mint. Defaulted when unset (injectable in tests). */
+  rateLimiter?: RateLimiter;
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
@@ -52,9 +56,14 @@ export function gateMatches(
   return setupOk || bearerMatches(header, deps.adminToken);
 }
 
-type Outcome = "connected" | "cancelled" | "no_refresh" | "bad_scope" | "bad_state" | "error";
-
-const PAGES: Record<Outcome, { status: 200 | 400 | 403 | 502; title: string; body: string }> = {
+// #10 — the page table is keyed off the SHARED {@link ConnectOutcome} (so the static fallback and the
+// web `?status=` banner can only ever render the same allowlisted slug). The `Record<ConnectOutcome, …>`
+// makes PAGES exhaustive by type; this runtime assert keeps the imported tuple load-bearing and fails
+// loudly at module load if a new outcome slug is added to the shared enum without a page here.
+const PAGES: Record<
+  ConnectOutcome,
+  { status: 200 | 400 | 403 | 502; title: string; body: string }
+> = {
   connected: { status: 200, title: "מחובר ✅", body: "חשבון Google חובר בהצלחה." },
   cancelled: { status: 200, title: "בוטל", body: "החיבור בוטל. אפשר לנסות שוב בכל עת." },
   no_refresh: {
@@ -72,6 +81,11 @@ const PAGES: Record<Outcome, { status: 200 | 400 | 403 | 502; title: string; bod
     title: "בקשה לא תקפה",
     body: "הבקשה פגה או אינה תקפה. התחילו את החיבור מחדש.",
   },
+  bad_account: {
+    status: 403,
+    title: "חשבון לא תואם",
+    body: "החשבון שאושר אינו החשבון המוגדר למשפחה. התחברו עם החשבון הנכון, או נתקו תחילה.",
+  },
   error: {
     status: 502,
     title: "שגיאה",
@@ -79,8 +93,14 @@ const PAGES: Record<Outcome, { status: 200 | 400 | 403 | 502; title: string; bod
   },
 };
 
+// Fail loudly at module load if the shared enum gains an outcome with no page (defence-in-depth on top
+// of the `Record<ConnectOutcome, …>` type — keeps the imported tuple load-bearing).
+for (const outcome of CONNECT_OUTCOMES) {
+  if (!PAGES[outcome]) throw new Error(`oauth-routes: missing page for outcome "${outcome}"`);
+}
+
 /** Static Hebrew RTL page from the allowlisted enum (no query interpolation) + strict CSP (OG16). */
-function page(c: Context, outcome: Outcome): Response {
+function page(c: Context, outcome: ConnectOutcome): Response {
   const p = PAGES[outcome];
   const html =
     `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">` +
@@ -125,18 +145,46 @@ export function buildGoogleDeps(
   };
 }
 
+/**
+ * #109 — the terminal step of the callback (and the new routes' page-rendering paths). When the
+ * self-serve return URL is configured, bounce the browser back to the web app with ONLY the
+ * server-constructed `?status=<outcome>` slug (an allowlisted {@link ConnectOutcome}) — NEVER forward
+ * `code`/`state`/`error` from the inbound query (open-redirect-safe, OG21-OR) — and set
+ * `Referrer-Policy: no-referrer` so the slug-bearing URL can't leak via the Referer header. In
+ * admin-only mode (no return URL) fall back to the static Hebrew page (the ships-dark / curl path).
+ */
+function finish(c: Context, deps: GoogleOAuthDeps, outcome: ConnectOutcome): Response {
+  if (deps.webReturnUrl) {
+    c.header("Referrer-Policy", "no-referrer");
+    return c.redirect(`${deps.webReturnUrl}?status=${outcome}`, 302);
+  }
+  return page(c, outcome);
+}
+
+/**
+ * #108 — revoke at Google (the PRIMARY kill-switch) then ALWAYS delete locally and purge
+ * provider-derived rows (#61/MF5). Extracted from the legacy disconnect body so both the admin curl
+ * path and the self-serve `POST /oauth/google/disconnect` route share one reversible teardown.
+ */
+async function performDisconnect(deps: GoogleOAuthDeps): Promise<void> {
+  const cred = deps.credentials.get(FAMILY_ID);
+  if (cred) {
+    try {
+      await deps.client.revoke(cred.refreshToken);
+    } catch (err) {
+      deps.log?.("oauth revoke failed (continuing to delete locally)", { err: String(err) });
+    }
+  }
+  deps.credentials.delete(FAMILY_ID);
+  deps.events.deleteByProvider("google"); // purge provider-derived rows (#61/MF5; 0 until #17/#18 tag them)
+}
+
 export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
   const dark = (c: Context) => c.text("Google OAuth not configured", 503);
-
-  // Admin, one-time: mint a single-use state, redirect to Google's consent screen.
-  app.get("/connect/google", (c) => {
-    if (!deps) return dark(c);
-    if (!bearerMatches(c.req.header("authorization"), deps.adminToken)) {
-      return c.text("Unauthorized", 401);
-    }
-    const state = deps.credentials.issueState(FAMILY_ID);
-    return c.redirect(buildGoogleAuthUrl(deps.config, state), 302);
-  });
+  const limiter =
+    deps?.rateLimiter ?? createRateLimiter({ windowMs: 60_000, max: 10, mismatchDelayMs: 0 });
+  const clientIp = (c: Context): string =>
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 
   app.get("/oauth/google/callback", async (c) => {
     if (!deps) return dark(c);
@@ -147,26 +195,47 @@ export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
       (q.state?.length ?? 0) > MAX_STATE ||
       (q.error?.length ?? 0) > MAX_ERR
     ) {
-      return page(c, "bad_state");
+      return finish(c, deps, "bad_state");
     }
-    if (q.error) return page(c, "cancelled"); // access_denied etc — no exchange, nothing stored
+    if (q.error) return finish(c, deps, "cancelled"); // access_denied etc — no exchange, nothing stored
     // State validated FIRST (single-use, family-bound, unexpired) — before any token exchange.
-    if (!q.state || !deps.credentials.consumeState(q.state, FAMILY_ID)) return page(c, "bad_state");
-    if (!q.code) return page(c, "bad_state");
+    if (!q.state || !deps.credentials.consumeState(q.state, FAMILY_ID)) {
+      return finish(c, deps, "bad_state");
+    }
+    if (!q.code) return finish(c, deps, "bad_state");
 
     let tokens: Awaited<ReturnType<GoogleOAuthClient["exchangeCode"]>>;
     try {
       tokens = await deps.client.exchangeCode(q.code);
     } catch (err) {
       deps.log?.("oauth callback exchange failed", { err: String(err) });
-      return page(c, "error");
+      return finish(c, deps, "error");
     }
-    if (!tokens.refreshToken) return page(c, "no_refresh"); // store nothing — can't refresh later
+    if (!tokens.refreshToken) return finish(c, deps, "no_refresh"); // store nothing — can't refresh later
     // OG17: validate the GRANTED scopes (a user can deselect on the consent screen).
     const granted = new Set(tokens.scope.split(" ").filter(Boolean));
     if (!GOOGLE_SCOPES.every((s) => granted.has(s))) {
       deps.log?.("oauth callback missing a required scope", { scope: tokens.scope });
-      return page(c, "bad_scope");
+      return finish(c, deps, "bad_scope");
+    }
+    // #109 overwrite-guard: never silently clobber a present credential — require disconnect-first.
+    if (deps.credentials.get(FAMILY_ID)) {
+      deps.log?.("oauth callback refused: a credential is already connected (disconnect first)");
+      return finish(c, deps, "bad_account");
+    }
+    // #109 account pin: when an allowed email is configured, the consenting account MUST match it.
+    if (deps.allowedEmail) {
+      let email: string;
+      try {
+        email = await deps.client.getEmail(tokens.accessToken);
+      } catch (err) {
+        deps.log?.("oauth callback getEmail failed", { err: String(err) });
+        return finish(c, deps, "error");
+      }
+      if (email !== deps.allowedEmail) {
+        deps.log?.("oauth callback refused: account does not match the allowed email");
+        return finish(c, deps, "bad_account");
+      }
     }
     const now = deps.now ?? (() => new Date());
     const expiry = sqliteUtc(new Date(now().getTime() + (tokens.expiresIn - 60) * 1000)); // MF3
@@ -176,25 +245,46 @@ export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
       expiry,
       scopes: [...granted],
     });
-    return page(c, "connected");
+    return finish(c, deps, "connected");
   });
 
-  // Admin, reversible (AC4): revoke at Google (PRIMARY kill-switch) then ALWAYS delete locally.
-  app.post("/disconnect/google", async (c) => {
+  // #108 — the family app polls this to render the Connect screen. Read-token gated; NEVER leaks token
+  // material (OG3) — only `connected` + the granted `scopes` + the access-token `expiresAt`.
+  app.get("/oauth/google/status", (c) => {
     if (!deps) return dark(c);
-    if (!bearerMatches(c.req.header("authorization"), deps.adminToken)) {
+    // readToken unset ⇒ gated off (mirrors GET /events). Guard it explicitly rather than fall through to
+    // bearerMatches with an empty token — an empty `Bearer ` header would satisfy timingSafeEqual([],[]).
+    if (
+      deps.readToken === undefined ||
+      !bearerMatches(c.req.header("authorization"), deps.readToken)
+    ) {
       return c.text("Unauthorized", 401);
     }
     const cred = deps.credentials.get(FAMILY_ID);
-    if (cred) {
-      try {
-        await deps.client.revoke(cred.refreshToken);
-      } catch (err) {
-        deps.log?.("oauth revoke failed (continuing to delete locally)", { err: String(err) });
-      }
+    if (!cred) return c.json({ connected: false });
+    return c.json({ connected: true, scopes: cred.scopes, expiresAt: cred.expiry });
+  });
+
+  // #108 — the self-serve consent-URL mint. Rate-limited per IP FIRST (429), then the dual-token gate
+  // BEFORE issueState so an unauth probe mints NO state row. ADMIN_TOKEN passes (the curl escape hatch).
+  app.get("/oauth/google/connect-url", async (c) => {
+    if (!deps) return dark(c);
+    if (limiter.check(clientIp(c)).limited) return c.text("Too Many Requests", 429);
+    if (!gateMatches(c.req.header("authorization"), deps)) {
+      await mismatchDelay(limiter.mismatchDelayMs);
+      return c.text("Unauthorized", 401);
     }
-    deps.credentials.delete(FAMILY_ID);
-    deps.events.deleteByProvider("google"); // purge provider-derived rows (#61/MF5; 0 until #17/#18 tag them)
-    return c.text("נותק. חשבון Google נותק והמידע המקומי נמחק.", 200);
+    const state = deps.credentials.issueState(FAMILY_ID);
+    return c.json({ url: buildGoogleAuthUrl(deps.config, state) });
+  });
+
+  // #108 — self-serve disconnect. Dual-token gated; revoke + delete + purge (reversible, AC4).
+  app.post("/oauth/google/disconnect", async (c) => {
+    if (!deps) return dark(c);
+    if (!gateMatches(c.req.header("authorization"), deps)) {
+      return c.text("Unauthorized", 401);
+    }
+    await performDisconnect(deps);
+    return c.json({ disconnected: true });
   });
 }
