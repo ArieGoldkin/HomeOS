@@ -106,7 +106,9 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 function ConnectedState({ scopes, expiresAt }: { scopes: string[]; expiresAt: string }) {
-  const expires = expiresFmt.format(new Date(expiresAt));
+  // The schema only guarantees a string, so guard a malformed expiry rather than render "Invalid Date".
+  const expiryDate = new Date(expiresAt);
+  const expires = Number.isNaN(expiryDate.getTime()) ? null : expiresFmt.format(expiryDate);
   return (
     <div className="flex flex-col gap-3" data-testid="google-connected">
       <div className="flex items-center justify-between gap-3">
@@ -127,7 +129,7 @@ function ConnectedState({ scopes, expiresAt }: { scopes: string[]; expiresAt: st
       >
         {scopes.map(friendlyScope).join(" · ")}
       </p>
-      <p className="text-[12px] text-muted-foreground">פג תוקף הגישה: {expires}</p>
+      {expires && <p className="text-[12px] text-muted-foreground">פג תוקף הגישה: {expires}</p>}
     </div>
   );
 }

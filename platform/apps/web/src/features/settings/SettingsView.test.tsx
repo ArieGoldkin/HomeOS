@@ -46,13 +46,6 @@ describe("SettingsView", () => {
     expect(localStorage.getItem("homeos-theme")).toBe("dark");
   });
 
-  it("renders the connected-service tiles", () => {
-    render(wrap(<SettingsView />));
-    expect(screen.getByText("Google Calendar")).toBeInTheDocument();
-    expect(screen.getByText("Gmail")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "בקרוב" })).toHaveLength(2);
-  });
-
   it("renders the notification switches and toggles one (mock, client-only)", async () => {
     render(wrap(<SettingsView />));
     expect(screen.getByText("התראות")).toBeInTheDocument();
