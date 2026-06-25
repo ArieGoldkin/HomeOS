@@ -1,9 +1,9 @@
 # Google OAuth — setup runbook (per-family, opt-in)
 
 > Operator checklist to stand up the Google OAuth credential flow for HomeOS (#16).
-> Companion to the design doc `docs/design/google-oauth-plan.md`. **The browser/visual flow only
-> works once #60 (the routes + config bundle) ships** — but the Google Cloud steps (Tracks 1–4)
-> are external and can be done **now, in parallel** with the build. Tracks 5–6 are the activation.
+> Companion to the design doc `docs/design/google-oauth-plan.md`. The full flow is **shipped** — #60
+> (the routes + config bundle) **and #10 (the self-serve web Connect flow)** are merged. The Google
+> Cloud steps (Tracks 1–4) are external and one-time; Tracks 5–6 are the activation (env + the test).
 
 ## What this sets up
 
@@ -59,10 +59,12 @@ openssl rand -base64 32     # → GOOGLE_TOKEN_ENC_KEY  (must be a 32-byte base6
 openssl rand -hex 32        # → ADMIN_TOKEN
 ```
 
-## Track 5 — Wire the env bundle (all-or-nothing) — *activates once #60 ships*
+## Track 5 — Wire the env bundle
 
-Set **all** of these (local `.env` for dev; Railway **Variables → Raw Editor** for prod). The bundle is
-validated as a group: a half-configured set fails fast at boot; an empty set ships dark.
+Set these in the local `.env` for dev, or Railway **Variables → Raw Editor** for prod.
+
+**Core bundle (all-or-nothing)** — validated as a group: a half-configured set fails fast at boot; an
+empty set ships dark (503, zero Google calls).
 
 | Var | Value | Source |
 |-----|-------|--------|
@@ -71,42 +73,67 @@ validated as a group: a half-configured set fails fast at boot; an empty set shi
 | `GOOGLE_REDIRECT_URI` | the **exact** callback URL for this environment | Track 3 |
 | `GOOGLE_TOKEN_ENC_KEY` | base64 32-byte AES key | Track 4 |
 | `ADMIN_TOKEN` | random bearer (≠ `READ_TOKEN`) | Track 4 |
-| `PUBLIC_BASE_URL` | *(optional)* public origin, boot sanity-check only | — |
 
 > Use the **right `GOOGLE_REDIRECT_URI` per environment** (localhost for local, the Railway URL for prod)
 > and make sure each is registered in Track 3. A mismatch → Google `redirect_uri_mismatch`.
 
-## Track 6 — The visual / manual test (the first clickable surface) — *needs #60*
+**Self-serve web flow (#10) — three OPTIONAL extras within the bundle above.** Each absent ⇒ admin-only
+mode (connect via the `ADMIN_TOKEN` curl path), unchanged. Set all three to let a family connect from the
+web **Connections** screen.
 
-Once #60 has shipped and the bundle is set:
+| Var | Value | Constraints |
+|-----|-------|-------------|
+| `SETUP_TOKEN` | `openssl rand -base64 32` | The bearer the web connect/disconnect flow needs. Boot-validated: **≥ 32 bytes** of base64 entropy AND **distinct** from `READ_TOKEN` *and* `ADMIN_TOKEN`. **Never a `VITE_*` var** — it's typed into the web dialog at runtime, never bundled. |
+| `WEB_BASE_URL` | `https://homeos-production-83a4.up.railway.app` | Absolute **`https://`** URL on the in-code `ALLOWED_WEB_ORIGINS` allowlist (boot-validated). The callback bounces the browser to `${WEB_BASE_URL}/connections?status=<outcome>`. Unset ⇒ the callback renders a static Hebrew page instead. |
+| `ALLOWED_GOOGLE_EMAIL` | the family's Google address | The consenting account's email must match (case-insensitive), else `bad_account`. Unset ⇒ unenforced. |
+
+## Track 6 — Connect & test
+
+The bundle set, there are two ways in. **The legacy `GET /connect/google` + `POST /disconnect/google`
+routes were removed in #10** — the routes are now all under `/oauth/google/*`.
+
+### A) The real path — the web Connections screen (needs the self-serve trio set)
+
+1. Open the app → **Connections** (`/connections`). The Google card shows **"לא מחובר"** with a **"חבר
+   Google"** button.
+2. Click it → a dialog prompts for the **setup code** → type the `SETUP_TOKEN` → it navigates to Google's
+   consent screen (the "unverified app" warning → *Advanced → continue*).
+3. Approve → Google redirects to `/oauth/google/callback` → HomeOS validates state, **pins the account
+   email** against `ALLOWED_GOOGLE_EMAIL`, stores the encrypted credential, and **bounces** back to
+   `…/connections?status=connected` (a one-time Hebrew success banner; the param is then stripped).
+4. The card flips to **"מחובר"** with the granted scopes + the access-token expiry. **"נתק"** disconnects
+   (re-prompts for the setup code → revoke at Google + delete locally).
+
+### B) The dev / curl path (works with `ADMIN_TOKEN` even without the self-serve trio)
 
 ```bash
-# terminal: run the server
 pnpm dev    # in platform/
 
-# browser (or curl): start the grant — note the ADMIN_TOKEN bearer
-#   GET http://localhost:3000/connect/google   with header  Authorization: Bearer <ADMIN_TOKEN>
+# 1) mint the consent URL  (Bearer = SETUP_TOKEN or ADMIN_TOKEN)
+#    GET /oauth/google/connect-url   →  { "url": "https://accounts.google.com/o/oauth2/v2/auth?..." }
+# 2) open that url in a browser, approve → /oauth/google/callback runs.
+#    With WEB_BASE_URL set → 302 bounce to /connections?status=…; unset → a static Hebrew result page.
+# 3) status   (Bearer = READ_TOKEN):   GET /oauth/google/status → { connected, scopes, expiresAt }
+# 4) disconnect (Bearer = SETUP_TOKEN or ADMIN_TOKEN):  POST /oauth/google/disconnect → { disconnected: true }
 ```
 
-Expected:
-1. `GET /connect/google` (with `ADMIN_TOKEN`) → **302 redirect to Google's consent screen** (you'll
-   see the "unverified app" warning → *Advanced → continue*).
-2. Approve → Google redirects to `GET /oauth/google/callback?code&state` → HomeOS exchanges the code
-   and renders a **Hebrew RTL "connected ✅" page**.
-3. **Verify it stored encrypted:** a row appears in the `credentials` table whose `enc_*` columns are
-   ciphertext (never the plaintext token).
-4. **Disconnect (reversible):** `POST /disconnect/google` (with `ADMIN_TOKEN`) → revokes at Google +
-   deletes the credential → back to app-only.
+**Verify it stored encrypted:** a row appears in the `credentials` table whose `enc_*` columns are
+ciphertext (never the plaintext token).
 
-Sad paths to eyeball: a cancelled consent → Hebrew "cancelled" page (no token stored); a bad/expired
-`state` → `403`; the bundle unset → `503` (dark).
+Sad paths to eyeball: a cancelled consent → `status=cancelled` (no token stored); a wrong/expired `state`
+→ `bad_state`; the wrong Google account, or a re-connect over a present credential → `bad_account` (stores
+nothing — disconnect first); a wrong setup code → `401`; too many attempts → `429`; the bundle unset →
+`503` (dark).
 
 ---
 
 ## Guardrails this setup honors
 
 - **OG14** redirect URI is pinned config, exact-match — never built from request headers.
-- **OG20** `/connect`+`/disconnect` gated by `ADMIN_TOKEN`, distinct from the read-only kiosk `READ_TOKEN`.
+- **OG20** the write routes (`/oauth/google/connect-url` + `/disconnect`) gated by `SETUP_TOKEN` **or**
+  `ADMIN_TOKEN` — both distinct from the board `READ_TOKEN`, which only gates the non-secret `/status`
+  read. `SETUP_TOKEN` is prompted-for in the web dialog, never bundled; a per-IP rate limiter + the
+  `FAMILY_ID==='default'` Phase-8 trip-wire back the write paths (#10).
 - **OG1/OG2** tokens AES-256-GCM at rest; a wrong/changed `GOOGLE_TOKEN_ENC_KEY` **fails loud at boot**
   (the #58 key-canary) rather than silently degrading — if you rotate the key, you must re-consent.
 - **OG16** the Hebrew result page is static/allowlisted (no reflected XSS).
@@ -116,8 +143,9 @@ Sad paths to eyeball: a cancelled consent → Hebrew "cancelled" page (no token 
 
 | Built by | Piece |
 |----------|-------|
-| #58 ✅ merged | encrypted credential store + crypto + key-canary |
-| #59 (next) | state/CSRF store + lean fetch client + `getValidAccessToken` |
-| **#60** | **the 3 routes + `GOOGLE_*` config wiring + Hebrew result page ← Tracks 5–6 light up here** |
-| #61 | reversibility/deletion seam (provider-tagged rows + backup-retention guard) |
-| #17 / #18 | the actual Gmail read + Calendar sync tools (consume `getValidAccessToken`) |
+| #58 ✅ | encrypted credential store + crypto + key-canary |
+| #59 ✅ | state/CSRF store + lean fetch client + `getValidAccessToken` |
+| #60 ✅ | the admin OAuth routes + `GOOGLE_*` config wiring + Hebrew result page |
+| #61 ✅ | reversibility/deletion seam (provider-tagged rows + backup-retention guard) |
+| #17 / #18 ✅ | the actual Gmail read + Calendar sync tools (consume `getValidAccessToken`) |
+| **#10 ✅** | **self-serve web Connect flow — `/oauth/google/{status,connect-url,disconnect}` + the Connections UI + `SETUP_TOKEN`/`WEB_BASE_URL`/`ALLOWED_GOOGLE_EMAIL` + the account-email pin + the `FAMILY_ID==='default'` Phase-8 trip-wire** |
