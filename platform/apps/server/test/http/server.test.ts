@@ -113,6 +113,7 @@ function makeApp(
     findEventsByRef: vi.fn(() => []),
     searchEvents: vi.fn(() => []),
     findEventsInScope: vi.fn(() => []),
+    remindersDueOn: vi.fn(() => []),
     updateEvent: vi.fn(() => null),
     setEventStatus: vi.fn(
       (id: number, status: string): SavedEvent | null =>

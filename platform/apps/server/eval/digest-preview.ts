@@ -9,6 +9,7 @@ import "dotenv/config";
 import { runDigestOnce } from "../src/core/digest.ts";
 import { createEventStore } from "../src/db/event-store.ts";
 import { createInboundStore } from "../src/db/inbound-store.ts";
+import { FAMILY_ID } from "../src/db/schema.ts";
 
 const dbPath = process.env.DB_PATH ?? "./data/homeos.db";
 const events = createEventStore(dbPath);
@@ -22,5 +23,6 @@ await runDigestOnce({
     console.log(`\n--- digest → ${to} (preview, not sent) ---\n${body}\n`);
   },
   adminPhone: "preview",
+  familyId: FAMILY_ID,
   hour: 0,
 });

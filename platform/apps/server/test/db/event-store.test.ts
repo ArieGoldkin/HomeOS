@@ -605,3 +605,66 @@ describe("rowToSaved provenance (#151) — derived source + created_at", () => {
     expect(saved.source).toBe("whatsapp");
   });
 });
+
+describe("remindersDueOn (#28 — open board reminders for a day)", () => {
+  const rem = (over: Partial<ParsedEvent>): ParsedEvent => ({
+    kind: "reminder",
+    title_he: "תזכורת",
+    date_iso: "2026-06-20",
+    time: null,
+    location: null,
+    assignee: null,
+    recurrence: null,
+    source_text: "תזכיר לי",
+    ...over,
+  });
+
+  it("returns OPEN reminders for the date — excluding other days, done, non-reminders, and synced rows", () => {
+    const store = createEventStore(":memory:");
+    const today = store.saveEvent(rem({ title_he: "לקחת תרופה", time: "09:00" }), {
+      fromPhone: "9725",
+      waMessageId: "r.1",
+    });
+    store.saveEvent(rem({ title_he: "מחר", date_iso: "2026-06-21" }), {
+      fromPhone: "9725",
+      waMessageId: "r.2",
+    }); // different day
+    const done = store.saveEvent(rem({ title_he: "כבר טופל", time: "08:00" }), {
+      fromPhone: "9725",
+      waMessageId: "r.3",
+    });
+    store.setEventStatus(done.id, "done", FAMILY_ID); // acted on → not re-surfaced (AC)
+    store.saveEvent(
+      { ...event, kind: "task", date_iso: "2026-06-20", title_he: "משימה" },
+      { fromPhone: "9725", waMessageId: "r.4" },
+    ); // not a reminder
+    store.saveEvent(rem({ title_he: "מהיומן", time: "10:00" }), {
+      fromPhone: "9725",
+      waMessageId: "r.5",
+      sourceProvider: "google",
+    }); // synced row → not a board reminder
+
+    const due = store.remindersDueOn(FAMILY_ID, "2026-06-20");
+    expect(due.map((r) => r.id)).toEqual([today.id]);
+    expect(due[0]).toMatchObject({ kind: "reminder", title_he: "לקחת תרופה", status: "open" });
+  });
+
+  it("orders timed reminders first (by time ascending), untimed last", () => {
+    const store = createEventStore(":memory:");
+    const untimed = store.saveEvent(rem({ title_he: "מתישהו", time: null }), {
+      fromPhone: "9725",
+      waMessageId: "o.1",
+    });
+    const late = store.saveEvent(rem({ title_he: "מאוחר", time: "18:00" }), {
+      fromPhone: "9725",
+      waMessageId: "o.2",
+    });
+    const early = store.saveEvent(rem({ title_he: "מוקדם", time: "07:30" }), {
+      fromPhone: "9725",
+      waMessageId: "o.3",
+    });
+
+    const due = store.remindersDueOn(FAMILY_ID, "2026-06-20");
+    expect(due.map((r) => r.id)).toEqual([early.id, late.id, untimed.id]);
+  });
+});
