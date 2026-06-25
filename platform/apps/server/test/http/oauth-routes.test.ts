@@ -7,8 +7,8 @@ import { FAMILY_ID } from "../../src/db/schema.ts";
 import { GOOGLE_SCOPES, type GoogleOAuthClient } from "../../src/google/oauth.ts";
 import {
   buildGoogleDeps,
-  gateMatches,
   type GoogleOAuthDeps,
+  gateMatches,
   registerOAuthRoutes,
 } from "../../src/http/oauth-routes.ts";
 

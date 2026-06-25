@@ -207,7 +207,7 @@ function validateWebBaseUrl(webBaseUrl: string): void {
   }
   if (url.protocol !== "https:") {
     throw new Error(
-      "Invalid environment configuration: WEB_BASE_URL must use https (got " + `${url.protocol}).`,
+      `Invalid environment configuration: WEB_BASE_URL must use https (got ${url.protocol}).`,
     );
   }
   if (!(ALLOWED_WEB_ORIGINS as readonly string[]).includes(url.origin)) {

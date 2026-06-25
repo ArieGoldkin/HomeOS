@@ -6,7 +6,7 @@ import { createRateLimiter, mismatchDelay } from "../../src/http/rate-limit.ts";
 
 describe("createRateLimiter — per-IP fixed window (#107)", () => {
   it("permits up to `max` attempts in the window, then reports limited (429 semantics)", () => {
-    let nowMs = 1_000_000;
+    const nowMs = 1_000_000;
     const limiter = createRateLimiter({ windowMs: 60_000, max: 3, now: () => nowMs });
     expect(limiter.check("1.1.1.1").limited).toBe(false); // 1
     expect(limiter.check("1.1.1.1").limited).toBe(false); // 2
@@ -25,7 +25,7 @@ describe("createRateLimiter — per-IP fixed window (#107)", () => {
   });
 
   it("counts each IP independently", () => {
-    let nowMs = 1_000_000;
+    const nowMs = 1_000_000;
     const limiter = createRateLimiter({ windowMs: 60_000, max: 1, now: () => nowMs });
     expect(limiter.check("3.3.3.3").limited).toBe(false);
     expect(limiter.check("3.3.3.3").limited).toBe(true); // 3.3.3.3 over the ceiling
