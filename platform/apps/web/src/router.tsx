@@ -5,6 +5,7 @@ import { FamilyView } from "@features/family";
 import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
 import { CalendarScreen } from "@features/week-view";
+import { type ConnectOutcome, connectOutcomeSchema } from "@homeos/shared";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
@@ -27,6 +28,16 @@ import { TokensView } from "./dev/TokensView";
 function validateDateSearch(search: { date?: string }): { date?: string } {
   const raw = search.date;
   return typeof raw === "string" && ISO_DATE_RE.test(raw) ? { date: raw } : {};
+}
+
+/**
+ * #112 — the OAuth callback bounces the family browser back to `/connections?status=<outcome>`. We validate
+ * the param against the shared `connectOutcomeSchema` (the SAME enum the server can emit) and DROP anything
+ * outside it — so the screen only ever maps an allowlisted enum value, never a raw/attacker-chosen param.
+ */
+function validateConnectionsSearch(search: { status?: string }): { status?: ConnectOutcome } {
+  const parsed = connectOutcomeSchema.safeParse(search.status);
+  return parsed.success ? { status: parsed.data } : {};
 }
 
 function RootLayout() {
@@ -59,6 +70,22 @@ function CalendarRoute() {
       dateIso={coerceDateIso(date)}
       onSelectDate={(d) => navigate({ to: "/today", search: { date: d } })}
       onChangeWeek={(anchor) => navigate({ to: "/calendar", search: { date: anchor } })}
+    />
+  );
+}
+
+// #112 — read the validated ?status= outcome and hand it to the Connections screen, with a callback that
+// strips the param from the URL once the banner has been shown (replace, so Back doesn't re-show it).
+const connectionsApi = getRouteApi("/app/connections");
+function ConnectionsRoute() {
+  const { status } = connectionsApi.useSearch();
+  const navigate = useNavigate();
+  return (
+    <ConnectionsView
+      connectStatus={status}
+      onDismissStatus={() =>
+        navigate({ to: "/connections", search: { status: undefined }, replace: true })
+      }
     />
   );
 }
@@ -118,7 +145,8 @@ function buildRouteTree() {
   const connectionsRoute = createRoute({
     getParentRoute: () => appRoute,
     path: "/connections",
-    component: ConnectionsView,
+    validateSearch: validateConnectionsSearch,
+    component: ConnectionsRoute,
   });
 
   const settingsRoute = createRoute({
