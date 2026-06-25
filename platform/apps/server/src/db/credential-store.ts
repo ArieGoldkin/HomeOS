@@ -9,6 +9,7 @@ import {
   CREATE_KEY_CANARY_TABLE,
   CREATE_OAUTH_STATE_TABLE,
   type CredentialRow,
+  FAMILY_ID,
 } from "./schema.ts";
 
 // node:sqlite is a newer builtin bundlers don't externalize cleanly — load via createRequire (as
@@ -25,6 +26,22 @@ const ENC_KEY_ENV = "GOOGLE_TOKEN_ENC_KEY";
 const CANARY_MARKER = "homeos.google.oauth.canary.v1";
 /** OAuth `state` TTL — ~10 min, plenty for a consent round-trip (OG7). */
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * #110 — Phase-8 trip-wire enforced in code: until a real family resolver exists, the only legal
+ * family is {@link FAMILY_ID}. The WRITE paths (upsert / issueState) assert it and throw a NAMED
+ * "single-family" error otherwise, so a stray family id can never silently mint state or store tokens.
+ * READ paths (get / updateTokens / delete / consumeState) stay unguarded — they're already
+ * `WHERE family_id = ?` bound and degrade to null/0, never a write.
+ */
+function assertSingleFamily(familyId: string): void {
+  if (familyId !== FAMILY_ID) {
+    throw new Error(
+      `single-family dogfood guard: familyId must be "${FAMILY_ID}" until a real family resolver ` +
+        `exists (Phase 8); refusing a write for "${familyId}".`,
+    );
+  }
+}
 
 export interface StoredCredential {
   refreshToken: string;
@@ -137,6 +154,7 @@ export function createCredentialStore(
       }
     },
     upsert(familyId, cred) {
+      assertSingleFamily(familyId);
       const encRefresh = encrypt(cred.refreshToken, key);
       const encAccess = encrypt(cred.accessToken, key);
       const scopesCsv = cred.scopes.join(",");
@@ -155,6 +173,7 @@ export function createCredentialStore(
       return Number(deleteStmt.run(familyId, PROVIDER).changes);
     },
     issueState(familyId) {
+      assertSingleFamily(familyId);
       const state = randomBytes(32).toString("base64url"); // unguessable
       const expiresAt = sqliteUtc(new Date(now().getTime() + STATE_TTL_MS));
       insertStateStmt.run(state, familyId, expiresAt);
