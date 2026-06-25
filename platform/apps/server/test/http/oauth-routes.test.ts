@@ -220,6 +220,19 @@ describe("GET /oauth/google/callback — account pin + overwrite-guard (#109)", 
     expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(REFRESH);
   });
 
+  it("allowedEmail match is case-insensitive (review N1)", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => "FAM@Example.TEST"); // same address, different casing
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED, // "fam@example.test"
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${state}`);
+    expect(res.status).toBe(200); // connected, not bad_account
+    expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(REFRESH);
+  });
+
   it("allowedEmail set + mismatched account → bad_account (403), stores nothing", async () => {
     const exchangeCode = vi.fn(async () => tokens());
     const getEmail = vi.fn(async () => "intruder@example.test");

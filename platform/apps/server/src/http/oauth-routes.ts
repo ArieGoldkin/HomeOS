@@ -232,7 +232,9 @@ export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
         deps.log?.("oauth callback getEmail failed", { err: String(err) });
         return finish(c, deps, "error");
       }
-      if (email !== deps.allowedEmail) {
+      // Case-insensitive — email addresses are effectively case-insensitive, so a capitalization
+      // difference (e.g. Fam@example.com vs fam@example.com) must not surprise-reject the right account.
+      if (email.toLowerCase() !== deps.allowedEmail.toLowerCase()) {
         deps.log?.("oauth callback refused: account does not match the allowed email");
         return finish(c, deps, "bad_account");
       }

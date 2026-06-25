@@ -76,7 +76,10 @@ export async function fetchUserInfoEmail(
     throw new TransientError(`google gmail profile endpoint ${res.status}`);
   }
   const j = (await res.json()) as { emailAddress?: unknown };
-  return String(j.emailAddress);
+  if (typeof j.emailAddress !== "string" || j.emailAddress.length === 0) {
+    throw new TransientError("google gmail profile: response had no emailAddress");
+  }
+  return j.emailAddress;
 }
 
 /** Minimum scopes — hardcoded server-side, never request-derived (OG4). */

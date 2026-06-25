@@ -162,6 +162,13 @@ describe("fetchUserInfoEmail (#109 — account-pin)", () => {
       fetchUserInfoEmail("acc-tok", fetchImpl as unknown as typeof fetch),
     ).rejects.toBeInstanceOf(TransientError);
   });
+
+  it("throws TransientError when the profile response has no emailAddress (review N3)", async () => {
+    const fetchImpl = vi.fn(async () => okJson({ messagesTotal: 7 })); // emailAddress missing
+    await expect(
+      fetchUserInfoEmail("acc-tok", fetchImpl as unknown as typeof fetch),
+    ).rejects.toBeInstanceOf(TransientError);
+  });
 });
 
 describe("httpGoogleOAuthClient.getEmail (#109 — injectable seam)", () => {
