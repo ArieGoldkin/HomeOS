@@ -23,7 +23,7 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-[58px] flex-none items-center gap-3 border-[var(--header-border)] border-b px-4 md:px-6">
-          <div className="flex items-baseline gap-2">
+          <div className="flex shrink-0 items-baseline gap-2">
             <span className="font-bold text-[16px] text-[color:var(--ink)] tracking-tight">
               HomeOS
             </span>
@@ -32,7 +32,9 @@ export function AppShell() {
             </span>
           </div>
 
-          <div className="flex flex-1 justify-center">
+          {/* Command bar is a non-functional placeholder (agent wiring deferred) — DESKTOP ONLY so it
+              never eats the cramped phone row (it was the flex-1 block that pushed the avatar off-edge). */}
+          <div className="hidden flex-1 justify-center md:flex">
             <div className="flex min-w-0 max-w-[400px] items-center gap-2 rounded-full border border-[var(--cmd-border)] bg-[var(--cmd-bg)] px-4 py-2">
               <span aria-hidden="true" className="text-primary">
                 ✦
@@ -43,11 +45,14 @@ export function AppShell() {
             </div>
           </div>
 
+          {/* Mobile-only spacer: pushes the theme+avatar cluster to the logical end once the command bar is hidden. */}
+          <div className="flex-1 md:hidden" />
+
           <button
             type="button"
             onClick={toggle}
             aria-label="החלפת ערכת נושא"
-            className="grid size-9 place-items-center rounded-[10px] border border-[var(--header-border)] text-[15px] text-ink-soft transition-colors hover:bg-secondary"
+            className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-[var(--header-border)] text-[15px] text-ink-soft transition-colors hover:bg-secondary"
           >
             <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
           </button>
@@ -59,13 +64,19 @@ export function AppShell() {
             התחלה
           </Link>
 
-          <IconButton aria-label="הוספה ללוח" variant="primary" onClick={() => setAddOpen(true)}>
+          {/* Header Add — DESKTOP ONLY; mobile uses the floating action button below. */}
+          <IconButton
+            aria-label="הוספה ללוח"
+            variant="primary"
+            onClick={() => setAddOpen(true)}
+            className="hidden md:grid"
+          >
             <span aria-hidden="true" className="text-2xl leading-none">
               +
             </span>
           </IconButton>
 
-          <PersonAvatar name="מאיה" size={34} />
+          <PersonAvatar name="מאיה" size={34} className="shrink-0" />
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 pt-6 pb-24 md:px-8 md:pb-8">
@@ -76,6 +87,20 @@ export function AppShell() {
       </div>
 
       <BottomNav className="flex md:hidden" />
+
+      {/* Mobile primary action — a floating Add button at the logical-end corner (RTL: bottom-left),
+          floating ABOVE the bottom bar (bottom-20 clears it). md:hidden — desktop keeps the header Add. */}
+      <button
+        type="button"
+        onClick={() => setAddOpen(true)}
+        aria-label="הוספה ללוח"
+        className="fixed end-4 bottom-20 z-20 grid size-14 place-items-center rounded-full bg-primary text-primary-foreground shadow-float transition hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100 md:hidden"
+      >
+        <span aria-hidden="true" className="text-2xl leading-none">
+          +
+        </span>
+      </button>
+
       <AddEventDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );

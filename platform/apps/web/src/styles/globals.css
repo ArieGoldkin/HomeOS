@@ -205,7 +205,7 @@
   --cmd-bg: rgba(255, 255, 255, 0.1);
   --cmd-border: rgba(255, 255, 255, 0.14);
   --cmd-text: rgba(237, 234, 227, 0.7);
-  --popover: rgba(28,30,38,.94);
+  --popover: rgba(28,30,38,1);                    /* OPAQUE focused-overlay (dialog/dropdown): sits over content, so it must be solid — no board bleed-through */
   --popover-foreground: #EDEAE3;
 
   --primary: #23B083;                             /* lightened green for contrast on dark */
@@ -244,7 +244,7 @@
   --chart-4: var(--coral);
   --chart-5: #E0B65A;
 
-  --rail: rgba(20,22,28,.5);
+  --rail: rgba(20,22,28,1);                       /* OPAQUE: the mobile bottom bar is fixed OVER scrolling content (no backdrop-blur), so a translucent rail let content bleed through */
   --rail-border: rgba(255,255,255,.09);
   --nav-active: rgba(255,255,255,.14);
   --glyph: rgba(237,234,227,.6);
