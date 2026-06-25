@@ -102,8 +102,8 @@ const callModel: CallModel = async (req) => {
   }
   const wrapped = typeof req.messages[0]?.content === "string" ? req.messages[0].content : "";
   const text = wrapped
-    .replace(/^Forwarded message to process:\n<forwarded>\n/, "")
-    .replace(/\n<\/forwarded>$/, "");
+    .replace(/^Forwarded message to process:\n<forwarded-[0-9a-f]+>\n/, "")
+    .replace(/\n<\/forwarded-[0-9a-f]+>$/, "");
   return {
     stop_reason: "tool_use",
     content: [{ type: "tool_use", id: "tu_int", name: "extract_events", input: { text } }],
