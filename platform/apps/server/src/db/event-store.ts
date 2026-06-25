@@ -102,6 +102,14 @@ export interface EventStore {
    */
   findEventsInScope(familyId: string, scope: { dateIso?: string; time?: string }): SavedEvent[];
   /**
+   * #28 — the OPEN reminders due on `dateIso` (board rows only, `source_provider IS NULL`), earliest-time
+   * first (untimed last). The daily digest surfaces these as a morning nudge: a reminder set "for
+   * tomorrow" lands dated tomorrow and shows up in tomorrow's digest. A `done` reminder is excluded, so it
+   * fires once on its day and is not re-surfaced after being acted on (#28 AC). `familyId` is the reserved
+   * Phase-8 contract (today: board rows are family-shared).
+   */
+  remindersDueOn(familyId: string, dateIso: string): SavedEvent[];
+  /**
    * #86 — edit a board row in place. FAMILY-scoped (`source_provider IS NULL` only: a synced gcal/gmail
    * row is NEVER written, preventing a read→write loop). Merges `patch` onto the row, re-validates the
    * MERGED row via `parsedEventSchema` BEFORE the write (G20), and returns the updated `SavedEvent` — or
@@ -269,6 +277,15 @@ export function createEventStore(dbPath: string): EventStore {
      ORDER BY id DESC
      LIMIT 1;`,
   );
+  // #28: OPEN reminders due on a date (board rows only) for the daily-digest morning nudge. Earliest-time
+  // first; untimed reminders (`time IS NULL` → sorts last) trail. `done` rows excluded so a reminder fires
+  // once on its day and never re-surfaces after being acted on. `kind`/`status` are trusted enum literals.
+  const remindersDueStmt = db.prepare(
+    `SELECT * FROM events
+     WHERE source_provider IS NULL AND kind = 'reminder' AND date_iso = ?
+       AND (status IS NULL OR status != 'done')
+     ORDER BY time IS NULL, time ASC, id ASC;`,
+  );
 
   return {
     saveEvent(event, meta) {
@@ -364,6 +381,10 @@ export function createEventStore(dbPath: string): EventStore {
       ];
       const sql = `${findByRefBase} ORDER BY id DESC LIMIT ${BULK_CANCEL_MAX};`;
       const rows = db.prepare(sql).all(...params) as unknown as EventRow[];
+      return rows.map(rowToSaved);
+    },
+    remindersDueOn(_familyId, dateIso) {
+      const rows = remindersDueStmt.all(dateIso) as unknown as EventRow[];
       return rows.map(rowToSaved);
     },
     findSlotConflict(_familyId, slot) {

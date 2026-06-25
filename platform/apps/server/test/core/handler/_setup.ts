@@ -85,6 +85,7 @@ export function makeDeps(
     findEventsByRef: vi.fn((): SavedEvent[] => []),
     searchEvents: vi.fn((): SavedEvent[] => []),
     findEventsInScope: vi.fn((): SavedEvent[] => opts.scopeMatches ?? []),
+    remindersDueOn: vi.fn((): SavedEvent[] => []),
     updateEvent: vi.fn(
       (_id: number, _patch: EventPatch, _familyId: string): SavedEvent | null => null,
     ),

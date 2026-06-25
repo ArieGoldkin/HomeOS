@@ -5,6 +5,22 @@ import {
   msUntilNextRun,
   runDigestOnce,
 } from "../../src/core/digest.ts";
+import type { SavedEvent } from "../../src/db/event-store.ts";
+
+const reminder = (over: Partial<SavedEvent> = {}): SavedEvent => ({
+  id: 1,
+  kind: "reminder",
+  title_he: "לקחת תרופה",
+  date_iso: "2026-06-15",
+  time: "09:00",
+  location: null,
+  assignee: null,
+  recurrence: null,
+  source_text: "תזכיר לי מחר לקחת תרופה",
+  source_provider: null,
+  status: "open",
+  ...over,
+});
 
 describe("buildDigest", () => {
   it("renders the Hebrew summary with counts", () => {
@@ -22,6 +38,20 @@ describe("buildDigest", () => {
   it("sends a heartbeat (all zeros) on a quiet day", () => {
     const msg = buildDigest({ events: 0, handled: 0, errors: 0, pending: 0 });
     expect(msg).toContain("אירועים שנוספו: 0"); // still sent — absence is the down-alert
+  });
+
+  it("appends a reminders section listing today's reminders (#28)", () => {
+    const msg = buildDigest({ events: 1, handled: 1, errors: 0, pending: 0 }, [
+      reminder({ time: "09:00", title_he: "לקחת תרופה" }),
+      reminder({ id: 2, time: null, title_he: "להתקשר לרופא" }),
+    ]);
+    expect(msg).toContain("🔔 תזכורות להיום");
+    expect(msg).toContain("• 09:00 לקחת תרופה"); // timed → HH:MM prefix
+    expect(msg).toContain("• להתקשר לרופא"); // untimed → no prefix
+  });
+
+  it("omits the reminders section when there are none (heartbeat stays clean)", () => {
+    expect(buildDigest({ events: 0, handled: 0, errors: 0, pending: 0 })).not.toContain("🔔");
   });
 });
 
@@ -53,6 +83,7 @@ describe("runDigestOnce", () => {
         findEventsByRef: vi.fn(() => []),
         searchEvents: vi.fn(() => []),
         findEventsInScope: vi.fn(() => []),
+        remindersDueOn: vi.fn(() => [reminder({ time: "09:00", title_he: "לקחת תרופה" })]),
         updateEvent: vi.fn(() => null),
         setEventStatus: vi.fn(() => null),
         findSlotConflict: vi.fn(() => null),
@@ -68,8 +99,9 @@ describe("runDigestOnce", () => {
       },
       sendText,
       adminPhone: "972501234567",
+      familyId: "default",
       hour: 21,
-      now: () => new Date("2026-06-15T18:00:00Z"),
+      now: () => new Date("2026-06-15T18:00:00Z"), // 21:00 Asia/Jerusalem → date 2026-06-15
     };
 
     await runDigestOnce(deps);
@@ -81,5 +113,9 @@ describe("runDigestOnce", () => {
     expect(body).toContain("אירועים שנוספו: 4");
     expect(body).toContain("הודעות שטופלו: 5");
     expect(body).toContain("שגיאות: 1");
+    // #28: reminders queried for TODAY in Asia/Jerusalem, surfaced in the body.
+    expect(deps.events.remindersDueOn).toHaveBeenCalledWith("default", "2026-06-15");
+    expect(body).toContain("🔔 תזכורות להיום");
+    expect(body).toContain("• 09:00 לקחת תרופה");
   });
 });

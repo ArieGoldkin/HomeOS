@@ -13,6 +13,7 @@ import { sqliteUtc } from "./core/time.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
+import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
 import { buildGoogleDeps } from "./http/oauth-routes.ts";
@@ -185,6 +186,7 @@ if (adminPhone) {
     inbound,
     sendText: wa.sendText,
     adminPhone,
+    familyId: FAMILY_ID,
     hour: config.digestHour,
     log,
   });
