@@ -129,7 +129,7 @@ describe("handleInbound (M2)", () => {
 
     it("when connected: runs the agent forcing read_gmail with ctx.google, then confirms", async () => {
       const { sendText, agent, deps } = makeDeps({ google: true });
-      await handleInbound(syncMsg, deps);
+      expect(await handleInbound(syncMsg, deps)).toBe("synced"); // #159 disposition for the feed
       expect(agent.run).toHaveBeenCalledTimes(1);
       const call = agent.run.mock.calls[0]!;
       expect(call[2]).toEqual({ forceTool: "read_gmail" }); // turn-0 forced tool (G4 preserved)
