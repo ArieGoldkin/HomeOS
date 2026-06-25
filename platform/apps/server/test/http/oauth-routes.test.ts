@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { connectionStatusSchema } from "@homeos/shared";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import type { GoogleOAuthSettings } from "../../src/config.ts";
@@ -11,6 +12,7 @@ import {
   gateMatches,
   registerOAuthRoutes,
 } from "../../src/http/oauth-routes.ts";
+import { createRateLimiter } from "../../src/http/rate-limit.ts";
 
 const ADMIN = "admin-tok";
 const NEW_ACCESS = "access-new";
@@ -28,6 +30,7 @@ const fakeClient = (over: Partial<GoogleOAuthClient> = {}): GoogleOAuthClient =>
   exchangeCode: vi.fn(),
   refresh: vi.fn(),
   revoke: vi.fn(),
+  getEmail: vi.fn(),
   ...over,
 });
 
@@ -69,29 +72,65 @@ describe("OAuth routes — ships dark", () => {
   it("returns 503 on every route when no Google deps are configured", async () => {
     const app = new Hono();
     registerOAuthRoutes(app); // undefined deps
-    expect((await app.request("/connect/google")).status).toBe(503);
     expect((await app.request("/oauth/google/callback?code=x&state=y")).status).toBe(503);
-    expect((await app.request("/disconnect/google", { method: "POST" })).status).toBe(503);
+    expect((await app.request("/oauth/google/status")).status).toBe(503);
+    expect((await app.request("/oauth/google/connect-url")).status).toBe(503);
+    expect((await app.request("/oauth/google/disconnect", { method: "POST" })).status).toBe(503);
+  });
+
+  it("the legacy routes are gone (404)", async () => {
+    const { app } = harness();
+    expect((await app.request("/connect/google", { headers: auth })).status).toBe(404);
+    expect(
+      (await app.request("/disconnect/google", { method: "POST", headers: auth })).status,
+    ).toBe(404);
   });
 });
 
-describe("GET /connect/google", () => {
-  it("401s without the admin bearer", async () => {
-    const { app } = harness();
-    expect((await app.request("/connect/google")).status).toBe(401);
+describe("GET /oauth/google/connect-url (#108)", () => {
+  it("401s without a valid gate bearer and mints NO state row", async () => {
+    const { app, credentials } = harness();
+    const before = credentials.issueState(FAMILY_ID); // a known live row to compare against
+    expect(credentials.consumeState(before, FAMILY_ID)).toBe(true);
     expect(
-      (await app.request("/connect/google", { headers: { authorization: "Bearer wrong" } })).status,
+      (
+        await app.request("/oauth/google/connect-url", {
+          headers: { authorization: "Bearer wrong" },
+        })
+      ).status,
     ).toBe(401);
+    expect((await app.request("/oauth/google/connect-url")).status).toBe(401);
+    // An unauth probe must not have minted a consumable state row.
+    expect(credentials.consumeState("anything", FAMILY_ID)).toBe(false);
   });
 
-  it("302s to Google's consent screen with min scopes + a state", async () => {
+  it("200 {url} with min scopes + a state for a valid admin bearer (curl escape hatch)", async () => {
     const { app } = harness();
-    const res = await app.request("/connect/google", { headers: auth });
-    expect(res.status).toBe(302);
-    const loc = new URL(res.headers.get("location") ?? "");
+    const res = await app.request("/oauth/google/connect-url", { headers: auth });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { url: string };
+    const loc = new URL(body.url);
     expect(loc.origin + loc.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
-    expect(loc.searchParams.get("scope")).toContain("gmail.readonly");
+    const scope = loc.searchParams.get("scope") ?? "";
+    expect(scope).toContain("gmail.readonly");
+    expect(scope).toContain("calendar");
     expect(loc.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("200 for a valid SETUP_TOKEN bearer too", async () => {
+    const SETUP = "setup-tok";
+    const { app } = harness({ setupToken: SETUP });
+    const res = await app.request("/oauth/google/connect-url", {
+      headers: { authorization: `Bearer ${SETUP}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("429 (rate-limited) before the gate check", async () => {
+    const limiter = createRateLimiter({ windowMs: 60_000, max: 1, mismatchDelayMs: 0 });
+    const { app } = harness({ rateLimiter: limiter });
+    expect((await app.request("/oauth/google/connect-url", { headers: auth })).status).toBe(200);
+    expect((await app.request("/oauth/google/connect-url", { headers: auth })).status).toBe(429);
   });
 });
 
@@ -163,34 +202,229 @@ describe("GET /oauth/google/callback", () => {
   });
 });
 
-describe("POST /disconnect/google", () => {
-  it("revokes at Google then deletes locally (reversible, AC4)", async () => {
+describe("GET /oauth/google/callback — account pin + overwrite-guard (#109)", () => {
+  const ALLOWED = "fam@example.test";
+
+  it("allowedEmail set + matching account → upsert + connected", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => ALLOWED);
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED,
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${state}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("מחובר");
+    expect(getEmail).toHaveBeenCalledWith(NEW_ACCESS);
+    expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(REFRESH);
+  });
+
+  it("allowedEmail match is case-insensitive (review N1)", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => "FAM@Example.TEST"); // same address, different casing
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED, // "fam@example.test"
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${state}`);
+    expect(res.status).toBe(200); // connected, not bad_account
+    expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(REFRESH);
+  });
+
+  it("allowedEmail set + mismatched account → bad_account (403), stores nothing", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => "intruder@example.test");
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED,
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${state}`);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("חשבון לא תואם");
+    expect(credentials.get(FAMILY_ID)).toBeNull();
+  });
+
+  it("a present credential row + a new attempt → bad_account (no silent overwrite)", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => ALLOWED);
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED,
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    // First connect succeeds.
+    const s1 = credentials.issueState(FAMILY_ID);
+    expect((await app.request(`/oauth/google/callback?code=C&state=${s1}`)).status).toBe(200);
+    const firstRefresh = credentials.get(FAMILY_ID)?.refreshToken;
+    // A second attempt is refused before any overwrite — the pin is never even consulted.
+    getEmail.mockClear();
+    const s2 = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${s2}`);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("חשבון לא תואם");
+    expect(getEmail).not.toHaveBeenCalled();
+    expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(firstRefresh);
+  });
+
+  it("getEmail throwing → error outcome, stores nothing", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => {
+      throw new Error("transient");
+    });
+    const { app, credentials } = harness({
+      allowedEmail: ALLOWED,
+      client: fakeClient({ exchangeCode, getEmail }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=C&state=${state}`);
+    expect(res.status).toBe(502);
+    expect(credentials.get(FAMILY_ID)).toBeNull();
+  });
+
+  it("allowedEmail UNSET → admin-only mode, no pin (getEmail never called)", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const getEmail = vi.fn(async () => ALLOWED);
+    const { app, credentials } = harness({ client: fakeClient({ exchangeCode, getEmail }) });
+    const state = credentials.issueState(FAMILY_ID);
+    expect((await app.request(`/oauth/google/callback?code=C&state=${state}`)).status).toBe(200);
+    expect(getEmail).not.toHaveBeenCalled();
+    expect(credentials.get(FAMILY_ID)?.refreshToken).toBe(REFRESH);
+  });
+});
+
+describe("GET /oauth/google/callback — open-redirect-safe bounce (#109)", () => {
+  const RETURN = "https://homeos-production-83a4.up.railway.app/connections";
+
+  it("success → 302 to ?status=connected with Referrer-Policy and NO code/state/error", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const { app, credentials } = harness({
+      webReturnUrl: RETURN,
+      client: fakeClient({ exchangeCode }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    const res = await app.request(`/oauth/google/callback?code=SECRET_CODE&state=${state}`);
+    expect(res.status).toBe(302);
+    const loc = res.headers.get("location") ?? "";
+    expect(loc).toBe(`${RETURN}?status=connected`);
+    expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(loc).not.toContain("SECRET_CODE");
+    expect(loc).not.toContain("code=");
+    expect(loc).not.toContain("state=");
+    expect(loc).not.toContain("error=");
+  });
+
+  it("error=access_denied → 302 to ?status=cancelled (no exchange)", async () => {
+    const exchangeCode = vi.fn();
+    const { app } = harness({ webReturnUrl: RETURN, client: fakeClient({ exchangeCode }) });
+    const res = await app.request("/oauth/google/callback?error=access_denied");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`${RETURN}?status=cancelled`);
+    expect(exchangeCode).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /oauth/google/disconnect (#108)", () => {
+  it("revokes at Google then deletes locally + purges (reversible, AC4) → {disconnected:true}", async () => {
     const revoke = vi.fn(async () => {});
     const exchangeCode = vi.fn(async () => tokens());
-    const { app, credentials } = harness({ client: fakeClient({ exchangeCode, revoke }) });
+    const deleteByProvider = vi.fn(() => 0);
+    const { app, credentials } = harness({
+      client: fakeClient({ exchangeCode, revoke }),
+      events: { deleteByProvider },
+    });
     const state = credentials.issueState(FAMILY_ID);
     await app.request(`/oauth/google/callback?code=C&state=${state}`); // connect first
     expect(credentials.get(FAMILY_ID)).not.toBeNull();
 
-    const res = await app.request("/disconnect/google", { method: "POST", headers: auth });
+    const res = await app.request("/oauth/google/disconnect", { method: "POST", headers: auth });
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ disconnected: true });
     expect(revoke).toHaveBeenCalledWith(REFRESH);
     expect(credentials.get(FAMILY_ID)).toBeNull();
-  });
-
-  it("purges provider-derived rows on disconnect (#61/MF5)", async () => {
-    const deleteByProvider = vi.fn(() => 0);
-    const { app } = harness({
-      client: fakeClient({ revoke: vi.fn(async () => {}) }),
-      events: { deleteByProvider },
-    });
-    await app.request("/disconnect/google", { method: "POST", headers: auth });
     expect(deleteByProvider).toHaveBeenCalledWith("google");
   });
 
-  it("401s without the admin bearer", async () => {
+  it("a valid SETUP_TOKEN bearer disconnects too (the gate, not admin-only)", async () => {
+    const SETUP = "setup-tok";
+    const { app } = harness({
+      setupToken: SETUP,
+      client: fakeClient({ revoke: vi.fn(async () => {}) }),
+    });
+    const res = await app.request("/oauth/google/disconnect", {
+      method: "POST",
+      headers: { authorization: `Bearer ${SETUP}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("401s without a valid gate bearer", async () => {
     const { app } = harness();
-    expect((await app.request("/disconnect/google", { method: "POST" })).status).toBe(401);
+    expect((await app.request("/oauth/google/disconnect", { method: "POST" })).status).toBe(401);
+    expect(
+      (
+        await app.request("/oauth/google/disconnect", {
+          method: "POST",
+          headers: { authorization: "Bearer wrong" },
+        })
+      ).status,
+    ).toBe(401);
+  });
+});
+
+describe("GET /oauth/google/status (#108)", () => {
+  const READ = "read-tok";
+
+  it("401s when the read token is wrong or unset", async () => {
+    const { app: noReadToken } = harness(); // readToken unset
+    expect((await noReadToken.request("/oauth/google/status")).status).toBe(401);
+    // readToken unset must NOT be bypassable with an empty `Bearer ` header (timingSafeEqual([],[])).
+    expect(
+      (await noReadToken.request("/oauth/google/status", { headers: { authorization: "Bearer " } }))
+        .status,
+    ).toBe(401);
+    const { app } = harness({ readToken: READ });
+    expect(
+      (await app.request("/oauth/google/status", { headers: { authorization: "Bearer wrong" } }))
+        .status,
+    ).toBe(401);
+  });
+
+  it("{connected:false} when no credential is stored", async () => {
+    const { app } = harness({ readToken: READ });
+    const res = await app.request("/oauth/google/status", {
+      headers: { authorization: `Bearer ${READ}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ connected: false });
+    expect(connectionStatusSchema.parse(body)).toEqual({ connected: false });
+  });
+
+  it("{connected:true,scopes,expiresAt} with NO token material (OG3) when stored", async () => {
+    const exchangeCode = vi.fn(async () => tokens());
+    const { app, credentials } = harness({
+      readToken: READ,
+      client: fakeClient({ exchangeCode }),
+    });
+    const state = credentials.issueState(FAMILY_ID);
+    await app.request(`/oauth/google/callback?code=C&state=${state}`); // connect first
+    const res = await app.request("/oauth/google/status", {
+      headers: { authorization: `Bearer ${READ}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // Strict shared schema — fails loudly on any extra field (e.g. a leaked token).
+    const parsed = connectionStatusSchema.parse(body);
+    expect(parsed).toEqual({
+      connected: true,
+      scopes: GOOGLE_SCOPES,
+      expiresAt: "2026-06-18 12:59:00",
+    });
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain(REFRESH);
+    expect(raw).not.toContain(NEW_ACCESS);
   });
 });
 

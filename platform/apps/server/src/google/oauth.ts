@@ -44,6 +44,42 @@ export interface GoogleOAuthClient {
   exchangeCode(code: string): Promise<GoogleTokens>;
   refresh(refreshToken: string): Promise<GoogleTokens>;
   revoke(token: string): Promise<void>;
+  /**
+   * #109 — the consenting account's email, for the self-serve account pin. Reads the GMAIL PROFILE
+   * endpoint (reachable with the already-granted `gmail.readonly` scope) — NOT the OIDC userinfo
+   * endpoint, since we never request an email/openid scope.
+   */
+  getEmail(accessToken: string): Promise<string>;
+}
+
+const GMAIL_PROFILE_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
+
+/**
+ * #109 — fetch the consenting Google account's email via the Gmail profile endpoint (granted by the
+ * already-requested `gmail.readonly` scope). A non-ok response or a network blip is a {@link
+ * TransientError} (the route degrades to the `error` outcome), mirroring the token endpoints.
+ */
+export async function fetchUserInfoEmail(
+  accessToken: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetchImpl(GMAIL_PROFILE_ENDPOINT, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (err) {
+    throw new TransientError("google gmail profile network error", err);
+  }
+  if (!res.ok) {
+    throw new TransientError(`google gmail profile endpoint ${res.status}`);
+  }
+  const j = (await res.json()) as { emailAddress?: unknown };
+  if (typeof j.emailAddress !== "string" || j.emailAddress.length === 0) {
+    throw new TransientError("google gmail profile: response had no emailAddress");
+  }
+  return j.emailAddress;
 }
 
 /** Minimum scopes — hardcoded server-side, never request-derived (OG4). */
@@ -143,6 +179,9 @@ export function httpGoogleOAuthClient(
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       throw new GoogleOAuthError(body.error ?? "revoke_failed", res.status);
+    },
+    getEmail(accessToken) {
+      return fetchUserInfoEmail(accessToken, fetchImpl);
     },
   };
 }
