@@ -56,7 +56,67 @@ export const sampleMessages = [
   },
 ];
 
+/**
+ * #111 — a CONNECTED `GET /oauth/google/status` payload (mirrors the shared `connectionStatusSchema`
+ * connected member): the granted scopes + the access-token `expiresAt`. Use it with `server.use(...)` or
+ * the {@link googleConnectedHandler} helper to flip a test from the default not-connected state.
+ */
+export const sampleGoogleStatusConnected = {
+  connected: true as const,
+  scopes: [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/gmail.readonly",
+  ],
+  expiresAt: "2026-06-25T18:30:00Z",
+};
+
+/** #111 — flip `GET /oauth/google/status` to the connected payload: `server.use(googleConnectedHandler())`. */
+export const googleConnectedHandler = () =>
+  http.get("*/oauth/google/status", () => HttpResponse.json(sampleGoogleStatusConnected));
+
+/** #111 — flip `GET /oauth/google/status` to the configured-dark 503: `server.use(googleDarkHandler())`. */
+export const googleDarkHandler = () =>
+  http.get("*/oauth/google/status", () => new HttpResponse("Service Unavailable", { status: 503 }));
+
 export const handlers = [
+  /**
+   * #111 — Bearer-gated `GET /oauth/google/status`. Defaults to the NOT-connected `{ connected: false }`;
+   * per-test overrides (`googleConnectedHandler` / `googleDarkHandler` or an inline `server.use`) flip it to
+   * connected or to the 503 dark state. The status read carries the family READ token, like /events.
+   */
+  http.get("*/oauth/google/status", ({ request }) => {
+    const auth = request.headers.get("authorization");
+    if (!auth?.startsWith("Bearer")) {
+      return new HttpResponse("Unauthorized", { status: 401 });
+    }
+    return HttpResponse.json({ connected: false });
+  }),
+
+  /**
+   * #111 — Bearer-gated `GET /oauth/google/connect-url`. The Bearer here is the user-typed SETUP CODE
+   * (a runtime arg, never bundled); the default echoes a consent URL on 200. Tests assert the distinct
+   * error reasons (401/403/429/503) by overriding with `server.use(...)`.
+   */
+  http.get("*/oauth/google/connect-url", ({ request }) => {
+    const auth = request.headers.get("authorization");
+    if (!auth?.startsWith("Bearer")) {
+      return new HttpResponse("Unauthorized", { status: 401 });
+    }
+    return HttpResponse.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?mock=1" });
+  }),
+
+  /**
+   * #111 — Bearer-gated `POST /oauth/google/disconnect`. The Bearer is again the user-typed setup code.
+   * Returns 204 on success; tests override to assert non-2xx handling.
+   */
+  http.post("*/oauth/google/disconnect", ({ request }) => {
+    const auth = request.headers.get("authorization");
+    if (!auth?.startsWith("Bearer")) {
+      return new HttpResponse("Unauthorized", { status: 401 });
+    }
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get("*/events", ({ request }) => {
     const auth = request.headers.get("authorization");
     if (!auth?.startsWith("Bearer")) {
