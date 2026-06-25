@@ -38,11 +38,54 @@ Forwarded message text lands in two places, both bounded by design (data-minimiz
 | `POST` | `/webhook` | Inbound messages — **acks 200 immediately**, then parses/persists async |
 | `GET`  | `/events`  | Board read seam (the family app). Bearer `READ_TOKEN`; returns `{ events }`. 503 if unset |
 | `POST` | `/events`  | Board write seam (web/phone add). Bearer `WRITE_TOKEN`; body = a `ParsedEvent` → the single created `SavedEvent` (201). 503 if unset |
+| `GET`  | `/oauth/google/status`      | Connection status for the web Connect screen. Bearer `READ_TOKEN`; `{ connected }` (+ `scopes`, `expiresAt` when connected) — never any token material. 503 if Google unconfigured |
+| `GET`  | `/oauth/google/connect-url` | Mint the consent URL. Rate-limited per IP; Bearer **`SETUP_TOKEN`** (or `ADMIN_TOKEN`) → `{ url }`. 401 wrong code · 429 too many · 503 dark |
+| `GET`  | `/oauth/google/callback`    | Google's redirect target. Validates single-use `state`, pins the account, stores the credential, then **bounces** to the web app (or renders a static Hebrew page) |
+| `POST` | `/oauth/google/disconnect`  | Revoke at Google + delete locally + purge derived rows. Bearer `SETUP_TOKEN` (or `ADMIN_TOKEN`) → `{ disconnected: true }`. 503 dark |
 
 > **`WRITE_TOKEN` is a DISTINCT credential from `READ_TOKEN`** (never aliased) so a read-only client
 > can't mutate the board — both optional, unset ⇒ that seam returns 503. For local dev set
 > `WRITE_TOKEN` (server) **and** `VITE_HOMEOS_WRITE_TOKEN` (web app) to the same string so the AddEvent
 > form persists; the web client's `?? READ_TOKEN` fallback is a dev convenience the server does not honor.
+
+## Connect Google (self-serve OAuth, #10)
+
+A family connects their Google account (Calendar + Gmail) themselves from the web **Connections** screen —
+no manual token surgery. The OAuth bundle is **all-or-nothing**: set every `GOOGLE_*` var
+(`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` / `GOOGLE_TOKEN_ENC_KEY` + `ADMIN_TOKEN`)
+or none — none ⇒ the routes ship **dark** (503). Three **optional** self-serve vars ride alongside (each
+absent ⇒ admin-only mode, unchanged):
+
+| Var | What | Constraints |
+|-----|------|-------------|
+| `SETUP_TOKEN` | the bearer the web connect/disconnect flow needs | Generate `openssl rand -base64 32`. Boot-validated: **≥ 32 bytes** of base64 entropy AND **distinct** from `READ_TOKEN` *and* `ADMIN_TOKEN` (a third, independent credential — never aliased). **Never a `VITE_*` var** — it's typed into the web dialog at runtime, never built into the bundle. |
+| `WEB_BASE_URL` | where the callback bounces the browser back | Absolute **`https://`** URL whose origin is on the in-code `ALLOWED_WEB_ORIGINS` allowlist (boot-validated, so a misconfigured/attacker-set base URL can't divert the post-consent redirect). |
+| `ALLOWED_GOOGLE_EMAIL` | the one Google account the flow accepts | The consenting account's email must match (case-insensitive), else `bad_account`. Unset ⇒ unenforced. |
+
+**Prompt-for-secret UX.** The web app never holds `SETUP_TOKEN`. The Connect dialog prompts for the code,
+keeps it in a short-lived in-memory value (cleared on close), sends it as a one-shot bearer, and discards it
+— it is never persisted (no `localStorage`/`sessionStorage`) and never bundled. `ADMIN_TOKEN` remains the
+curl escape hatch for the same gated routes.
+
+**Dual-mode callback.** When `WEB_BASE_URL` is set, the callback **bounces** the browser to
+`${WEB_BASE_URL}/connections?status=<outcome>` — only the server-constructed, allowlisted outcome slug is
+forwarded (never `code` / `state` / `error`), with `Referrer-Policy: no-referrer`. When unset, it renders
+the original static Hebrew result page (the ships-dark / curl fallback).
+
+**Account-email pin + overwrite guard.** The real write-authorization is Google consent, not the bearer:
+after the granted-scope re-check and **before** storing, the callback refuses to silently overwrite a
+present credential (→ `bad_account`, disconnect-first) and — when `ALLOWED_GOOGLE_EMAIL` is set — fetches
+the consenting account's email (via the Gmail profile endpoint, under the already-granted `gmail.readonly`
+scope; **no** extra OIDC/`openid` scope) and requires a match. A fetch failure fails **closed** (stores nothing).
+
+**Phase-8 trip-wire (code-enforced).** Until a real family resolver exists, the only legal family is
+`FAMILY_ID === "default"`. The credential store **asserts** this in `upsert` and `issueState`, throwing a
+named *single-family* error otherwise — a second family is a loud failure, not a silent unverified-cap /
+CASA breach. Crossing it means the identity/session model + the CASA gates (#29/#30) come first.
+
+**Invariants.** Auth is **bearer-only, never a cookie** (no ambient credentials, no CSRF surface). Note a
+bearer typed into the browser is visible in React DevTools / the network panel for that session — acceptable
+for a single dogfood operator typing a setup code, not a model for real per-user auth (deferred).
 
 ## Module map (foundation-first seams)
 
