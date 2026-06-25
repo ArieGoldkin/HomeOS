@@ -240,3 +240,39 @@ export const inboundMessagesResponseSchema = z.object({
   messages: z.array(inboundMessageSchema),
 });
 export type InboundMessagesResponse = z.infer<typeof inboundMessagesResponseSchema>;
+
+/**
+ * #10 — the connection outcome slugs shared by the OAuth callback (server) and the web `?status=` banner.
+ * Making this ONE source of truth means the server can only bounce a slug the web knows how to render, and
+ * the web maps an allowlisted enum value rather than a raw request param (OG21-OR, open-redirect-safe).
+ * `bad_account` is the account-identity-pin outcome (#109): the consenting Google account didn't match
+ * `ALLOWED_GOOGLE_EMAIL`, or a present credential row would have been silently overwritten.
+ */
+export const CONNECT_OUTCOMES = [
+  "connected",
+  "cancelled",
+  "no_refresh",
+  "bad_scope",
+  "bad_state",
+  "error",
+  "bad_account",
+] as const;
+export const connectOutcomeSchema = z.enum(CONNECT_OUTCOMES);
+export type ConnectOutcome = z.infer<typeof connectOutcomeSchema>;
+
+/**
+ * #10 — the `GET /oauth/google/status` payload the web Connect screen polls. A discriminated union on
+ * `connected`: disconnected is the bare `{ connected: false }`; connected adds the granted `scopes` and
+ * the access-token `expiresAt` (ISO) for the "מחובר · פג תוקף …" line. Both members are strict so any
+ * extra field — above all a leaked token/refresh/enc-key (OG3) — fails parsing loudly rather than reaching
+ * the client. Mirrors the {@link savedEventsResponseSchema} shape-drift-fails-loudly contract.
+ */
+export const connectionStatusSchema = z.discriminatedUnion("connected", [
+  z.strictObject({ connected: z.literal(false) }),
+  z.strictObject({
+    connected: z.literal(true),
+    scopes: z.array(z.string()),
+    expiresAt: z.string(),
+  }),
+]);
+export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
