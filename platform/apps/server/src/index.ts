@@ -12,6 +12,7 @@ import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
+import { createFamilyStore } from "./db/family-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
@@ -54,6 +55,22 @@ const inbound = createInboundStore(config.dbPath);
 // file. The constructor creates the table (CREATE TABLE IF NOT EXISTS) + the one-thread-per-sender
 // index; the boot `expireStale` below both sweeps stale threads and acts as a table-exists boot check.
 const conversations = createConversationStore(config.dbPath);
+// 👨‍👩‍👧 Identity spine (#227, milestone #13): stand up families/family_members/family_phones and
+// idempotently seed our one family on boot. The return is discarded — this is a seed-only side effect;
+// the phone→family resolver (#229) is the first real reader (it will retain the handle). Members come
+// from the existing config.members (#14 phone:name) map, keyed on the UNIQUE phone — NOT the display
+// name, so two members sharing a name can't collapse under the (family_id, user_id) PK; the whole
+// `user_id` is a PLACEHOLDER until Supabase login (#225) supplies the real auth.uid(). Seeding is
+// first-wins (INSERT OR IGNORE), so the owner/member role freezes at first boot and later MEMBERS drift
+// isn't reconciled here — intentional for this placeholder spine. family_phones is seeded with NOTHING
+// — bindings are earned through the wa.me/OTP ceremony (#228), never hardcoded.
+createFamilyStore(config.dbPath, {
+  family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
+  members: Object.keys(config.members).map((phone, i) => ({
+    userId: `placeholder:${phone}`,
+    role: i === 0 ? "owner" : "member",
+  })),
+});
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 

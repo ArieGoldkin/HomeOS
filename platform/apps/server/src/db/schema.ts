@@ -180,6 +180,80 @@ export interface OAuthStateRow {
 }
 
 /**
+ * Identity spine (#227, milestone #13) — three plain tables that replace the implicit single-tenancy
+ * of {@link FAMILY_ID} with a real, queryable model for our one dogfood family. Schema + idempotent
+ * seed ONLY: no resolver, no Postgres, no RLS, no Realtime (all deferred). At N=1, app-layer
+ * `WHERE family_id = ?` is trivially correct — what would force Supabase-Postgres is cross-family RLS,
+ * which one family never needs. Mirrors the already-`family_id`-keyed `credentials` / `oauth_state` shape.
+ */
+export const CREATE_FAMILIES_TABLE = `
+  CREATE TABLE IF NOT EXISTS families (
+    family_id    TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+/**
+ * `family_members(family_id, user_id, role)` — keyed to the Supabase `auth.uid()` so the browser read
+ * path (`auth.uid() → family_members → family_id`) has something to resolve against (#226/#230). PK
+ * `(family_id, user_id)` matches the `credentials` `(family_id, provider)` convention. `user_id` is a
+ * PLACEHOLDER until the Supabase-login issue (#225) supplies the real `auth.uid()` — that issue is the
+ * one seam this row completes. Absorbs the `family_members` concept as identity plumbing only (NOT the
+ * closed #23 per-person-items feature).
+ */
+export const CREATE_FAMILY_MEMBERS_TABLE = `
+  CREATE TABLE IF NOT EXISTS family_members (
+    family_id   TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (family_id, user_id)
+  );
+`;
+
+/**
+ * `family_phones(family_id, from_phone, verified_at)` — the DURABLE result of the wa.me/OTP binding
+ * ceremony (#228): a row here means "this WhatsApp number is proven to belong to this family." It is
+ * what the bot write path (`from_phone → family_phones → family_id`) resolves against (#229) — the
+ * security chokepoint with NO RLS backstop, so `from_phone` is stored digit-normalized (the same
+ * `normalizePhone` the allowlist/inbound path uses) to keep resolver comparisons exact. PK
+ * `(family_id, from_phone)` enforces one binding per phone per family. Seeded with NOTHING by default —
+ * bindings are earned through the ceremony, never hardcoded.
+ */
+export const CREATE_FAMILY_PHONES_TABLE = `
+  CREATE TABLE IF NOT EXISTS family_phones (
+    family_id    TEXT NOT NULL,
+    from_phone   TEXT NOT NULL,
+    verified_at  TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (family_id, from_phone)
+  );
+`;
+
+export interface FamilyRow {
+  family_id: string;
+  display_name: string;
+  created_at: string;
+}
+
+export interface FamilyMemberRow {
+  family_id: string;
+  /** Supabase `auth.uid()`; a placeholder until #225 lands. */
+  user_id: string;
+  role: string;
+  created_at: string;
+}
+
+export interface FamilyPhoneRow {
+  family_id: string;
+  /** Digit-normalized (`normalizePhone`), as the resolver compares. */
+  from_phone: string;
+  verified_at: string;
+  created_at: string;
+}
+
+/**
  * Bounded multi-turn conversation thread (#83, Milestone #8) — the "ask → wait → resume" primitive
  * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 7 columns: the
  * per-kind variant lives in one `payload_json` blob (NOT typed columns), and `status` is pinned to
