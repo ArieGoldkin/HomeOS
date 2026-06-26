@@ -13,6 +13,7 @@ import { Card, SectionLabel, StatusPill, type StatusPillProps } from "@shared/ui
  */
 const OUTCOME_META: Record<InboundOutcome, { label: string; tone: StatusPillProps["tone"] }> = {
   parsed: { label: "נוסף ליומן", tone: "active" }, // success → green
+  bound: { label: "מספר חובר", tone: "active" }, // #228 — a WhatsApp number bound to the family → green
   clarified: { label: "נשאלה שאלה", tone: "pending" }, // needs the user's answer → blue
   refused: { label: "נחסם", tone: "overdue" }, // blocked → coral
   rephrase: { label: "לא הובן", tone: "archived" }, // no-op (was an identical slate)

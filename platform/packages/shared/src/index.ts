@@ -212,6 +212,8 @@ export const INBOUND_OUTCOMES = [
   "synced",
   "aborted",
   "resumed",
+  // #228 — a wa.me phone-binding message: a valid HOME-XXXXX code bound the sender's number to a family.
+  "bound",
 ] as const;
 export const inboundOutcomeSchema = z.enum(INBOUND_OUTCOMES);
 export type InboundOutcome = z.infer<typeof inboundOutcomeSchema>;

@@ -10,6 +10,7 @@ import { anthropicCallModel, createAgent, RESOLVE_SYSTEM } from "./core/agent.ts
 import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
+import { createBindingStore } from "./db/binding-store.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
 import { createFamilyStore } from "./db/family-store.ts";
@@ -71,6 +72,12 @@ createFamilyStore(config.dbPath, {
     role: i === 0 ? "owner" : "member",
   })),
 });
+// 🔗 Phone-binding ceremony store (#228): its own connection on the same DB file; the constructor creates
+// phone_binding (+ ensures family_phones). Wired into the inbound handler so a `HOME-XXXXX` code binds the
+// sender's number to a family BEFORE the allowlist gate. The session-gated issue-code endpoint + web card
+// ride the auth slice (#226); at N=1 nothing reads family_phones until the #229 resolver, so this is the
+// security seam built correct from day one, not yet a user-facing flow.
+const bindings = createBindingStore(config.dbPath);
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 
@@ -142,6 +149,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     sendText: wa.sendText,
     inbound,
     conversations,
+    bindings, // #228: pre-allowlist wa.me/OTP binding branch
     conversationTtlMs: config.conversationTtlMs, // #87/G24: open-thread TTL (env CONVERSATION_TTL_MIN)
     parse, // #84: the non-persisting re-parse seam a clarify RESUME uses to complete a date answer
     members: config.members,
