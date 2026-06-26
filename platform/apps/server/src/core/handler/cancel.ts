@@ -25,7 +25,7 @@ import {
   TIME_RE,
   WEEKDAY_RE,
   weekdayOfIso,
-} from "./shared.ts";
+} from "./shared/index.ts";
 
 /**
  * #85/#163 — pull a relative scope (an explicit HH:MM time + a relative Hebrew DATE: היום/מחר/מחרתיים or

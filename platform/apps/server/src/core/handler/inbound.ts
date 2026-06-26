@@ -47,7 +47,7 @@ import {
   stripLeadingFiller,
   TEXT_ONLY_HE,
   TRANSIENT_HE,
-} from "./shared.ts";
+} from "./shared/index.ts";
 import { runSyncIntent } from "./sync.ts";
 
 /**

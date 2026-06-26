@@ -3,7 +3,7 @@ import type { InboundMessage } from "../../http/webhook.ts";
 import { resumeCancel } from "./cancel.ts";
 import { resumeClarify } from "./clarify.ts";
 import { resumeEdit } from "./edit.ts";
-import { type HandlerDeps, REPHRASE_HE } from "./shared.ts";
+import { type HandlerDeps, REPHRASE_HE } from "./shared/index.ts";
 
 /**
  * Resume an open conversation thread (#83, Milestone #8 foundation). Routes the sender's next message

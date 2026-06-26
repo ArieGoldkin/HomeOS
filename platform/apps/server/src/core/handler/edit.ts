@@ -22,7 +22,7 @@ import {
   REPHRASE_HE,
   resolveCandidates,
   safeJsonParse,
-} from "./shared.ts";
+} from "./shared/index.ts";
 
 /**
  * #86 — extract an explicit-edit REFERENCE + a field DELTA from a fixed vocabulary (server-side, NO
