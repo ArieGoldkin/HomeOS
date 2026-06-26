@@ -4,7 +4,13 @@ import type { EventPatch } from "../../db/event-store.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
-import { familyOf, formatConfirm, type HandlerDeps, REPHRASE_HE, safeJsonParse } from "./shared.ts";
+import {
+  familyOf,
+  formatConfirm,
+  type HandlerDeps,
+  REPHRASE_HE,
+  safeJsonParse,
+} from "./shared/index.ts";
 
 /**
  * #86 — extract the NEW field value from a terse correction ("לא ב-28, ב-21" → day 21; "לא בשעה 4:00" →

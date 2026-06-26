@@ -12,7 +12,7 @@ import {
   jerusalemToday,
   REPHRASE_HE,
   safeJsonParse,
-} from "./shared.ts";
+} from "./shared/index.ts";
 
 /**
  * #84 — complete a clarify draft from the sender's answer, then save + confirm. Turn cap = 1: the

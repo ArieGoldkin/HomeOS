@@ -3,7 +3,7 @@ import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type CallModel, createAgent } from "../../src/core/agent.ts";
 import { processInbound } from "../../src/core/handler/index.ts";
-import { CLARIFY_QUESTIONS, REPHRASE_HE } from "../../src/core/handler/shared.ts";
+import { CLARIFY_QUESTIONS, REPHRASE_HE } from "../../src/core/handler/shared/index.ts";
 import {
   type ConversationStore,
   createConversationStore,

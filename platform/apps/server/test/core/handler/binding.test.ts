@@ -6,7 +6,7 @@ import {
   BIND_WRONG_FAMILY_HE,
   REFUSAL_HE,
   TEXT_ONLY_HE,
-} from "../../../src/core/handler/shared.ts";
+} from "../../../src/core/handler/shared/index.ts";
 import { createBindingStore } from "../../../src/db/binding-store.ts";
 import { FAMILY_ID } from "../../../src/db/schema.ts";
 import type { InboundMessage } from "../../../src/http/webhook.ts";

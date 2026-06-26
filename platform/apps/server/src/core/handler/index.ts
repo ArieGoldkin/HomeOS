@@ -10,4 +10,4 @@
 //   - HandlerDeps / ProcessDeps — the dependency contracts callers construct
 export { extractBulkCancel, extractCancelRef, parseSelection } from "./cancel.ts";
 export { handleInbound, processInbound } from "./inbound.ts";
-export type { HandlerDeps, ProcessDeps } from "./shared.ts";
+export type { HandlerDeps, ProcessDeps } from "./shared/index.ts";

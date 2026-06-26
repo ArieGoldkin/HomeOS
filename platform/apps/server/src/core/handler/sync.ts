@@ -8,7 +8,7 @@ import {
   SYNC_FAILED_HE,
   savedOf,
   TRANSIENT_HE,
-} from "./shared.ts";
+} from "./shared/index.ts";
 
 /**
  * Shared provider-sync run (Gmail #72 / Calendar #18): force the given tool on an agent run (turn 0,

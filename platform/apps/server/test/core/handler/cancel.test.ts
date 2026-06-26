@@ -5,7 +5,7 @@ import {
   handleInbound,
   parseSelection,
 } from "../../../src/core/handler/index.ts";
-import { CANCEL_NOT_FOUND_HE, isAffirmative } from "../../../src/core/handler/shared.ts";
+import { CANCEL_NOT_FOUND_HE, isAffirmative } from "../../../src/core/handler/shared/index.ts";
 import {
   type ConversationStore,
   createConversationStore,
