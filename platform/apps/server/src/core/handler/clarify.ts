@@ -2,7 +2,7 @@ import { type ParsedEvent, parsedEventSchema, sanitizeUserText } from "@homeos/s
 import { clarifyPayloadSchema } from "../../db/conversation-store.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
-import { type ClarifyResult, pushSavedEventsToCalendar } from "../../tools/tools.ts";
+import { type ClarifyResult, pushSavedEventsToCalendar } from "../../tools/index.ts";
 import {
   CLARIFY_QUESTIONS,
   conversationExpiresAt,

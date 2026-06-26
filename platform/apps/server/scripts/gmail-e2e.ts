@@ -9,7 +9,7 @@ import { FAMILY_ID } from "../src/db/schema.ts";
 import { httpGmailClient } from "../src/google/gmail.ts";
 import { buildGoogleDeps } from "../src/http/oauth-routes.ts";
 import { anthropicRawParse, createParser } from "../src/parsing/parser.ts";
-import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../src/tools/tools.ts";
+import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../src/tools/index.ts";
 
 /**
  * Local end-to-end harness for the Gmail sync (#17) — runs the FULL pipeline WITHOUT WhatsApp:

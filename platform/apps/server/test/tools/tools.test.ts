@@ -17,7 +17,7 @@ import {
   readGmailTool,
   searchEventsTool,
   type ToolContext,
-} from "../../src/tools/tools.ts";
+} from "../../src/tools/index.ts";
 
 const sampleEvent: ParsedEvent = {
   kind: "event",

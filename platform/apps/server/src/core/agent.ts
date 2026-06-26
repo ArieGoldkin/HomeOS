@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
 import type { SavedEvent } from "../db/event-store.ts";
-import type { ClarifyResult, Tool, ToolContext } from "../tools/tools.ts";
+import type { ClarifyResult, Tool, ToolContext } from "../tools/index.ts";
 import { isProgrammingError, isTransient, TransientError } from "./errors.ts";
 
 /**

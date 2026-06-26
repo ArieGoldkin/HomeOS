@@ -2,7 +2,7 @@ import { cancelPayloadSchema } from "../../db/conversation-store.ts";
 import type { SavedEvent } from "../../db/event-store.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
-import { deleteFromCalendar } from "../../tools/tools.ts";
+import { deleteFromCalendar } from "../../tools/index.ts";
 import {
   addDaysIso,
   BULK_QUANTIFIER_RE,

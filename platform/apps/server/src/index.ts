@@ -32,7 +32,7 @@ import {
   readGmailTool,
   searchEventsTool,
   type Tool,
-} from "./tools/tools.ts";
+} from "./tools/index.ts";
 import { createWhatsAppClient } from "./whatsapp/client.ts";
 
 // Fail fast if the environment is misconfigured (missing token, empty allowlist, …).

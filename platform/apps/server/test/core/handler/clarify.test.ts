@@ -6,7 +6,7 @@ import {
   type ConversationStore,
   createConversationStore,
 } from "../../../src/db/conversation-store.ts";
-import type { ClarifyResult } from "../../../src/tools/tools.ts";
+import type { ClarifyResult } from "../../../src/tools/index.ts";
 import { makeDeps, sampleEvent, textMsg } from "./_setup.ts";
 
 // #84 (Milestone #8): the confidence gate. A clarify arm from agent.run opens a templated thread and
