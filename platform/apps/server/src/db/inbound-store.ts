@@ -75,7 +75,8 @@ export function createInboundStore(dbPath: string): InboundStore {
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(CREATE_INBOUND_TABLE);
   // #135: ensure `outcome` exists on a pre-existing inbound_messages table (CREATE IF NOT EXISTS won't
-  // add it). Fresh DBs get it from the DDL; older DBs get it here (mirrors event-store.ts:169-171).
+  // add it). Fresh DBs get it from the DDL; older DBs get it here (mirrors the idempotent column-add in
+  // event-store/index.ts).
   const cols = db.prepare("PRAGMA table_info(inbound_messages);").all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === "outcome")) db.exec(ADD_INBOUND_OUTCOME);
 
