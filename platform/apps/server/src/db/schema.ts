@@ -255,15 +255,22 @@ export interface FamilyPhoneRow {
 
 /**
  * Bounded multi-turn conversation thread (#83, Milestone #8) — the "ask → wait → resume" primitive
- * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 7 columns: the
+ * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 8 columns: the
  * per-kind variant lives in one `payload_json` blob (NOT typed columns), and `status` is pinned to
  * 'pending' because resolution DELETEs (single-use, like `oauth_state`) — only pending rows ever
  * exist. `expires_at` (SQLite-UTC, injected clock) is the TTL, checked at READ time so a stale
  * question never resumes. `kind`/`status` CHECKs keep the row well-formed at the DB layer.
+ *
+ * #232 — `family_id` (DEFAULT 'default') makes the table tenant-shaped. Inert at N=1, but it pivots
+ * the one-pending-per-sender uniqueness to `(family_id, from_phone)` so a second family's pending
+ * thread can never silently `INSERT OR REPLACE` over the first family's (a cross-tenant corruption the
+ * moment the resolver #229 introduces a real second `family_id`). The `ConversationStore` signatures
+ * stay unchanged — `create` omits the column, so every N=1 row falls to 'default'.
  */
 export const CREATE_CONVERSATIONS_TABLE = `
   CREATE TABLE IF NOT EXISTS conversations (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id    TEXT    NOT NULL DEFAULT 'default',
     from_phone   TEXT    NOT NULL,
     kind         TEXT    NOT NULL CHECK(kind IN ('clarify','cancel','edit')),
     payload_json TEXT    NOT NULL,
@@ -274,17 +281,39 @@ export const CREATE_CONVERSATIONS_TABLE = `
 `;
 
 /**
+ * #232 — idempotent migration: add `family_id` to a PRE-EXISTING conversations table (mirrors
+ * ADD_EVENTS_STATUS). `NOT NULL DEFAULT 'default'` backfills every existing row to the constant in one
+ * step — no separate UPDATE pass. Fresh DBs get the column from the DDL above; older DBs get it here.
+ */
+export const ADD_CONVERSATIONS_FAMILY_ID =
+  "ALTER TABLE conversations ADD COLUMN family_id TEXT NOT NULL DEFAULT 'default';";
+
+/**
+ * #232 — drop the OLD single-column index so the composite one below can take its name. `CREATE … IF
+ * NOT EXISTS` is a no-op when the index *name* already exists, so on an upgraded DB the old
+ * `(from_phone)` index would otherwise persist and the pivot would silently not happen. The store runs
+ * this whenever the live index isn't already the `(family_id, from_phone)` shape (PRAGMA index_info),
+ * so the pivot self-heals even after a crash mid-migration.
+ */
+export const DROP_CONVERSATIONS_INDEX =
+  "DROP INDEX IF EXISTS conversations_one_pending_per_sender;";
+
+/**
  * DB-layer enforcement of "at most ONE open thread per sender" — the SQLite analogue of
  * `inbound_messages`' wa_message_id dedupe. Because resolution DELETEs, only pending rows exist, so a
- * plain UNIQUE on `from_phone` suffices; `create` uses INSERT OR REPLACE to overwrite a prior thread.
+ * UNIQUE on the sender suffices; `create` uses INSERT OR REPLACE to overwrite a prior thread. #232
+ * pivots it to `(family_id, from_phone)` — same index name, scoped per family (inert at N=1, where
+ * family_id is always 'default', so it's a superset of the old `(from_phone)` key).
  */
 export const CREATE_CONVERSATIONS_INDEX = `
   CREATE UNIQUE INDEX IF NOT EXISTS conversations_one_pending_per_sender
-    ON conversations(from_phone);
+    ON conversations(family_id, from_phone);
 `;
 
 export interface ConversationRow {
   id: number;
+  /** #232 — tenant column; DEFAULT 'default' at N=1 until the resolver (#229) threads a real value. */
+  family_id: string;
   from_phone: string;
   kind: string;
   payload_json: string;

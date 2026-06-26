@@ -5,9 +5,11 @@ import { clarifyReasonSchema, type ParsedEvent, parsedEventSchema } from "@homeo
 import { z } from "zod/v4";
 import { BULK_CANCEL_MAX, type EventPatch } from "./event-store.ts";
 import {
+  ADD_CONVERSATIONS_FAMILY_ID,
   type ConversationRow,
   CREATE_CONVERSATIONS_INDEX,
   CREATE_CONVERSATIONS_TABLE,
+  DROP_CONVERSATIONS_INDEX,
 } from "./schema.ts";
 
 // node:sqlite is a newer builtin bundlers don't externalize cleanly — load via createRequire (as
@@ -110,7 +112,25 @@ export function createConversationStore(dbPath: string): ConversationStore {
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(CREATE_CONVERSATIONS_TABLE);
-  db.exec(CREATE_CONVERSATIONS_INDEX);
+  // #232 — two idempotent, self-healing migration steps (CREATE IF NOT EXISTS won't add a column or
+  // re-shape a same-named index on a PRE-EXISTING table):
+  //   (1) add family_id if missing — NOT NULL DEFAULT backfills existing rows in the ALTER itself;
+  //   (2) pivot the unique index to (family_id, from_phone) whenever it isn't already that shape.
+  // Keying the pivot on the index SHAPE (via PRAGMA index_info), NOT on "the column was just added",
+  // makes it CONVERGE: even if a crash landed between (1) and (2) — leaving family_id present but the
+  // old (from_phone) index still in place — the next boot still re-pivots. The DROP is load-bearing
+  // because CREATE … IF NOT EXISTS no-ops on the index NAME, so the composite would never replace it.
+  const cols = db.prepare("PRAGMA table_info(conversations);").all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === "family_id")) db.exec(ADD_CONVERSATIONS_FAMILY_ID);
+  const idxCols = db
+    .prepare("PRAGMA index_info(conversations_one_pending_per_sender);")
+    .all() as Array<{ name: string }>;
+  const isComposite =
+    idxCols.length === 2 && idxCols[0]?.name === "family_id" && idxCols[1]?.name === "from_phone";
+  if (!isComposite) {
+    db.exec(DROP_CONVERSATIONS_INDEX);
+    db.exec(CREATE_CONVERSATIONS_INDEX);
+  }
 
   // INSERT OR REPLACE on the unique `from_phone`: opening a new thread atomically overwrites a prior
   // pending one (one open thread per sender). `status`/`created_at` fall to their column defaults;

@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   type ConversationPayload,
   cancelPayloadSchema,
@@ -7,6 +11,10 @@ import {
   editPayloadSchema,
 } from "../../src/db/conversation-store.ts";
 import { BULK_CANCEL_MAX } from "../../src/db/event-store.ts";
+
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
 
 const draft: ParsedEvent = {
   kind: "event",
@@ -26,6 +34,16 @@ const B = "972500000002";
 const EXPIRES_AT = "2026-06-20 12:30:00";
 const BEFORE = "2026-06-20 12:15:00";
 const AFTER = "2026-06-20 12:45:00";
+
+const tmpDirs: string[] = [];
+function tmpDbPath(): string {
+  const dir = mkdtempSync(join(tmpdir(), "homeos-conv-"));
+  tmpDirs.push(dir);
+  return join(dir, "test.db");
+}
+afterEach(() => {
+  for (const d of tmpDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 describe("ConversationStore", () => {
   it("create → getPending round-trips the pending row", () => {
@@ -165,5 +183,103 @@ describe("cancelPayloadSchema — #163 bulk-cancel (confirmAll + raised cap)", (
     const parsed = cancelPayloadSchema.safeParse(JSON.parse(row.payload_json));
     expect(parsed.success && parsed.data.confirmAll).toBe(true);
     expect(parsed.success && parsed.data.candidateIds).toHaveLength(6);
+  });
+});
+
+describe("#232 — family_id column + UNIQUE(family_id, from_phone)", () => {
+  it("create() writes family_id = 'default' (the column exists and backfills at N=1)", () => {
+    const store = createConversationStore(":memory:");
+    const row = store.create({ fromPhone: A, payload: clarifyPayload, expiresAt: EXPIRES_AT });
+    expect(row.family_id).toBe("default");
+  });
+
+  it("the composite key lets two families hold a pending thread for the SAME phone (no REPLACE collision)", () => {
+    const path = tmpDbPath();
+    createConversationStore(path); // builds the table + the composite (family_id, from_phone) index
+    // The store API only ever writes family_id='default'; reach past it with raw SQL to prove the
+    // constraint itself doesn't collapse two tenants — the corruption vector #232 closes pre-#229.
+    const raw = new DatabaseSync(path);
+    const ins = raw.prepare(
+      `INSERT OR REPLACE INTO conversations (family_id, from_phone, kind, payload_json, expires_at)
+       VALUES (?, ?, 'clarify', '{}', ?);`,
+    );
+    ins.run("default", A, EXPIRES_AT);
+    ins.run("family-2", A, EXPIRES_AT); // same phone, different family — must NOT replace the first
+    const rows = raw
+      .prepare("SELECT family_id FROM conversations WHERE from_phone = ? ORDER BY family_id;")
+      .all(A) as Array<{ family_id: string }>;
+    expect(rows.map((r) => r.family_id)).toEqual(["default", "family-2"]); // both coexist
+  });
+
+  it("migrates a PRE-#232 table: adds family_id (backfilled 'default') + pivots the index, idempotently", () => {
+    const path = tmpDbPath();
+    // Hand-build the OLD schema: no family_id, single-column unique index, one existing row.
+    const old = new DatabaseSync(path);
+    old.exec("PRAGMA journal_mode = WAL;");
+    old.exec(`CREATE TABLE conversations (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_phone   TEXT    NOT NULL,
+      kind         TEXT    NOT NULL,
+      payload_json TEXT    NOT NULL,
+      status       TEXT    NOT NULL DEFAULT 'pending',
+      expires_at   TEXT    NOT NULL,
+      created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );`);
+    old.exec(
+      "CREATE UNIQUE INDEX conversations_one_pending_per_sender ON conversations(from_phone);",
+    );
+    old
+      .prepare(
+        "INSERT INTO conversations (from_phone, kind, payload_json, expires_at) VALUES (?, 'clarify', '{}', ?);",
+      )
+      .run(A, EXPIRES_AT);
+
+    // Opening the store runs the migration.
+    const store = createConversationStore(path);
+    const probe = new DatabaseSync(path);
+
+    const cols = probe.prepare("PRAGMA table_info(conversations);").all() as Array<{
+      name: string;
+    }>;
+    expect(cols.some((c) => c.name === "family_id")).toBe(true);
+
+    const backfilled = probe
+      .prepare("SELECT family_id FROM conversations WHERE from_phone = ?;")
+      .get(A) as { family_id: string };
+    expect(backfilled.family_id).toBe("default"); // the pre-existing row is backfilled
+
+    const idxCols = probe
+      .prepare("PRAGMA index_info(conversations_one_pending_per_sender);")
+      .all() as Array<{ name: string }>;
+    expect(idxCols.map((c) => c.name)).toEqual(["family_id", "from_phone"]); // pivoted to composite
+
+    expect(store.getPending(A, BEFORE)).not.toBeNull(); // store still works on the migrated DB
+    expect(() => createConversationStore(path)).not.toThrow(); // re-running the migration is a no-op
+  });
+
+  it("self-heals a partial migration — family_id present but the index still single-column → re-pivots", () => {
+    const path = tmpDbPath();
+    // Simulate a crash BETWEEN add-column and the index pivot: column exists, old (from_phone) index.
+    const partial = new DatabaseSync(path);
+    partial.exec("PRAGMA journal_mode = WAL;");
+    partial.exec(`CREATE TABLE conversations (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      family_id    TEXT    NOT NULL DEFAULT 'default',
+      from_phone   TEXT    NOT NULL,
+      kind         TEXT    NOT NULL,
+      payload_json TEXT    NOT NULL,
+      status       TEXT    NOT NULL DEFAULT 'pending',
+      expires_at   TEXT    NOT NULL,
+      created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );`);
+    partial.exec(
+      "CREATE UNIQUE INDEX conversations_one_pending_per_sender ON conversations(from_phone);",
+    );
+
+    createConversationStore(path); // shape-keyed guard must re-pivot, not skip (column already present)
+    const idxCols = new DatabaseSync(path)
+      .prepare("PRAGMA index_info(conversations_one_pending_per_sender);")
+      .all() as Array<{ name: string }>;
+    expect(idxCols.map((c) => c.name)).toEqual(["family_id", "from_phone"]);
   });
 });
