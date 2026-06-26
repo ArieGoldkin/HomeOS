@@ -21,7 +21,7 @@ import {
   type GmailToolDeps,
   readGmailTool,
   searchEventsTool,
-} from "../../src/tools/tools.ts";
+} from "../../src/tools/index.ts";
 
 // Webhook HMAC is mandatory; integration posts are signed with this test key (named "key" to avoid
 // the repo's secret scanner). The same key is wired into createServer below.

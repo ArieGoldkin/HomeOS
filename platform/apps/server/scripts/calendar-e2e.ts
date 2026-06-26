@@ -14,7 +14,7 @@ import {
   extractEventsTool,
   pushSavedEventsToCalendar,
   readCalendarTool,
-} from "../src/tools/tools.ts";
+} from "../src/tools/index.ts";
 
 /**
  * Local end-to-end harness for the Calendar read sync (#18, chunk 1) — runs the FULL pipeline

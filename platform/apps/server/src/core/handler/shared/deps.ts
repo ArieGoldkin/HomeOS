@@ -5,7 +5,7 @@ import type { FamilyResolver } from "../../../db/family-resolver.ts";
 import type { InboundStore } from "../../../db/inbound-store.ts";
 import { FAMILY_ID } from "../../../db/schema.ts";
 import type { ParseMessage } from "../../../parsing/parser.ts";
-import type { CalendarToolDeps, GmailToolDeps } from "../../../tools/tools.ts";
+import type { CalendarToolDeps, GmailToolDeps } from "../../../tools/index.ts";
 import type { SendText } from "../../../whatsapp/client.ts";
 import type { Agent } from "../../agent.ts";
 

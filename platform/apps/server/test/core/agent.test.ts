@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { anthropicCallModel, createAgent, type ModelResponse } from "../../src/core/agent.ts";
 import { TransientError } from "../../src/core/errors.ts";
 import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
-import { extractEventsTool, searchEventsTool, type ToolContext } from "../../src/tools/tools.ts";
+import { extractEventsTool, searchEventsTool, type ToolContext } from "../../src/tools/index.ts";
 
 const sampleEvent: ParsedEvent = {
   kind: "event",

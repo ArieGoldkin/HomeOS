@@ -1,6 +1,6 @@
 import type { SavedEvent } from "../../../db/event-store.ts";
 import type { InboundMessage } from "../../../http/webhook.ts";
-import type { ClarifyResult } from "../../../tools/tools.ts";
+import type { ClarifyResult } from "../../../tools/index.ts";
 import type { AgentResult } from "../../agent.ts";
 import { familyOf, type HandlerDeps } from "./deps.ts";
 

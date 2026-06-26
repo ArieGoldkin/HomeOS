@@ -12,7 +12,7 @@ import type {
   ClarifyResult,
   GmailToolDeps,
   ToolContext,
-} from "../../../src/tools/tools.ts";
+} from "../../../src/tools/index.ts";
 
 export const allowlist = ["972501234567"];
 
