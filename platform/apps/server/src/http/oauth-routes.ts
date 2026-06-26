@@ -16,8 +16,8 @@ import {
   type GoogleOAuthClient,
   httpGoogleOAuthClient,
 } from "../google/oauth.ts";
+import { bearerMatches } from "./auth.ts";
 import { createRateLimiter, mismatchDelay, type RateLimiter } from "./rate-limit.ts";
-import { bearerMatches } from "./server.ts";
 
 /**
  * Google OAuth routes (#60) — connect / callback / disconnect. The routes file IS the orchestrator
