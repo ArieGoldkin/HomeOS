@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { eventStatusPatchSchema, type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
@@ -10,6 +10,7 @@ import type { InboundStore } from "../db/inbound-store.ts";
 // which doesn't exist until #226. The bot WRITE path — the chokepoint with no RLS backstop — is fully
 // resolved (db/family-resolver.ts); the browser path finishes threading when a real session lands.
 import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
+import { bearerMatches } from "./auth.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes.ts";
 import {
   extractMessages,
@@ -47,15 +48,6 @@ export interface ServerDeps {
    *  build / tests). When set, the SPA is served same-origin so the dashboard shares the API's origin. */
   webDist?: string;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
-}
-
-/** Constant-time bearer check (avoids leaking the token via timing). Reused by the OAuth routes. */
-export function bearerMatches(header: string | undefined, token: string): boolean {
-  const prefix = "Bearer ";
-  if (!header?.startsWith(prefix)) return false;
-  const got = Buffer.from(header.slice(prefix.length));
-  const want = Buffer.from(token);
-  return got.length === want.length && timingSafeEqual(got, want);
 }
 
 /** #135 — how many recent inbound rows the GET /messages feed returns (newest-first). */
