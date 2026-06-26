@@ -52,6 +52,13 @@ export function makeDeps(
     conversations?: ConversationStore;
     /** #228: wire a phone-binding store so the pre-allowlist binding branch engages (omitted ⇒ inert). */
     bindings?: BindingStore;
+    /**
+     * #229: when defined, wires deps.familyResolver so handleInbound resolves the family after the
+     * allowlist gate. A string ⇒ resolveFamilyByPhone returns it (the resolved family threaded downstream);
+     * `null` ⇒ the phone is unbound (handleInbound logs + skips without writing). Omitted ⇒ no resolver
+     * wired, so familyOf degrades to FAMILY_ID — the exact pre-#229 behavior.
+     */
+    familyResolves?: string | null;
     /** #84: when set, agent.run (the main path) returns this clarify arm instead of saved rows. */
     clarifyResult?: ClarifyResult;
     /** #84: when defined, wires deps.parse (the clarify-resume re-parse seam) to return this. */
@@ -188,6 +195,14 @@ export function makeDeps(
     autoPushCalendar: opts.autoPush,
     ...(opts.conversations ? { conversations: opts.conversations } : {}),
     ...(opts.bindings ? { bindings: opts.bindings } : {}),
+    ...(opts.familyResolves !== undefined
+      ? {
+          familyResolver: {
+            resolveFamilyByPhone: vi.fn((_from: string) => opts.familyResolves ?? null),
+            resolveFamilyByUser: vi.fn((_uid: string) => opts.familyResolves ?? null),
+          },
+        }
+      : {}),
     ...(opts.conversationTtlMs !== undefined ? { conversationTtlMs: opts.conversationTtlMs } : {}),
     ...(opts.parseThrows !== undefined
       ? {

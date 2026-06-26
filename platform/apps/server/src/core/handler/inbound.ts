@@ -1,6 +1,6 @@
 import type { InboundOutcome } from "@homeos/shared";
 import type { SavedEvent } from "../../db/event-store.ts";
-import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
+import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import type { AgentResult } from "../agent.ts";
@@ -25,6 +25,7 @@ import {
   cancelReply,
   clarifyOf,
   EDIT_REF_RE,
+  familyOf,
   formatAlready,
   formatConfirm,
   type HandlerDeps,
@@ -100,6 +101,23 @@ export async function handleInbound(
     await deps.sendText(msg.from, REFUSAL_HE);
     return "refused";
   }
+
+  // 🔑 #229 — resolve the family ONCE, right after the allowlist gate and BEFORE any write/model call. The
+  // resolved id threads down on a per-request deps clone (`rdeps`); every downstream site reads it via
+  // `familyOf`/the `family` local. This is the cross-tenant chokepoint with NO RLS backstop: an
+  // allowlisted-but-UNBOUND phone (resolver wired AND returns null) is a bootstrap/config error → log and
+  // SKIP without writing, NEVER fall through to FAMILY_ID="default". No resolver wired (app-only dev / unit
+  // tests) ⇒ `familyId` stays unset ⇒ `familyOf` degrades to FAMILY_ID, i.e. the exact prior behavior.
+  let rdeps = deps;
+  if (deps.familyResolver) {
+    const resolved = deps.familyResolver.resolveFamilyByPhone(msg.from);
+    if (resolved === null) {
+      log("allowlisted sender has no family binding — skipping (no write)", { from: msg.from });
+      return "refused";
+    }
+    rdeps = { ...deps, familyId: resolved };
+  }
+  const family = familyOf(rdeps);
 
   // Read the clock ONCE for the whole handler (#87/F4): the G16 rate gate, the date anchor, and the
   // resume lookup all reuse it — no split-brain, no redundant Date() construction.
@@ -180,7 +198,7 @@ export async function handleInbound(
     }
     // #86 CORRECTION: a terse "לא ב-/בשעה/במיקום …" corrects the held draft IN PLACE (G21).
     if (CORRECTION_RE.test(text)) {
-      await applyCorrection(deps, msg, pending, today);
+      await applyCorrection(rdeps, msg, pending, today);
       return "edited";
     }
     // #207 — a fresh VERB-LED command (cancel/edit) takes precedence over the open thread: abort it and
@@ -206,14 +224,16 @@ export async function handleInbound(
         { from: msg.from },
       );
     } else {
-      await handleResume(deps, msg, pending);
+      await handleResume(rdeps, msg, pending);
       return "resumed";
     }
   }
 
   // Undo: a bare "ביטול" removes the sender's last message's events — caught before parse so it's
   // never sent to Claude. The confirm (with the resolved Hebrew date) is what makes a misparse
-  // catchable; this is the recovery.
+  // catchable; this is the recovery. #229: scoped by SENDER phone (not the resolved family) — a phone
+  // belongs to exactly one family, so this is already family-isolated; it leans on the same
+  // one-phone-one-family invariant the resolver does, not on the threaded `family`.
   if (text === CANCEL_TRIGGER) {
     const removed = deps.events.deleteLastFromSender(msg.from);
     log("cancel", { from: msg.from, removed });
@@ -226,7 +246,7 @@ export async function handleInbound(
   // G4). Opt-in: with no Google bundle or no stored credential we reply "connect first" and make ZERO
   // Gmail/parse/model calls. The command already counted against the G16 ceiling above.
   if (text === SYNC_MAIL_TRIGGER) {
-    if (!deps.google?.credentials.get(FAMILY_ID)) {
+    if (!deps.google?.credentials.get(family)) {
       log("sync mail — not connected", { from: msg.from });
       await deps.sendText(msg.from, NOT_CONNECTED_HE);
       return;
@@ -236,7 +256,7 @@ export async function handleInbound(
       from: msg.from,
       waMessageId: msg.id,
       senderName: deps.members?.[msg.from],
-      familyId: FAMILY_ID,
+      familyId: family,
       events: deps.events,
       google: deps.google, // the G8 gate — read_gmail is inert unless this is set (sync path only)
     });
@@ -247,7 +267,7 @@ export async function handleInbound(
   // board. Same shape as the mail sync — deterministic route (sibling to ביטול), forces `read_calendar`
   // on turn 0 (keeps G4), opt-in: no Google bundle / no stored credential ⇒ "connect first", ZERO calls.
   if (text === SYNC_CAL_TRIGGER) {
-    if (!deps.calendar?.credentials.get(FAMILY_ID)) {
+    if (!deps.calendar?.credentials.get(family)) {
       log("sync calendar — not connected", { from: msg.from });
       await deps.sendText(msg.from, CAL_NOT_CONNECTED_HE);
       return;
@@ -257,7 +277,7 @@ export async function handleInbound(
       from: msg.from,
       waMessageId: msg.id,
       senderName: deps.members?.[msg.from],
-      familyId: FAMILY_ID,
+      familyId: family,
       events: deps.events,
       calendar: deps.calendar, // the G8 gate — read_calendar is inert unless this is set (sync path only)
     });
@@ -276,7 +296,7 @@ export async function handleInbound(
   // disambiguation thread (never auto-pick — the board is shared, G20). A forward that merely CONTAINS
   // "בטל…" deletes nothing unless a real board event matches (state-not-content, G22).
   if (CANCEL_REF_RE.test(command)) {
-    await routeCancelByRef(deps, msg, command, today);
+    await routeCancelByRef(rdeps, msg, command, today);
     return "cancelled";
   }
 
@@ -284,7 +304,7 @@ export async function handleInbound(
   // recognized field delta AND a specific reference; 0 (לא מצאתי) | 1 (apply, refusing a synced row) |
   // N>1 (numbered kind='edit' thread holding the patch). Same family/state-not-content guards as cancel.
   if (EDIT_REF_RE.test(command)) {
-    await routeEditByRef(deps, msg, command, today);
+    await routeEditByRef(rdeps, msg, command, today);
     return "edited";
   }
 
@@ -301,7 +321,7 @@ export async function handleInbound(
       from: msg.from,
       waMessageId: msg.id,
       senderName: deps.members?.[msg.from],
-      familyId: FAMILY_ID,
+      familyId: family,
       events: deps.events,
       duplicates,
     });
@@ -352,7 +372,7 @@ export async function handleInbound(
   // The board is the source of truth; a push failure is logged, never fails the confirm or replays the
   // row. App-only / disabled ⇒ no-op; only board-originated rows are written (the push filters them).
   if (deps.autoPushCalendar && deps.calendar) {
-    const { pushed } = await pushSavedEventsToCalendar(saved, deps.calendar, FAMILY_ID, log);
+    const { pushed } = await pushSavedEventsToCalendar(saved, deps.calendar, family, log);
     if (pushed > 0) log("auto-pushed to calendar", { id: msg.id, pushed });
   }
 

@@ -1,10 +1,10 @@
 import { parsedEventSchema, sanitizeUserText } from "@homeos/shared";
 import { clarifyPayloadSchema } from "../../db/conversation-store.ts";
 import type { EventPatch } from "../../db/event-store.ts";
-import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
+import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
-import { formatConfirm, type HandlerDeps, REPHRASE_HE, safeJsonParse } from "./shared.ts";
+import { familyOf, formatConfirm, type HandlerDeps, REPHRASE_HE, safeJsonParse } from "./shared.ts";
 
 /**
  * #86 — extract the NEW field value from a terse correction ("לא ב-28, ב-21" → day 21; "לא בשעה 4:00" →
@@ -58,7 +58,7 @@ export async function applyCorrection(
   log("correction applied", { from: msg.from, id: saved.id });
   await deps.sendText(msg.from, formatConfirm([saved]));
   if (deps.autoPushCalendar && deps.calendar) {
-    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, FAMILY_ID, log);
+    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, familyOf(deps), log);
     if (pushed > 0) log("auto-pushed correction", { id: msg.id, pushed });
   }
 }

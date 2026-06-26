@@ -1,7 +1,7 @@
 import { sanitizeUserText } from "@homeos/shared";
 import { editPayloadSchema } from "../../db/conversation-store.ts";
 import type { EventPatch, SavedEvent } from "../../db/event-store.ts";
-import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
+import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import { extractCancelRef, parseSelection } from "./cancel.ts";
@@ -15,6 +15,7 @@ import {
   EDIT_TIME_RE,
   EDIT_WHICH_HE,
   editConfirmPrompt,
+  familyOf,
   formatWhen,
   type HandlerDeps,
   isAffirmative,
@@ -65,13 +66,14 @@ export async function applyPatchToId(
   patch: EventPatch,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
-  const updated = deps.events.updateEvent(id, patch, FAMILY_ID);
+  const family = familyOf(deps);
+  const updated = deps.events.updateEvent(id, patch, family);
   if (!updated) {
     await deps.sendText(msg.from, REPHRASE_HE); // synced row / invalid merge → no write happened
     return;
   }
   if (deps.calendar) {
-    await pushSavedEventsToCalendar([updated], deps.calendar, FAMILY_ID, log); // G25 best-effort
+    await pushSavedEventsToCalendar([updated], deps.calendar, family, log); // G25 best-effort
   }
   log("edit applied", { from: msg.from, id: updated.id });
   await deps.sendText(msg.from, `עודכן ✓\n${updated.title_he} · ${formatWhen(updated)}`);
@@ -94,13 +96,14 @@ async function applyPatchToMany(
     return;
   }
   const log = deps.log ?? (() => {});
+  const family = familyOf(deps);
   const updated: SavedEvent[] = [];
   for (const id of ids) {
-    const row = deps.events.updateEvent(id, patch, FAMILY_ID);
+    const row = deps.events.updateEvent(id, patch, family);
     if (row) {
       updated.push(row);
       if (deps.calendar) {
-        await pushSavedEventsToCalendar([row], deps.calendar, FAMILY_ID, log); // G25 best-effort
+        await pushSavedEventsToCalendar([row], deps.calendar, family, log); // G25 best-effort
       }
     }
   }
@@ -192,7 +195,7 @@ export async function routeEditByRef(
     await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
     return;
   }
-  const candidates = deps.events.findEventsByRef(FAMILY_ID, edit.ref);
+  const candidates = deps.events.findEventsByRef(familyOf(deps), edit.ref);
   // Deterministic exact-match path (Option B — UNCHANGED): 1 → apply immediately; N>1 → numbered thread.
   if (candidates.length === 1) {
     await applyEdit(deps, msg, candidates[0]!, edit.patch);

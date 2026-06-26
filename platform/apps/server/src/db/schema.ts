@@ -151,9 +151,13 @@ export interface CredentialRow {
 }
 
 /**
- * The single family id used everywhere until Phase 8. A constant, NOT a resolved identity — named
- * explicitly so OG9 ("per-family isolation") isn't hand-wavy. Phase 8 swaps it for a real resolver;
- * the `(family_id, provider)` PK and `WHERE family_id = ?` queries are already isolation-ready.
+ * Default / fallback family id for E2E scripts and tests; production resolves the family per request via
+ * the {@link createFamilyResolver | FamilyResolver} (#229) — `from_phone → family_id` on the bot write
+ * path, `user_id → family_id` on the browser read path. This is NO LONGER read on a production handler
+ * path: the bot threads the resolved id from `handleInbound`, and the constant survives only as the
+ * `familyOf` test/dev fallback, the composition-root seed/digest scope, and the E2E harnesses (which have
+ * no session/phone to resolve from). The `(family_id, …)` PKs and `WHERE family_id = ?` queries are
+ * isolation-ready; the browser/OAuth call sites finish threading when a real session lands (#226).
  */
 export const FAMILY_ID = "default";
 
