@@ -8,6 +8,6 @@
 //   - parseSelection — exported so the #161 multi-select disambiguation parser (shared by cancel + edit)
 //     is unit-tested
 //   - HandlerDeps / ProcessDeps — the dependency contracts callers construct
-export { extractBulkCancel, extractCancelRef, parseSelection } from "./cancel.ts";
+export { extractBulkCancel, extractCancelRef, parseSelection } from "./cancel/index.ts";
 export { handleInbound, processInbound } from "./inbound.ts";
 export type { HandlerDeps, ProcessDeps } from "./shared/index.ts";

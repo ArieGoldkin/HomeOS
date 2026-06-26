@@ -7,7 +7,7 @@ import type { AgentResult } from "../agent.ts";
 import { isAllowed } from "../allowlist.ts";
 import { TransientError } from "../errors.ts";
 import { jerusalemDayStartSqlite, sqliteUtc } from "../time.ts";
-import { routeCancelByRef } from "./cancel.ts";
+import { routeCancelByRef } from "./cancel/index.ts";
 import { openClarifyThread } from "./clarify.ts";
 import { applyCorrection } from "./correction.ts";
 import { routeEditByRef } from "./edit.ts";
