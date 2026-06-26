@@ -254,6 +254,31 @@ export interface FamilyPhoneRow {
 }
 
 /**
+ * Ephemeral phone-binding claim (#228) — sibling to `oauth_state`: a single-use, TTL'd, family-bound
+ * `DELETE … RETURNING` primitive. A `HOME-XXXXX` code is minted from the authenticated browser session
+ * (`issueBinding`), the user echoes it to the bot over WhatsApp, and `matchBinding` consumes it to write
+ * the DURABLE `family_phones` row. The web-session code IS the OTP; the WhatsApp echo IS the proof — no
+ * restricted WhatsApp OTP template needed. `code` is the PK (short + human-typable, unguessable for a
+ * 10-min TTL); `expires_at` is a SQLite-UTC string from the injected clock, checked at READ time so a
+ * stale claim never binds. Single-use consumption + TTL + per-family scope bound the brute-force surface.
+ */
+export const CREATE_PHONE_BINDING_TABLE = `
+  CREATE TABLE IF NOT EXISTS phone_binding (
+    code       TEXT PRIMARY KEY,
+    family_id  TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+export interface PhoneBindingRow {
+  code: string;
+  family_id: string;
+  expires_at: string;
+  created_at: string;
+}
+
+/**
  * Bounded multi-turn conversation thread (#83, Milestone #8) — the "ask → wait → resume" primitive
  * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 8 columns: the
  * per-kind variant lives in one `payload_json` blob (NOT typed columns), and `status` is pinned to

@@ -2,6 +2,7 @@ import type { ParsedEvent } from "@homeos/shared";
 import { vi } from "vitest";
 import type { AgentResult } from "../../../src/core/agent.ts";
 import type { HandlerDeps } from "../../../src/core/handler/index.ts";
+import type { BindingStore } from "../../../src/db/binding-store.ts";
 import type { ConversationStore } from "../../../src/db/conversation-store.ts";
 import type { EventPatch, SavedEvent } from "../../../src/db/event-store.ts";
 import type { InboundStore } from "../../../src/db/inbound-store.ts";
@@ -49,6 +50,8 @@ export function makeDeps(
     autoPush?: boolean;
     /** #83: wire an open-thread store so the RESUME branch engages (omitted ⇒ branch inert). */
     conversations?: ConversationStore;
+    /** #228: wire a phone-binding store so the pre-allowlist binding branch engages (omitted ⇒ inert). */
+    bindings?: BindingStore;
     /** #84: when set, agent.run (the main path) returns this clarify arm instead of saved rows. */
     clarifyResult?: ClarifyResult;
     /** #84: when defined, wires deps.parse (the clarify-resume re-parse seam) to return this. */
@@ -184,6 +187,7 @@ export function makeDeps(
     calendar,
     autoPushCalendar: opts.autoPush,
     ...(opts.conversations ? { conversations: opts.conversations } : {}),
+    ...(opts.bindings ? { bindings: opts.bindings } : {}),
     ...(opts.conversationTtlMs !== undefined ? { conversationTtlMs: opts.conversationTtlMs } : {}),
     ...(opts.parseThrows !== undefined
       ? {
