@@ -10,7 +10,7 @@ import {
   type ConversationStore,
   createConversationStore,
 } from "../../../src/db/conversation-store.ts";
-import type { SavedEvent } from "../../../src/db/event-store.ts";
+import type { SavedEvent } from "../../../src/db/event-store/index.ts";
 import { makeDeps, sampleEvent, textMsg } from "./_setup.ts";
 
 // #85 (Milestone #8): cancel by reference — a deterministic route (no model call) with 0/1/N behavior

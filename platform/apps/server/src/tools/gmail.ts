@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { SavedEvent } from "../db/event-store.ts";
+import type { SavedEvent } from "../db/event-store/index.ts";
 import { getValidAccessToken } from "../google/oauth.ts";
 import type { ParseMessage } from "../parsing/parser.ts";
 import type { Tool } from "./context.ts";

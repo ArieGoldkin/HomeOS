@@ -10,7 +10,7 @@ import {
   createConversationStore,
   editPayloadSchema,
 } from "../../src/db/conversation-store.ts";
-import { BULK_CANCEL_MAX } from "../../src/db/event-store.ts";
+import { BULK_CANCEL_MAX } from "../../src/db/event-store/index.ts";
 
 const { DatabaseSync } = createRequire(import.meta.url)(
   "node:sqlite",

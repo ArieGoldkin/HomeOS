@@ -1,7 +1,7 @@
 import { type ParsedEvent, parsedEventSchema, sanitizeUserText } from "@homeos/shared";
 import { z } from "zod/v4";
 import { addDaysIso, jerusalemDayStartIso, jerusalemWallClock } from "../core/time.ts";
-import type { SavedEvent } from "../db/event-store.ts";
+import type { SavedEvent } from "../db/event-store/index.ts";
 import type { CalendarEvent } from "../google/calendar.ts";
 import { getValidAccessToken } from "../google/oauth.ts";
 import type { Tool } from "./context.ts";

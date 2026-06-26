@@ -1,6 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { addWallClockHours } from "../core/time.ts";
-import type { SavedEvent } from "../db/event-store.ts";
+import type { SavedEvent } from "../db/event-store/index.ts";
 import type { CalendarWriteEvent, CalendarWriteTime } from "../google/calendar.ts";
 import { getValidAccessToken } from "../google/oauth.ts";
 import type { CalendarToolDeps } from "./context.ts";

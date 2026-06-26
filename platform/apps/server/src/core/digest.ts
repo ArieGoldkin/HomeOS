@@ -1,4 +1,4 @@
-import type { EventStore, SavedEvent } from "../db/event-store.ts";
+import type { EventStore, SavedEvent } from "../db/event-store/index.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { SendText } from "../whatsapp/client.ts";
 import { scheduleDaily } from "./scheduler.ts";

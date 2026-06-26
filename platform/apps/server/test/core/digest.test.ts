@@ -5,7 +5,7 @@ import {
   msUntilNextRun,
   runDigestOnce,
 } from "../../src/core/digest.ts";
-import type { SavedEvent } from "../../src/db/event-store.ts";
+import type { SavedEvent } from "../../src/db/event-store/index.ts";
 
 const reminder = (over: Partial<SavedEvent> = {}): SavedEvent => ({
   id: 1,
