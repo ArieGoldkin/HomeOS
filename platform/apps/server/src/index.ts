@@ -12,7 +12,7 @@ import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
 import { createBindingStore } from "./db/binding-store.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
-import { createEventStore } from "./db/event-store.ts";
+import { createEventStore } from "./db/event-store/index.ts";
 import { createFamilyResolver } from "./db/family-resolver.ts";
 import { createFamilyStore } from "./db/family-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";

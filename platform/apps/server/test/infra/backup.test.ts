@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEventStore } from "../../src/db/event-store.ts";
+import { createEventStore } from "../../src/db/event-store/index.ts";
 import {
   backupDatabase,
   DEFAULT_RETENTION_DAYS,

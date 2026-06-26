@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { handleInbound } from "../../../src/core/handler/index.ts";
 import { createConversationStore } from "../../../src/db/conversation-store.ts";
-import type { SavedEvent } from "../../../src/db/event-store.ts";
+import type { SavedEvent } from "../../../src/db/event-store/index.ts";
 import { makeDeps, sampleEvent, textMsg } from "./_setup.ts";
 
 // #86 (Milestone #8): edit in place + the pending-context correction (THE live 2-reminder bug fix).

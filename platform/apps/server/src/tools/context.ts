@@ -1,6 +1,6 @@
 import type { ClarifyReason, ParsedEvent } from "@homeos/shared";
 import type { ZodType } from "zod/v4";
-import type { EventStore, SavedEvent } from "../db/event-store.ts";
+import type { EventStore, SavedEvent } from "../db/event-store/index.ts";
 import type { CalendarClient } from "../google/calendar.ts";
 import type { GmailClient } from "../google/gmail.ts";
 import type { GetTokenDeps } from "../google/oauth.ts";

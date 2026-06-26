@@ -3,7 +3,7 @@ import { eventStatusPatchSchema, type InboundMessageDTO, parsedEventSchema } fro
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
-import type { EventStore } from "../db/event-store.ts";
+import type { EventStore } from "../db/event-store/index.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 // #229 — the web read/write surface (served DTO family_id, setEventStatus) still uses the single-family
 // FAMILY_ID. DEFERRED with the OAuth path (see oauth-routes.ts): it resolves via the session identity,

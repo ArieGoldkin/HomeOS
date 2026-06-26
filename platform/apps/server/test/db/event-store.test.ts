@@ -1,6 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it } from "vitest";
-import { BULK_CANCEL_MAX, createEventStore } from "../../src/db/event-store.ts";
+import { BULK_CANCEL_MAX, createEventStore } from "../../src/db/event-store/index.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 
 const event: ParsedEvent = {

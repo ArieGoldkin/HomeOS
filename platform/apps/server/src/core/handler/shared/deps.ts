@@ -1,6 +1,6 @@
 import type { BindingStore } from "../../../db/binding-store.ts";
 import type { ConversationStore } from "../../../db/conversation-store.ts";
-import type { EventStore } from "../../../db/event-store.ts";
+import type { EventStore } from "../../../db/event-store/index.ts";
 import type { FamilyResolver } from "../../../db/family-resolver.ts";
 import type { InboundStore } from "../../../db/inbound-store.ts";
 import { FAMILY_ID } from "../../../db/schema.ts";

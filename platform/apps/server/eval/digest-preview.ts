@@ -7,7 +7,7 @@
  */
 import "dotenv/config";
 import { runDigestOnce } from "../src/core/digest.ts";
-import { createEventStore } from "../src/db/event-store.ts";
+import { createEventStore } from "../src/db/event-store/index.ts";
 import { createInboundStore } from "../src/db/inbound-store.ts";
 import { FAMILY_ID } from "../src/db/schema.ts";
 

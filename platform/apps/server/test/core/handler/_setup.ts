@@ -4,7 +4,7 @@ import type { AgentResult } from "../../../src/core/agent.ts";
 import type { HandlerDeps } from "../../../src/core/handler/index.ts";
 import type { BindingStore } from "../../../src/db/binding-store.ts";
 import type { ConversationStore } from "../../../src/db/conversation-store.ts";
-import type { EventPatch, SavedEvent } from "../../../src/db/event-store.ts";
+import type { EventPatch, SavedEvent } from "../../../src/db/event-store/index.ts";
 import type { InboundStore } from "../../../src/db/inbound-store.ts";
 import type { InboundMessage } from "../../../src/http/webhook.ts";
 import type {

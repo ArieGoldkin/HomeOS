@@ -1,5 +1,5 @@
 import type { InboundOutcome } from "@homeos/shared";
-import type { SavedEvent } from "../../db/event-store.ts";
+import type { SavedEvent } from "../../db/event-store/index.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/index.ts";

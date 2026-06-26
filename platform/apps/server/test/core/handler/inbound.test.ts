@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TransientError } from "../../../src/core/errors.ts";
 import { handleInbound } from "../../../src/core/handler/index.ts";
 import { createConversationStore } from "../../../src/db/conversation-store.ts";
-import type { SavedEvent } from "../../../src/db/event-store.ts";
+import type { SavedEvent } from "../../../src/db/event-store/index.ts";
 import type { InboundMessage } from "../../../src/http/webhook.ts";
 import { makeDeps, sampleEvent, sampleSaved, textMsg } from "./_setup.ts";
 

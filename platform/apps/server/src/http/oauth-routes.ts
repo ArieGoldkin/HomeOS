@@ -3,7 +3,7 @@ import type { Context, Hono } from "hono";
 import type { GoogleOAuthSettings } from "../config.ts";
 import { sqliteUtc } from "../core/time.ts";
 import { type CredentialStore, createCredentialStore } from "../db/credential-store.ts";
-import type { EventStore } from "../db/event-store.ts";
+import type { EventStore } from "../db/event-store/index.ts";
 // #229 — the browser/OAuth path still reads the single-family FAMILY_ID below. DEFERRED on purpose: it
 // resolves via `resolveFamilyByUser(session.uid)`, but no real session identity exists until #226 (Supabase
 // login). The resolver method is built + tested now (db/family-resolver.ts); these call sites finish

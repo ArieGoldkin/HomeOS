@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { clarifyReasonSchema, type ParsedEvent, parsedEventSchema } from "@homeos/shared";
 import { z } from "zod/v4";
-import { BULK_CANCEL_MAX, type EventPatch } from "./event-store.ts";
+import { BULK_CANCEL_MAX, type EventPatch } from "./event-store/index.ts";
 import {
   ADD_CONVERSATIONS_FAMILY_ID,
   type ConversationRow,

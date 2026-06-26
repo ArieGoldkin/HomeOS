@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig } from "../src/config.ts";
 import { anthropicCallModel, createAgent } from "../src/core/agent.ts";
 import { handleInbound } from "../src/core/handler.ts";
-import { createEventStore } from "../src/db/event-store.ts";
+import { createEventStore } from "../src/db/event-store/index.ts";
 import { FAMILY_ID } from "../src/db/schema.ts";
 import { httpGmailClient } from "../src/google/gmail.ts";
 import { buildGoogleDeps } from "../src/http/oauth-routes.ts";

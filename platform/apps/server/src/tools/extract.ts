@@ -1,6 +1,6 @@
 import type { ClarifyReason } from "@homeos/shared";
 import { z } from "zod/v4";
-import type { SavedEvent } from "../db/event-store.ts";
+import type { SavedEvent } from "../db/event-store/index.ts";
 import type { ParseMessage } from "../parsing/parser.ts";
 import type { Tool } from "./context.ts";
 import { MAX_TOOL_TEXT } from "./limits.ts";

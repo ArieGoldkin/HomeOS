@@ -1,4 +1,4 @@
-import type { SavedEvent } from "../../../db/event-store.ts";
+import type { SavedEvent } from "../../../db/event-store/index.ts";
 import type { InboundMessage } from "../../../http/webhook.ts";
 import type { ClarifyResult } from "../../../tools/index.ts";
 import type { AgentResult } from "../../agent.ts";

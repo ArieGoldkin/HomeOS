@@ -2,7 +2,7 @@ import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod/v4";
 import { TransientError } from "../../src/core/errors.ts";
-import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store.ts";
+import type { EventMeta, EventStore, SavedEvent } from "../../src/db/event-store/index.ts";
 import type { CalendarEvent, CalendarWriteEvent } from "../../src/google/calendar.ts";
 import {
   buildGmailQuery,

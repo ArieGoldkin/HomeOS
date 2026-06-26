@@ -8,7 +8,7 @@ import {
   type ConversationStore,
   createConversationStore,
 } from "../../src/db/conversation-store.ts";
-import { createEventStore } from "../../src/db/event-store.ts";
+import { createEventStore } from "../../src/db/event-store/index.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import type { CalendarClient } from "../../src/google/calendar.ts";
 import type { GoogleOAuthClient } from "../../src/google/oauth.ts";

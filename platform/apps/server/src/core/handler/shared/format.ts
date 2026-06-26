@@ -1,5 +1,5 @@
 import type { ParsedEvent } from "@homeos/shared";
-import type { SavedEvent } from "../../../db/event-store.ts";
+import type { SavedEvent } from "../../../db/event-store/index.ts";
 import { ALREADY_HE, CANCEL_NONE_HE } from "./messages.ts";
 
 const hebrewDate = new Intl.DateTimeFormat("he-IL", {
