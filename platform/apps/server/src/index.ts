@@ -13,6 +13,7 @@ import { sqliteUtc } from "./core/time.ts";
 import { createBindingStore } from "./db/binding-store.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store.ts";
+import { createFamilyResolver } from "./db/family-resolver.ts";
 import { createFamilyStore } from "./db/family-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
@@ -58,20 +59,33 @@ const inbound = createInboundStore(config.dbPath);
 const conversations = createConversationStore(config.dbPath);
 // 👨‍👩‍👧 Identity spine (#227, milestone #13): stand up families/family_members/family_phones and
 // idempotently seed our one family on boot. The return is discarded — this is a seed-only side effect;
-// the phone→family resolver (#229) is the first real reader (it will retain the handle). Members come
+// the phone→family resolver (#229) is the first real reader (it opens its own handle below). Members come
 // from the existing config.members (#14 phone:name) map, keyed on the UNIQUE phone — NOT the display
 // name, so two members sharing a name can't collapse under the (family_id, user_id) PK; the whole
 // `user_id` is a PLACEHOLDER until Supabase login (#225) supplies the real auth.uid(). Seeding is
 // first-wins (INSERT OR IGNORE), so the owner/member role freezes at first boot and later MEMBERS drift
-// isn't reconciled here — intentional for this placeholder spine. family_phones is seeded with NOTHING
-// — bindings are earned through the wa.me/OTP ceremony (#228), never hardcoded.
+// isn't reconciled here — intentional for this placeholder spine.
+//
+// 🔑 #229 N=1 BOOTSTRAP: seed family_phones from the allowlist so every already-trusted family number
+// RESOLVES via FamilyResolver from day one — the live bot keeps working before the wa.me/OTP ceremony's
+// web-half (the issue-code card) lands with #226. This is exactly the "commented dogfood bootstrap" the
+// FamilyStore seed reserves `phones` for: the honest binding path is still the ceremony (#228), which
+// coexists here via INSERT OR IGNORE (first-wins on the (family_id, from_phone) PK). `from_phone` is
+// stored digit-normalized by the store, matching the resolver's read-side `normalizePhone`. A SECOND
+// family never gets auto-seeded — it earns its bindings through the ceremony, never from a config list.
+const bootVerifiedAt = sqliteUtc(new Date());
 createFamilyStore(config.dbPath, {
   family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
   members: Object.keys(config.members).map((phone, i) => ({
     userId: `placeholder:${phone}`,
     role: i === 0 ? "owner" : "member",
   })),
+  phones: config.allowlist.map((fromPhone) => ({ fromPhone, verifiedAt: bootVerifiedAt })),
 });
+// 🔑 #229 — the phone→family resolver (the security chokepoint): its own connection on the same DB file,
+// reading the family_phones rows seeded above (and, later, written by the #228 ceremony). Injected into the
+// inbound handler, which resolves `from_phone → family_id` ONCE after the allowlist gate and threads it down.
+const familyResolver = createFamilyResolver(config.dbPath);
 // 🔗 Phone-binding ceremony store (#228): its own connection on the same DB file; the constructor creates
 // phone_binding (+ ensures family_phones). Wired into the inbound handler so a `HOME-XXXXX` code binds the
 // sender's number to a family BEFORE the allowlist gate. The session-gated issue-code endpoint + web card
@@ -150,6 +164,7 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     inbound,
     conversations,
     bindings, // #228: pre-allowlist wa.me/OTP binding branch
+    familyResolver, // #229: from_phone → family_id, resolved once after the allowlist gate
     conversationTtlMs: config.conversationTtlMs, // #87/G24: open-thread TTL (env CONVERSATION_TTL_MIN)
     parse, // #84: the non-persisting re-parse seam a clarify RESUME uses to complete a date answer
     members: config.members,

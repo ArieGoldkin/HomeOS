@@ -5,6 +5,10 @@ import { Hono } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
+// #229 — the web read/write surface (served DTO family_id, setEventStatus) still uses the single-family
+// FAMILY_ID. DEFERRED with the OAuth path (see oauth-routes.ts): it resolves via the session identity,
+// which doesn't exist until #226. The bot WRITE path — the chokepoint with no RLS backstop — is fully
+// resolved (db/family-resolver.ts); the browser path finishes threading when a real session lands.
 import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes.ts";
 import {

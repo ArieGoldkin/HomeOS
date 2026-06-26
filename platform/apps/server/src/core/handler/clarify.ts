@@ -1,11 +1,12 @@
 import { type ParsedEvent, parsedEventSchema, sanitizeUserText } from "@homeos/shared";
 import { clarifyPayloadSchema } from "../../db/conversation-store.ts";
-import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
+import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { type ClarifyResult, pushSavedEventsToCalendar } from "../../tools/tools.ts";
 import {
   CLARIFY_QUESTIONS,
   conversationExpiresAt,
+  familyOf,
   formatConfirm,
   type HandlerDeps,
   jerusalemToday,
@@ -84,7 +85,7 @@ export async function resumeClarify(
 
   // Auto-push to Calendar — the same best-effort follower as the main forward path (#18 chunk 2).
   if (deps.autoPushCalendar && deps.calendar) {
-    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, FAMILY_ID, log);
+    const { pushed } = await pushSavedEventsToCalendar([saved], deps.calendar, familyOf(deps), log);
     if (pushed > 0) log("auto-pushed clarify resume to calendar", { id: msg.id, pushed });
   }
 }

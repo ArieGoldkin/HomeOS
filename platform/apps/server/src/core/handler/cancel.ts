@@ -1,6 +1,6 @@
 import { cancelPayloadSchema } from "../../db/conversation-store.ts";
 import type { SavedEvent } from "../../db/event-store.ts";
-import { type ConversationRow, FAMILY_ID } from "../../db/schema.ts";
+import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { deleteFromCalendar } from "../../tools/tools.ts";
 import {
@@ -14,6 +14,7 @@ import {
   cancelConfirmPrompt,
   cancelReply,
   conversationExpiresAt,
+  familyOf,
   formatWhen,
   type HandlerDeps,
   HEBREW_WEEKDAYS,
@@ -122,9 +123,10 @@ export async function cancelOne(
   eventId: number,
 ): Promise<void> {
   const log = deps.log ?? (() => {});
-  const removed = deps.events.deleteById(eventId, FAMILY_ID);
+  const family = familyOf(deps);
+  const removed = deps.events.deleteById(eventId, family);
   if (removed > 0 && deps.calendar) {
-    await deleteFromCalendar(eventId, deps.calendar, FAMILY_ID, log);
+    await deleteFromCalendar(eventId, deps.calendar, family, log);
   }
   log("cancel-by-ref delete", { from: msg.from, eventId, removed });
   await deps.sendText(msg.from, cancelReply(removed));
@@ -141,12 +143,13 @@ async function cancelMany(
   eventIds: number[],
 ): Promise<void> {
   const log = deps.log ?? (() => {});
+  const family = familyOf(deps);
   let removed = 0;
   for (const id of eventIds) {
-    const n = deps.events.deleteById(id, FAMILY_ID);
+    const n = deps.events.deleteById(id, family);
     removed += n;
     if (n > 0 && deps.calendar) {
-      await deleteFromCalendar(id, deps.calendar, FAMILY_ID, log);
+      await deleteFromCalendar(id, deps.calendar, family, log);
     }
   }
   log("cancel multi-select delete", { from: msg.from, eventIds, removed });
@@ -265,7 +268,7 @@ export async function routeCancelByRef(
     await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
     return;
   }
-  const candidates = deps.events.findEventsByRef(FAMILY_ID, ref);
+  const candidates = deps.events.findEventsByRef(familyOf(deps), ref);
   // Deterministic exact-match path (Option B — UNCHANGED): 1 → delete immediately; N>1 → numbered thread.
   if (candidates.length === 1) {
     await cancelOne(deps, msg, candidates[0]!.id);
@@ -300,7 +303,7 @@ async function routeBulkCancel(
   msg: InboundMessage,
   scope: { dateIso?: string; time?: string },
 ): Promise<void> {
-  const candidates = deps.events.findEventsInScope(FAMILY_ID, scope);
+  const candidates = deps.events.findEventsInScope(familyOf(deps), scope);
   if (candidates.length === 0) {
     await deps.sendText(msg.from, CANCEL_NOT_FOUND_HE);
     return;
