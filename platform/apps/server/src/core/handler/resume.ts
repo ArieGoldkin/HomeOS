@@ -2,7 +2,7 @@ import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { resumeCancel } from "./cancel/index.ts";
 import { resumeClarify } from "./clarify.ts";
-import { resumeEdit } from "./edit.ts";
+import { resumeEdit } from "./edit/index.ts";
 import { type HandlerDeps, REPHRASE_HE } from "./shared/index.ts";
 
 /**
