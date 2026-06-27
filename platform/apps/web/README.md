@@ -8,7 +8,8 @@ TanStack Router/Query + Vitest.
 
 > The old no-auth kitchen-tablet surface is retired. The `/`, `/phone/*`, and `/web/*` route trees
 > collapsed into this single authenticated app rooted at `/today`, served same-origin from the server.
-> Tokens are family-shared and build-embedded — **not** real per-user auth (deferred).
+> #225 — the board now has **real per-user Google login** via Supabase Auth (PKCE + cookie session);
+> the old family-shared, build-embedded tokens are retired.
 
 ## Routes
 
