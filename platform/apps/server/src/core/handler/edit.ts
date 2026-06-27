@@ -4,7 +4,7 @@ import type { EventPatch, SavedEvent } from "../../db/event-store/index.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/index.ts";
-import { extractCancelRef, parseSelection } from "./cancel.ts";
+import { extractCancelRef, parseSelection } from "./cancel/index.ts";
 import {
   CANCEL_NOT_FOUND_HE,
   CONFIRM_ABORT_HE,
