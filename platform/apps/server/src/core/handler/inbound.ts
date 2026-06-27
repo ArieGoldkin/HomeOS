@@ -10,7 +10,7 @@ import { jerusalemDayStartSqlite, sqliteUtc } from "../time.ts";
 import { routeCancelByRef } from "./cancel/index.ts";
 import { openClarifyThread } from "./clarify.ts";
 import { applyCorrection } from "./correction.ts";
-import { routeEditByRef } from "./edit.ts";
+import { routeEditByRef } from "./edit/index.ts";
 import { handleResume } from "./resume.ts";
 import {
   ABORT_THREAD_HE,
