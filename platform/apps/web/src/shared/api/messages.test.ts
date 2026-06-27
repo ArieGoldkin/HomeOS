@@ -1,5 +1,6 @@
 import { HttpResponse, http } from "msw";
 import { describe, expect, it } from "vitest";
+import { sampleMessages } from "../../test/msw/handlers";
 import { server } from "../../test/msw/server";
 import { fetchMessages } from "./messages";
 
@@ -23,5 +24,20 @@ describe("fetchMessages", () => {
   it("rejects a bare array (payload must be wrapped in { messages })", async () => {
     server.use(http.get("*/messages", () => HttpResponse.json([])));
     await expect(fetchMessages()).rejects.toThrow();
+  });
+
+  it("sends the session cookie (credentials: include) and no Authorization header (#225)", async () => {
+    let credentials: RequestCredentials | undefined;
+    let authHeader: string | null = null;
+    server.use(
+      http.get("*/messages", ({ request }) => {
+        credentials = request.credentials;
+        authHeader = request.headers.get("authorization");
+        return HttpResponse.json({ messages: sampleMessages });
+      }),
+    );
+    await fetchMessages();
+    expect(credentials).toBe("include");
+    expect(authHeader).toBeNull();
   });
 });

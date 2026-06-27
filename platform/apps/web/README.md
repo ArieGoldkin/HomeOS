@@ -8,7 +8,8 @@ TanStack Router/Query + Vitest.
 
 > The old no-auth kitchen-tablet surface is retired. The `/`, `/phone/*`, and `/web/*` route trees
 > collapsed into this single authenticated app rooted at `/today`, served same-origin from the server.
-> Tokens are family-shared and build-embedded — **not** real per-user auth (deferred).
+> #225 — the board now has **real per-user Google login** via Supabase Auth (PKCE + cookie session);
+> the old family-shared, build-embedded tokens are retired.
 
 ## Routes
 
@@ -75,11 +76,11 @@ pnpm typecheck                    # all packages (strict TS)
 
 ## Data + env
 
-TanStack Query over `GET /events` (Bearer `VITE_HOMEOS_READ_TOKEN`); writes via `POST /events`
-(Bearer `VITE_HOMEOS_WRITE_TOKEN`, falls back to the read token in dev). The Connections **recent-ingestion
-feed** reads `GET /messages` with a **distinct** Bearer `VITE_HOMEOS_MESSAGES_TOKEN` (must equal the
-server's `MESSAGES_TOKEN`, never aliased to the read token) — **unset ⇒ the feed is empty/disabled**, the
-board still works. Point `VITE_HOMEOS_API_BASE` at a local server or the gitignored
-`.develop/mock-events.mjs` (CORS-enabled; serves `/events` + `/messages`, accepts any bearer). See
+#225 — the board logs in with real Google auth via Supabase (`@supabase/ssr`, PKCE + cookie session). API
+calls (`GET /events`, `POST /events`, `GET /messages`, `GET /oauth/google/status`) send the same-origin
+Supabase auth **cookie** (`credentials:'include'`) — the retired `VITE_HOMEOS_*_TOKEN` bearers are gone.
+TanStack Query still wraps the reads/writes; the zod-envelope parsing is unchanged. Set `VITE_SUPABASE_URL`
++ `VITE_SUPABASE_PUBLISHABLE_KEY` (= the server's `SUPABASE_URL` and the publishable key). Point
+`VITE_HOMEOS_API_BASE` at a local server or the gitignored `.develop/mock-events.mjs`. See
 `apps/web/env.example`. The server has no CORS/proxy, so split dev needs the mock or a same-origin build.
 ```

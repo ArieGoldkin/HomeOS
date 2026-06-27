@@ -1,3 +1,4 @@
+import type { AuthState } from "@shared/auth";
 import { ThemeProvider } from "@shared/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
@@ -6,6 +7,18 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createTestRouter } from "../../router";
 import { ConnectionsView } from "./ConnectionsView";
+
+// #225 — the router guard reads auth off context; these cases exercise the authed board.
+const AUTHED: AuthState = {
+  status: "authenticated",
+  isLoading: false,
+  isAuthenticated: true,
+  userId: "u1",
+  email: "fam@homeos.test",
+  full_name: "משפחה",
+  avatar_url: null,
+  signOut: async () => {},
+};
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -19,7 +32,7 @@ function renderAppAt(path: string) {
   render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} context={{ auth: AUTHED }} />
       </ThemeProvider>
     </QueryClientProvider>,
   );

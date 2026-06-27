@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { AuthProvider } from "./shared/auth";
 import { ThemeProvider } from "./shared/theme";
 
 const queryClient = new QueryClient();
@@ -21,9 +22,11 @@ if (!rootEl) throw new Error("#root element not found");
 createRoot(rootEl).render(
   <StrictMode>
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </AuthProvider>
     </ThemeProvider>
   </StrictMode>,
 );

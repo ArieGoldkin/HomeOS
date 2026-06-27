@@ -1,15 +1,35 @@
+import { AuthProvider } from "@shared/auth";
 import { ThemeProvider } from "@shared/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+
+// #225 — App gates on a real Supabase session. Mock the browser client as an authenticated family session
+// so the AuthProvider resolves to "authenticated" and the router mounts the board (no live network).
+vi.mock("@shared/auth/supabase-client", () => ({
+  supabase: {
+    auth: {
+      getClaims: vi.fn().mockResolvedValue({
+        data: {
+          claims: { sub: "u1", email: "fam@homeos.test", user_metadata: { full_name: "משפחה" } },
+        },
+        error: null,
+      }),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+      signOut: vi.fn().mockResolvedValue({ error: null }),
+    },
+  },
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={client}>
-      <ThemeProvider>{node}</ThemeProvider>
+      <ThemeProvider>
+        <AuthProvider>{node}</AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

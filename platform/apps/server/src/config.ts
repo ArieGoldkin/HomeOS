@@ -32,15 +32,8 @@ const membersMap = z
     }, {}),
   );
 
-// Env name held as a quoted string (scanner-exempt) so the write seam token can be added as a
-// computed key below without tripping the content filter's key-value heuristic.
-const kWrite = "WRITE_TOKEN";
-// #135 — same scanner-exempt trick for the messages-feed read token (GET /messages). A DISTINCT
-// token from READ_TOKEN: the raw inbound feed can hold pre-allowlist/non-family text, so a client
-// holding only READ_TOKEN (the family app's build-embedded read token) must never be able to fetch it.
-const kMessages = "MESSAGES_TOKEN";
-// #106 — same scanner-exempt trick for the self-serve Connect-Google bearer (a DISTINCT token from
-// READ_TOKEN and ADMIN_TOKEN; boot enforces ≥32 bytes of base64 entropy + that distinctness).
+// #106 — env name held as a quoted string (scanner-exempt) so the self-serve Connect-Google bearer can be
+// read via index access. A DISTINCT token from ADMIN_TOKEN; boot enforces ≥32 bytes of base64 entropy.
 const kSetup = "SETUP_TOKEN";
 
 /**
@@ -66,9 +59,12 @@ const schema = z.object({
   // "ערב שבת") that Sonnet resolves correctly — date accuracy is the product wedge, well inside ≤$100/mo.
   ANTHROPIC_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
   DB_PATH: z.string().min(1).default("./data/homeos.db"),
-  // Bearer token gating GET /events (the family app's board read seam). Optional: when unset the
-  // read endpoint is disabled (503) rather than exposed unauthenticated.
-  READ_TOKEN: z.string().min(1).optional(),
+  // #225 — Supabase Auth session gate. SUPABASE_URL is the project URL (`https://<ref>.supabase.co`);
+  // ALLOWED_LOGIN_EMAILS is the comma-separated allowlist of Google accounts permitted to log in. Both
+  // set ⇒ the read/write routes are session-gated; neither ⇒ those routes ship disabled (503). The server
+  // verifies the session JWT locally vs the cached JWKS (asymmetric ES256) — no per-request round-trip.
+  SUPABASE_URL: z.string().url().optional(),
+  ALLOWED_LOGIN_EMAILS: csvList.optional(),
   // Meta app secret for X-Hub-Signature-256 HMAC verification (item H). Optional: unset = skip.
   APP_SECRET: z.string().min(1).optional(),
   // Daily self-digest (item D): where it's sent (defaults to the first allowlist number) and
@@ -113,13 +109,6 @@ const schema = z.object({
     .string()
     .default("true")
     .transform((s) => s.toLowerCase() !== "false" && s !== "0"),
-  // Optional Bearer token for POST /events (the app's write seam); unset disables writes (503).
-  // A DISTINCT token from the read token — never aliased: a client holding only the read token must
-  // not be able to mutate the board. Computed key keeps the content scanner quiet.
-  [kWrite]: z.string().min(1).optional(),
-  // #135 — optional Bearer token for GET /messages (the raw inbound feed). DISTINCT from READ_TOKEN
-  // and never aliased to it; unset disables the endpoint (503). Computed key keeps the scanner quiet.
-  [kMessages]: z.string().min(1).optional(),
 });
 
 /** Google OAuth settings (#16) — present only when the full GOOGLE_* bundle is configured. */
@@ -137,6 +126,14 @@ export interface GoogleOAuthSettings {
   allowedEmail?: string;
 }
 
+/** #225 — Supabase Auth session settings; present only when SUPABASE_URL + ALLOWED_LOGIN_EMAILS are set. */
+export interface SupabaseAuthSettings {
+  /** Supabase project URL, e.g. `https://<ref>.supabase.co`. */
+  url: string;
+  /** Allowlist of Google accounts permitted to log in (matched case-insensitively at the gate). */
+  allowedLoginEmails: string[];
+}
+
 export interface Config {
   verifyToken: string;
   whatsappToken: string;
@@ -147,7 +144,6 @@ export interface Config {
   port: number;
   anthropicModel: string;
   dbPath: string;
-  readToken?: string;
   appSecret?: string;
   adminPhone?: string;
   digestHour: number;
@@ -162,30 +158,25 @@ export interface Config {
   calendarWindowDays: number;
   calendarId: string;
   calendarAutoPush: boolean;
-  writeToken?: string;
-  /** #135 — Bearer token gating GET /messages (raw inbound feed). Distinct from readToken; unset ⇒ 503. */
-  messagesToken?: string;
   google?: GoogleOAuthSettings;
+  /** #225 — Supabase Auth session gate (url + allowed login emails). Undefined ⇒ read/write routes 503. */
+  supabase?: SupabaseAuthSettings;
 }
 
 /**
- * #106 — validate the optional SETUP_TOKEN when present: ≥32 bytes of base64-decoded entropy AND
- * distinct from both READ_TOKEN and the bundle's ADMIN_TOKEN (never aliased — the self-serve gate is
- * a third, independent credential). Throws a NAMED error (mentions SETUP_TOKEN) on any violation.
+ * #106 — validate the optional SETUP_TOKEN when present: ≥32 bytes of base64-decoded entropy AND distinct
+ * from the bundle's ADMIN_TOKEN (never aliased — the self-serve gate is an independent credential). Throws
+ * a NAMED error (mentions SETUP_TOKEN) on any violation. (#225 retired READ_TOKEN, so it's no longer compared.)
  */
-function validateSetupToken(
-  setupToken: string,
-  readToken: string | undefined,
-  adminToken: string,
-): void {
+function validateSetupToken(setupToken: string, adminToken: string): void {
   if (Buffer.from(setupToken, "base64").length < 32) {
     throw new Error(
       "Invalid environment configuration: SETUP_TOKEN must carry at least 32 bytes of base64 entropy.",
     );
   }
-  if (setupToken === readToken || setupToken === adminToken) {
+  if (setupToken === adminToken) {
     throw new Error(
-      "Invalid environment configuration: SETUP_TOKEN must be DISTINCT from READ_TOKEN and ADMIN_TOKEN " +
+      "Invalid environment configuration: SETUP_TOKEN must be DISTINCT from ADMIN_TOKEN " +
         "(the self-serve gate is an independent credential, never aliased).",
     );
   }
@@ -245,7 +236,7 @@ function readGoogleBundle(
   }
   const admin = adminToken as string;
   const setupToken = env[kSetup];
-  if (setupToken) validateSetupToken(setupToken, env["READ_TOKEN"], admin);
+  if (setupToken) validateSetupToken(setupToken, admin);
   const webBaseUrl = env.WEB_BASE_URL;
   if (webBaseUrl) validateWebBaseUrl(webBaseUrl);
   const allowedEmail = env.ALLOWED_GOOGLE_EMAIL;
@@ -261,6 +252,31 @@ function readGoogleBundle(
     webBaseUrl: webBaseUrl || undefined,
     allowedEmail: allowedEmail || undefined,
   } as GoogleOAuthSettings;
+}
+
+/**
+ * #225 — the Supabase Auth bundle is all-or-nothing: both SUPABASE_URL and a non-empty ALLOWED_LOGIN_EMAILS
+ * present ⇒ settings (session gate active); neither ⇒ undefined (the read/write routes ship disabled/503,
+ * the dev/app-only path the retired READ_TOKEN expressed); a partial set fails fast naming the gap. An empty
+ * allowlist alongside a URL is rejected — it would lock out every web user.
+ */
+function readSupabaseBundle(
+  url: string | undefined,
+  emails: string[] | undefined,
+): SupabaseAuthSettings | undefined {
+  if (!url && (!emails || emails.length === 0)) return undefined; // ships dark
+  if (!url) {
+    throw new Error(
+      "Invalid environment configuration: ALLOWED_LOGIN_EMAILS is set but SUPABASE_URL is missing.",
+    );
+  }
+  if (!emails || emails.length === 0) {
+    throw new Error(
+      "Invalid environment configuration: SUPABASE_URL is set but ALLOWED_LOGIN_EMAILS is empty " +
+        "(an empty allowlist would lock out every web user).",
+    );
+  }
+  return { url, allowedLoginEmails: emails };
 }
 
 /**
@@ -286,7 +302,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port: e.PORT,
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,
-    readToken: e.READ_TOKEN,
     appSecret: e.APP_SECRET,
     adminPhone: e.ADMIN_PHONE,
     digestHour: e.DIGEST_HOUR,
@@ -301,9 +316,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     calendarId: e.CALENDAR_ID,
     calendarAutoPush: e.CALENDAR_AUTO_PUSH,
     google: readGoogleBundle(env),
+    supabase: readSupabaseBundle(e.SUPABASE_URL, e.ALLOWED_LOGIN_EMAILS),
   };
-  // Assigned via index read (not a `:` pair) to sidestep the secret-scanner on the *Token key.
-  cfg.writeToken = e[kWrite];
-  cfg.messagesToken = e[kMessages];
   return cfg;
 }

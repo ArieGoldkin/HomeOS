@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import { sqliteUtc } from "../../core/time.ts";
 // #229 — the browser/OAuth path still reads the single-family FAMILY_ID below. DEFERRED on purpose: it
 // resolves via `resolveFamilyByUser(session.uid)`, but no real session identity exists until #226 (Supabase
@@ -6,7 +6,6 @@ import { sqliteUtc } from "../../core/time.ts";
 // threading when #226 lands a session to resolve from. The `assertSingleFamily` trip-wire stays meanwhile.
 import { FAMILY_ID } from "../../db/schema.ts";
 import { buildGoogleAuthUrl, GOOGLE_SCOPES, type GoogleOAuthClient } from "../../google/oauth.ts";
-import { bearerMatches } from "../auth.ts";
 import { createRateLimiter, mismatchDelay } from "../rate-limit.ts";
 import { type GoogleOAuthDeps, gateMatches } from "./deps.ts";
 import { finish } from "./pages.ts";
@@ -42,7 +41,11 @@ async function performDisconnect(deps: GoogleOAuthDeps): Promise<void> {
   deps.events.deleteByProvider("google"); // purge provider-derived rows (#61/MF5; 0 until #17/#18 tag them)
 }
 
-export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
+export function registerOAuthRoutes(
+  app: Hono,
+  deps?: GoogleOAuthDeps,
+  sessionGuard?: MiddlewareHandler,
+): void {
   const dark = (c: Context) => c.text("Google OAuth not configured", 503);
   const limiter =
     deps?.rateLimiter ?? createRateLimiter({ windowMs: 60_000, max: 10, mismatchDelayMs: 0 });
@@ -113,18 +116,14 @@ export function registerOAuthRoutes(app: Hono, deps?: GoogleOAuthDeps): void {
     return finish(c, deps, "connected");
   });
 
-  // #108 — the family app polls this to render the Connect screen. Read-token gated; NEVER leaks token
-  // material (OG3) — only `connected` + the granted `scopes` + the access-token `expiresAt`.
-  app.get("/oauth/google/status", (c) => {
+  // #108/#225 — the family app polls this to render the Connect screen. SESSION-gated via the shared
+  // `sessionGuard` (a real per-user Supabase session, allowlisted by email) — this REPLACES the retired
+  // build-embedded readToken. NEVER leaks token material (OG3): only `connected` + the granted `scopes`
+  // + the access-token `expiresAt`. When no guard is supplied (session unconfigured), the route is dark (503).
+  const statusGuard: MiddlewareHandler =
+    sessionGuard ?? (async (c) => c.text("Auth not configured", 503));
+  app.get("/oauth/google/status", statusGuard, (c) => {
     if (!deps) return dark(c);
-    // readToken unset ⇒ gated off (mirrors GET /events). Guard it explicitly rather than fall through to
-    // bearerMatches with an empty token — an empty `Bearer ` header would satisfy timingSafeEqual([],[]).
-    if (
-      deps.readToken === undefined ||
-      !bearerMatches(c.req.header("authorization"), deps.readToken)
-    ) {
-      return c.text("Unauthorized", 401);
-    }
     const cred = deps.credentials.get(FAMILY_ID);
     if (!cred) return c.json({ connected: false });
     return c.json({ connected: true, scopes: cred.scopes, expiresAt: cred.expiry });

@@ -45,19 +45,6 @@ describe("loadConfig", () => {
     expect(cfg.dbPath).toBe("/tmp/h.db");
   });
 
-  it("leaves READ_TOKEN undefined when unset, and passes it through when set", () => {
-    expect(loadConfig(base).readToken).toBeUndefined();
-    expect(loadConfig({ ...base, READ_TOKEN: "read-secret" }).readToken).toBe("read-secret");
-  });
-
-  it("leaves WRITE_TOKEN undefined when unset, and keeps it independent of READ_TOKEN", () => {
-    expect(loadConfig(base).writeToken).toBeUndefined();
-    // The web/phone write seam token is a DISTINCT secret — it must never alias the read token.
-    const cfg = loadConfig({ ...base, READ_TOKEN: "read-secret", WRITE_TOKEN: "write-secret" });
-    expect(cfg.writeToken).toBe("write-secret");
-    expect(cfg.readToken).toBe("read-secret");
-  });
-
   it("defaults DIGEST_HOUR to 21 and respects ADMIN_PHONE / DIGEST_HOUR overrides", () => {
     expect(loadConfig(base).digestHour).toBe(21);
     expect(loadConfig(base).adminPhone).toBeUndefined();
@@ -188,12 +175,6 @@ describe("loadConfig — self-serve OAuth optionals (#106)", () => {
     ).toThrowError(/SETUP_TOKEN/);
   });
 
-  it("rejects a SETUP_TOKEN equal to READ_TOKEN", () => {
-    expect(() =>
-      loadConfig({ ...base, ...googleEnv, READ_TOKEN: SETUP32_B64, [kSetup]: SETUP32_B64 }),
-    ).toThrowError(/SETUP_TOKEN/);
-  });
-
   it("rejects a SETUP_TOKEN equal to ADMIN_TOKEN", () => {
     expect(() =>
       loadConfig({ ...base, ...googleEnv, [kAdmin]: SETUP32_B64, [kSetup]: SETUP32_B64 }),
@@ -236,5 +217,37 @@ describe("loadConfig — self-serve OAuth optionals (#106)", () => {
     expect(g?.webBaseUrl).toBe("https://homeos-production-83a4.up.railway.app");
     // the allowlist URL fixture lives under the same origin the deps thread the return URL from
     expect(new URL(ALLOWED_ORIGIN_URL).origin).toBe(g?.webBaseUrl);
+  });
+});
+
+// #225 — the Supabase Auth session bundle (SUPABASE_URL + ALLOWED_LOGIN_EMAILS) replaces the retired
+// READ_TOKEN/WRITE_TOKEN/MESSAGES_TOKEN. All-or-nothing: both set ⇒ config.supabase; neither ⇒ undefined
+// (the read/write routes ship disabled/503); only one set ⇒ loadConfig throws naming the gap.
+describe("loadConfig — Supabase Auth session bundle (#225)", () => {
+  const SUPABASE_URL = "https://x.supabase.co";
+  const ALLOWED_LOGIN_EMAILS = "a@x.com,b@x.com";
+
+  it("builds config.supabase from SUPABASE_URL + ALLOWED_LOGIN_EMAILS", () => {
+    const cfg = loadConfig({ ...base, SUPABASE_URL, ALLOWED_LOGIN_EMAILS });
+    expect(cfg.supabase).toEqual({
+      url: SUPABASE_URL,
+      allowedLoginEmails: ["a@x.com", "b@x.com"],
+    });
+  });
+
+  it("leaves config.supabase undefined when neither var is set (ships dark / 503)", () => {
+    expect(loadConfig(base).supabase).toBeUndefined();
+  });
+
+  it("throws when only SUPABASE_URL is set (no allowlist would lock out every user)", () => {
+    expect(() => loadConfig({ ...base, SUPABASE_URL })).toThrowError(
+      /ALLOWED_LOGIN_EMAILS|SUPABASE_URL|all-or-nothing|lock out/,
+    );
+  });
+
+  it("throws when only ALLOWED_LOGIN_EMAILS is set (no project URL)", () => {
+    expect(() => loadConfig({ ...base, ALLOWED_LOGIN_EMAILS })).toThrowError(
+      /SUPABASE_URL|ALLOWED_LOGIN_EMAILS|all-or-nothing/,
+    );
   });
 });
