@@ -1,6 +1,6 @@
 import type { InboundMessage } from "../../http/webhook.ts";
 import type { ToolContext } from "../../tools/index.ts";
-import type { AgentResult } from "../agent.ts";
+import type { AgentResult } from "../agent/index.ts";
 import { TransientError } from "../errors.ts";
 import {
   formatConfirm,

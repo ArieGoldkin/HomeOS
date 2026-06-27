@@ -3,7 +3,7 @@ import type { SavedEvent } from "../../db/event-store/index.ts";
 import type { ConversationRow } from "../../db/schema.ts";
 import type { InboundMessage } from "../../http/webhook.ts";
 import { pushSavedEventsToCalendar } from "../../tools/index.ts";
-import type { AgentResult } from "../agent.ts";
+import type { AgentResult } from "../agent/index.ts";
 import { isAllowed } from "../allowlist.ts";
 import { TransientError } from "../errors.ts";
 import { jerusalemDayStartSqlite, sqliteUtc } from "../time.ts";

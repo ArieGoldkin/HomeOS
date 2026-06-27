@@ -2,7 +2,7 @@
 import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig } from "../src/config.ts";
-import { anthropicCallModel, createAgent } from "../src/core/agent.ts";
+import { anthropicCallModel, createAgent } from "../src/core/agent/index.ts";
 import { handleInbound } from "../src/core/handler.ts";
 import { createEventStore } from "../src/db/event-store/index.ts";
 import { FAMILY_ID } from "../src/db/schema.ts";

@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import type { ParsedEvent } from "@homeos/shared";
 import { describe, expect, it, vi } from "vitest";
-import { type CallModel, createAgent } from "../../src/core/agent.ts";
+import { type CallModel, createAgent } from "../../src/core/agent/index.ts";
 import { processInbound } from "../../src/core/handler/index.ts";
 import { CLARIFY_QUESTIONS, REPHRASE_HE } from "../../src/core/handler/shared/index.ts";
 import {

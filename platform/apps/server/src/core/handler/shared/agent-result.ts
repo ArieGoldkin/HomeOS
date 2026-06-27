@@ -1,7 +1,7 @@
 import type { SavedEvent } from "../../../db/event-store/index.ts";
 import type { InboundMessage } from "../../../http/webhook.ts";
 import type { ClarifyResult } from "../../../tools/index.ts";
-import type { AgentResult } from "../../agent.ts";
+import type { AgentResult } from "../../agent/index.ts";
 import { familyOf, type HandlerDeps } from "./deps.ts";
 
 /** JSON.parse that returns null instead of throwing on a corrupt blob (paired with clarifyPayloadSchema). */
