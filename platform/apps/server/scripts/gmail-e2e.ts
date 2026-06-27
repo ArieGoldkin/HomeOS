@@ -3,7 +3,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { loadConfig } from "../src/config.ts";
 import { anthropicCallModel, createAgent } from "../src/core/agent/index.ts";
-import { handleInbound } from "../src/core/handler.ts";
+import { handleInbound } from "../src/core/handler/index.ts";
 import { createEventStore } from "../src/db/event-store/index.ts";
 import { FAMILY_ID } from "../src/db/schema.ts";
 import { httpGmailClient } from "../src/google/gmail.ts";
@@ -46,7 +46,7 @@ async function main() {
 
   // In-memory board (no pollution); the credential store opens your REAL db where /connect stored it.
   const events = createEventStore(":memory:");
-  const googleDeps = buildGoogleDeps(config.google, config.dbPath, events, log);
+  const googleDeps = buildGoogleDeps(config.google, config.dbPath, events, undefined, log);
 
   const cred = googleDeps.credentials.get(FAMILY_ID);
   if (!cred) {
