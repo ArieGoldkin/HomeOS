@@ -57,6 +57,21 @@ describe("fetchConnectionStatus (#111)", () => {
     await expect(fetchConnectionStatus()).rejects.toThrow(/401/);
     await expect(fetchConnectionStatus()).rejects.not.toBeInstanceOf(GoogleNotConfiguredError);
   });
+
+  it("rides the session cookie (credentials: include), not a bearer token (#225)", async () => {
+    let credentials: RequestCredentials | undefined;
+    let authHeader: string | null = null;
+    server.use(
+      http.get("*/oauth/google/status", ({ request }) => {
+        credentials = request.credentials;
+        authHeader = request.headers.get("authorization");
+        return HttpResponse.json({ connected: false });
+      }),
+    );
+    await fetchConnectionStatus();
+    expect(credentials).toBe("include");
+    expect(authHeader).toBeNull();
+  });
 });
 
 describe("startGoogleConnect (#111)", () => {

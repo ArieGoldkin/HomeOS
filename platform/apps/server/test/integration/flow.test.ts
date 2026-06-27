@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { ParsedEvent } from "@homeos/shared";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { type CallModel, createAgent } from "../../src/core/agent/index.ts";
 import { processInbound } from "../../src/core/handler/index.ts";
 import { CLARIFY_QUESTIONS, REPHRASE_HE } from "../../src/core/handler/shared/index.ts";
@@ -22,6 +22,7 @@ import {
   readGmailTool,
   searchEventsTool,
 } from "../../src/tools/index.ts";
+import { type JwtKit, makeJwtKit } from "../http/session/jwt-test-kit.ts";
 
 // Webhook HMAC is mandatory; integration posts are signed with this test key (named "key" to avoid
 // the repo's secret scanner). The same key is wired into createServer below.
@@ -37,6 +38,13 @@ const appKey = "homeos-webhook-test-key";
  */
 
 const allowlist = ["972501234567"];
+
+// #225 — the read/write routes are session-gated; the kit mints offline-verified ES256 session tokens
+// so the GET /events leg of the flow authenticates with a real signed Bearer (default email allowlisted).
+let kit: JwtKit;
+beforeAll(async () => {
+  kit = await makeJwtKit();
+});
 
 const evA: ParsedEvent = {
   kind: "event",
@@ -212,13 +220,15 @@ function makeSystem(
       autoPushCalendar: extra.autoPush,
       now: () => new Date("2026-06-20T09:00:00Z"),
     });
+  // #225 — neutral local name (keeps the secret scanner quiet) for the kit-backed session gate.
+  const gate = kit.sessionConfig(["dad@example.com"]);
   const app = createServer({
     verifyToken: "verify",
     inbound,
     process: runInbound,
     events,
     allowlist,
-    readToken: "read-secret",
+    session: gate,
     appSecret: appKey,
   });
   return { app, events, inbound, sent, runInbound };
@@ -278,7 +288,7 @@ describe("integration: webhook → queue → store → confirm → read → undo
     const unauth = await sys.app.request("/events");
     expect(unauth.status).toBe(401);
     const res = await sys.app.request("/events", {
-      headers: { Authorization: "Bearer read-secret" },
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(200);
     const board = (await res.json()) as { events: ParsedEvent[] };

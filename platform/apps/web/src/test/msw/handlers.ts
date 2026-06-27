@@ -80,15 +80,11 @@ export const googleDarkHandler = () =>
 
 export const handlers = [
   /**
-   * #111 — Bearer-gated `GET /oauth/google/status`. Defaults to the NOT-connected `{ connected: false }`;
+   * #111/#225 — session-gated `GET /oauth/google/status`. Defaults to the NOT-connected `{ connected: false }`;
    * per-test overrides (`googleConnectedHandler` / `googleDarkHandler` or an inline `server.use`) flip it to
-   * connected or to the 503 dark state. The status read carries the family READ token, like /events.
+   * connected or to the 503 dark state. The status read rides the Supabase session cookie, like /events.
    */
-  http.get("*/oauth/google/status", ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
+  http.get("*/oauth/google/status", () => {
     return HttpResponse.json({ connected: false });
   }),
 
@@ -117,46 +113,30 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
-  http.get("*/events", ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
+  // #225 — session-gated GET /events (the Supabase session cookie). Returns the wrapped { events }.
+  http.get("*/events", () => {
     return HttpResponse.json({ events: sampleEvents });
   }),
 
-  // #135 — Bearer-gated GET /messages, returning the wrapped { messages } feed.
-  http.get("*/messages", ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
+  // #135/#225 — session-gated GET /messages, returning the wrapped { messages } feed.
+  http.get("*/messages", () => {
     return HttpResponse.json({ messages: sampleMessages });
   }),
 
   /**
-   * Bearer-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
-   * (id: 999, source_provider: null). Mirrors what the real server will return once
-   * POST /events is built (issue #96 client-seam only).
+   * #225 — session-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
+   * (id: 999, source_provider: null). Mirrors what the real server returns; auth is the session cookie.
    */
   http.post("*/events", async ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
     const body = (await request.json()) as Record<string, unknown>;
     return HttpResponse.json({ ...body, id: 999, source_provider: null }, { status: 201 });
   }),
 
   /**
-   * #19 — Bearer-gated PATCH /events/:id status toggle. Returns sampleEvents[0] with the patched status
-   * and the path id, mirroring the server's updated-SavedEvent response.
+   * #19/#225 — session-gated PATCH /events/:id status toggle. Returns sampleEvents[0] with the patched
+   * status and the path id, mirroring the server's updated-SavedEvent response.
    */
   http.patch("*/events/:id", async ({ request, params }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
     const body = (await request.json()) as { status: string };
     return HttpResponse.json(
       { ...sampleEvents[0], id: Number(params.id), status: body.status },

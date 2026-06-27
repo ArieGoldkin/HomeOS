@@ -21,6 +21,7 @@ import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
 import { buildGoogleDeps } from "./http/oauth-routes/index.ts";
 import { createServer, type ServerDeps } from "./http/server.ts";
+import { cookieTokenReader, type RequireSessionConfig, remoteJwks } from "./http/session/index.ts";
 import type { InboundMessage } from "./http/webhook.ts";
 import { noopUploader, scheduleBackup } from "./infra/backup.ts";
 import { anthropicRawParse, createParser } from "./parsing/parser.ts";
@@ -98,7 +99,7 @@ const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 // 🔌 Google OAuth (#16): built ONLY when the full GOOGLE_* bundle is configured; otherwise undefined
 // so the routes ship dark (503). The credential store opens its own connection on the same DB file.
 const googleDeps = config.google
-  ? buildGoogleDeps(config.google, config.dbPath, events, config.readToken, log)
+  ? buildGoogleDeps(config.google, config.dbPath, events, log)
   : undefined;
 
 // 📧 Gmail tool deps (#72): reuse googleDeps' oauth client + credential store (getValidAccessToken),
@@ -175,23 +176,29 @@ const runInbound = (msg: InboundMessage): Promise<void> =>
     log,
   });
 
+// #225 — session auth: built only when the Supabase bundle is configured (SUPABASE_URL + ALLOWED_LOGIN_EMAILS).
+// Undefined ⇒ the read/write routes ship disabled (503), the dev/app-only path the retired READ_TOKEN expressed.
+// Verification is local — jose against the cached JWKS (asymmetric ES256), no per-request Supabase round-trip.
+const session: RequireSessionConfig | undefined = config.supabase
+  ? {
+      getKey: remoteJwks(config.supabase.url),
+      verify: { issuer: `${config.supabase.url}/auth/v1`, audience: "authenticated" },
+      allowedEmails: new Set(config.supabase.allowedLoginEmails.map((e) => e.toLowerCase())),
+      extractCookieToken: cookieTokenReader(config.supabase.url),
+    }
+  : undefined;
+
 const serverDeps: ServerDeps = {
   verifyToken: config.verifyToken,
   inbound,
   process: runInbound,
   events,
   allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
-  readToken: config.readToken,
   appSecret: config.appSecret,
   google: googleDeps,
+  session, // #225 — per-user Supabase session gate (undefined ⇒ read/write routes 503)
   log,
 };
-// Assigned (not a `:` pair) to sidestep the secret-scanner on the *Token key.
-serverDeps.writeToken = config.writeToken;
-// #135 — distinct inbound-feed credential for GET /messages; read into a plain local first so the
-// assignment isn't a `xToken = config.xToken` shape the content scanner flags.
-const inboundFeedCred = config.messagesToken;
-serverDeps.messagesToken = inboundFeedCred;
 
 // #150 — same-origin web app: serve the built SPA when a build is present. Resolve the dist ABSOLUTELY
 // from this module (stable regardless of the process cwd), then hand serve-static a cwd-RELATIVE root

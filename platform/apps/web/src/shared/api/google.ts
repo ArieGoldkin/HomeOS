@@ -1,14 +1,6 @@
 import { type ConnectionStatus, connectionStatusSchema } from "@homeos/shared";
 
 const API_BASE = import.meta.env.VITE_HOMEOS_API_BASE ?? "";
-/**
- * The connection STATUS is a non-secret read (a boolean + the granted scopes, never a token — the shared
- * `connectionStatusSchema` is a strictObject that fails loudly if a token ever leaks into it). It rides on
- * the existing build-embedded family READ token, like {@link fetchEvents}. The setup CODE that authorizes
- * the connect/disconnect MUTATIONS is a different, higher privilege — a RUNTIME argument the user types,
- * NEVER read from `import.meta.env` and NEVER bundled (see `startGoogleConnect`/`disconnectGoogle`).
- */
-const READ_TOKEN = import.meta.env.VITE_HOMEOS_READ_TOKEN ?? "";
 
 /**
  * #111 — the server answered `503 Service Unavailable`: Google OAuth is not configured on the server
@@ -49,15 +41,19 @@ function connectReasonForStatus(status: number): ConnectErrorReason {
 }
 
 /**
- * #111 — GET `/oauth/google/status`: the connection status the Connect screen polls. Sends the
- * non-secret family READ token (status is a read, not a mutation). A `503` is the configured-dark state
- * surfaced as a distinguishable {@link GoogleNotConfiguredError} so the UI can show a non-actionable
- * "not configured" tile. The body is parsed with the shared `connectionStatusSchema` (a strictObject):
- * any shape drift — above all a leaked token — fails loudly here, never silently in the UI.
+ * #111 — GET `/oauth/google/status`: the connection status the Connect screen polls. A non-secret read
+ * (a boolean + the granted scopes, never a token), authorized by the Supabase session cookie like
+ * {@link fetchEvents} (#225 — `credentials: "include"`). A `503` is the configured-dark state surfaced as
+ * a distinguishable {@link GoogleNotConfiguredError} so the UI can show a non-actionable "not configured"
+ * tile. The body is parsed with the shared `connectionStatusSchema` (a strictObject): any shape drift —
+ * above all a leaked token — fails loudly here, never silently in the UI.
+ *
+ * NOTE: the connect/disconnect MUTATIONS below are authorized by a different, higher-privilege credential —
+ * the setup CODE the user types (a RUNTIME argument, NEVER bundled). That mechanism is unchanged by #225.
  */
 export async function fetchConnectionStatus(signal?: AbortSignal): Promise<ConnectionStatus> {
   const res = await fetch(`${API_BASE}/oauth/google/status`, {
-    headers: { Authorization: `Bearer ${READ_TOKEN}` },
+    credentials: "include",
     signal,
   });
   if (res.status === 503) {

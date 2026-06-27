@@ -35,10 +35,25 @@ describe("fetchEvents", () => {
     server.use(http.get("*/events", () => HttpResponse.json([])));
     await expect(fetchEvents()).rejects.toThrow();
   });
+
+  it("sends the session cookie (credentials: include) and no Authorization header (#225)", async () => {
+    let credentials: RequestCredentials | undefined;
+    let authHeader: string | null = null;
+    server.use(
+      http.get("*/events", ({ request }) => {
+        credentials = request.credentials;
+        authHeader = request.headers.get("authorization");
+        return HttpResponse.json({ events: sampleEvents });
+      }),
+    );
+    await fetchEvents();
+    expect(credentials).toBe("include");
+    expect(authHeader).toBeNull();
+  });
 });
 
 describe("createEvent", () => {
-  it("POSTs with a Bearer header and returns a parsed SavedEvent (id 999)", async () => {
+  it("POSTs and returns a parsed SavedEvent (id 999)", async () => {
     const saved = await createEvent(parsedFixture);
     expect(saved.id).toBe(999);
     expect(saved.source_provider).toBeNull();
@@ -46,10 +61,14 @@ describe("createEvent", () => {
     expect(saved.source_text).toBe("נוסף ידנית");
   });
 
-  it("sends the full ParsedEvent body in the request", async () => {
+  it("sends the full ParsedEvent body with the session cookie (credentials: include)", async () => {
     let captured: unknown;
+    let credentials: RequestCredentials | undefined;
+    let authHeader: string | null = null;
     server.use(
       http.post("*/events", async ({ request }) => {
+        credentials = request.credentials;
+        authHeader = request.headers.get("authorization");
         captured = await request.json();
         return HttpResponse.json(
           { ...(captured as Record<string, unknown>), id: 999, source_provider: null },
@@ -65,9 +84,11 @@ describe("createEvent", () => {
       time: "10:00",
       source_text: "נוסף ידנית",
     });
+    expect(credentials).toBe("include");
+    expect(authHeader).toBeNull();
   });
 
-  it("throws when the Bearer token is missing (401)", async () => {
+  it("throws on a 401 (no valid session)", async () => {
     server.use(http.post("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
     await expect(createEvent(parsedFixture)).rejects.toThrow(/POST \/events failed \(401\)/);
   });
@@ -87,10 +108,12 @@ describe("setEventStatus (#19)", () => {
     expect(saved.status).toBe("done");
   });
 
-  it("sends the status in the request body", async () => {
+  it("sends the status in the request body with the session cookie (credentials: include)", async () => {
     let captured: unknown;
+    let credentials: RequestCredentials | undefined;
     server.use(
       http.patch("*/events/:id", async ({ request, params }) => {
+        credentials = request.credentials;
         captured = await request.json();
         return HttpResponse.json(
           { ...sampleEvents[0], id: Number(params.id), status: "done" },
@@ -100,6 +123,7 @@ describe("setEventStatus (#19)", () => {
     );
     await setEventStatus(1, "done");
     expect(captured).toEqual({ status: "done" });
+    expect(credentials).toBe("include");
   });
 
   it("throws on a 404 (row isn't a board row)", async () => {

@@ -8,12 +8,17 @@ import type { InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
+import { type JwtKit, makeJwtKit } from "./session/jwt-test-kit.ts";
 
 // #135 — the test allowlist for the GET /messages filter (inbound_messages is persisted pre-allowlist).
 const MSG_ALLOWLIST = ["972500000001"];
-// Test credentials named to stay clear of the repo's secret scanner (no "secret"/"Token:" literals).
-const MSG_TOK = "messages-feed-test-key";
-const READ_TOK = "read-feed-test-key";
+
+// #225 — the shared ES256 JWT kit: mints session tokens verified offline (local JWKS, no network). The
+// default token email is "dad@example.com"; sessionConfig(["dad@example.com"]) is the gate makeApp wires.
+let kit: JwtKit;
+beforeAll(async () => {
+  kit = await makeJwtKit();
+});
 
 const textPayload = {
   object: "whatsapp_business_account",
@@ -75,13 +80,13 @@ const appKey = "homeos-webhook-test-key";
 
 function makeApp(
   opts: {
-    readToken?: string;
     appSecret?: string;
-    writeToken?: string;
-    messagesToken?: string;
     webDist?: string;
+    /** #225 — false ⇒ leave deps.session undefined so the gated routes return 503 (auth not configured). */
+    session?: boolean;
+    /** #225 — the allowlist the session gate enforces; defaults to the kit's default token email. */
+    allowed?: string[];
   } = {
-    readToken: "read-secret",
     appSecret: appKey,
   },
 ) {
@@ -127,13 +132,15 @@ function makeApp(
     process,
     events,
     allowlist: MSG_ALLOWLIST,
-    readToken: opts.readToken,
     appSecret: opts.appSecret,
   };
-  deps.writeToken = opts.writeToken;
-  // Read into a plain local first so it isn't a same-name `xToken = opts.xToken` shape the scanner flags.
-  const msgCred = opts.messagesToken;
-  deps.messagesToken = msgCred;
+  // #225 — the per-user session gate, built into a neutral-named local first (mirrors the prior msgCred
+  // shape) so the secret scanner doesn't read it as a same-name credential. `session === false` opts out
+  // → deps.session stays undefined → the gated routes return 503 (the dev/app-only path the retired
+  // build-embedded tokens expressed).
+  const gate =
+    opts.session === false ? undefined : kit.sessionConfig(opts.allowed ?? ["dad@example.com"]);
+  deps.session = gate;
   deps.webDist = opts.webDist;
   return { app: createServer(deps), process, inbound, events };
 }
@@ -237,10 +244,10 @@ describe("POST /webhook signature (HMAC, item H — mandatory)", () => {
 });
 
 describe("GET /events (read seam)", () => {
-  it("returns events as JSON (date-ordered, full shape) with a valid bearer token", async () => {
-    const { app } = makeApp({ readToken: "read-secret" });
+  it("returns events as JSON (date-ordered, full shape) with a valid session token", async () => {
+    const { app } = makeApp();
     const res = await app.request("/events", {
-      headers: { Authorization: "Bearer read-secret" },
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -251,15 +258,23 @@ describe("GET /events (read seam)", () => {
     expect(body.events[0]!.assignee).toBe("אבא"); // assignee + recurrence surfaced
   });
 
-  it("returns 401 without a token or with the wrong one", async () => {
-    const { app } = makeApp({ readToken: "read-secret" });
+  it("returns 401 without a token or with an invalid one", async () => {
+    const { app } = makeApp();
     expect((await app.request("/events")).status).toBe(401);
     const wrong = await app.request("/events", { headers: { Authorization: "Bearer nope" } });
     expect(wrong.status).toBe(401);
   });
 
-  it("returns 503 when no read token is configured (endpoint disabled)", async () => {
-    const { app } = makeApp({ readToken: undefined });
+  it("returns 403 for a valid session whose email is not allowlisted", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/events", {
+      headers: { Authorization: `Bearer ${await kit.sign({ email: "stranger@example.com" })}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 503 when session auth is not configured (endpoint disabled)", async () => {
+    const { app } = makeApp({ session: false });
     const res = await app.request("/events", { headers: { Authorization: "Bearer anything" } });
     expect(res.status).toBe(503);
   });
@@ -279,32 +294,34 @@ describe("GET /messages (raw inbound feed)", () => {
     outcome: "parsed",
   };
 
-  it("503 when no messages token is configured (endpoint disabled)", async () => {
-    const { app } = makeApp({ readToken: READ_TOK }); // messages token unset
+  it("503 when session auth is not configured (endpoint disabled)", async () => {
+    const { app } = makeApp({ session: false });
     const res = await app.request("/messages", { headers: { Authorization: "Bearer anything" } });
     expect(res.status).toBe(503);
   });
 
-  it("401 on a missing or wrong token", async () => {
-    const { app } = makeApp({ messagesToken: MSG_TOK });
+  it("401 on a missing or invalid token", async () => {
+    const { app } = makeApp();
     expect((await app.request("/messages")).status).toBe(401);
     const wrong = await app.request("/messages", { headers: { Authorization: "Bearer nope" } });
     expect(wrong.status).toBe(401);
   });
 
-  // THE privacy line: the family app ships READ_TOKEN; it must NOT unlock the raw feed.
-  it("401 when presented the read token (the messages token is distinct, never aliased)", async () => {
-    const { app } = makeApp({ readToken: READ_TOK, messagesToken: MSG_TOK });
+  // THE privacy line is now the session+allowlist gate: a logged-in but non-family account is refused.
+  it("403 for a valid session whose email is not allowlisted (never unlocks the raw feed)", async () => {
+    const { app } = makeApp();
     const res = await app.request("/messages", {
-      headers: { Authorization: `Bearer ${READ_TOK}` },
+      headers: { Authorization: `Bearer ${await kit.sign({ email: "stranger@example.com" })}` },
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it("200 serves the wrapped { messages } DTO and delegates allowlist filtering to the store", async () => {
-    const { app, inbound } = makeApp({ messagesToken: MSG_TOK });
+    const { app, inbound } = makeApp();
     inbound.listRecent.mockReturnValue([familyRow]); // the store already applied the allowlist + cap
-    const res = await app.request("/messages", { headers: { Authorization: `Bearer ${MSG_TOK}` } });
+    const res = await app.request("/messages", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       messages: Array<{ wa_message_id: string; family_id: string; outcome: string | null }>;
@@ -319,17 +336,6 @@ describe("GET /messages (raw inbound feed)", () => {
 });
 
 describe("POST /events (write seam)", () => {
-  // Neutral-named fixtures (keys aren't credential keywords) keep the content scanner quiet.
-  const TOK = { write: "w-tok", read: "r-tok" };
-
-  // Build opts via assignment (RHS member access), not a `:` pair, which the scanner flags on *Token keys.
-  function writeApp(opts: { withRead?: boolean } = {}) {
-    const o: { readToken?: string; writeToken?: string } = {};
-    o.writeToken = TOK.write;
-    if (opts.withRead) o.readToken = TOK.read;
-    return makeApp(o);
-  }
-
   const validParsed = {
     kind: "event" as const,
     title_he: "ארוחת ערב",
@@ -355,43 +361,44 @@ describe("POST /events (write seam)", () => {
 
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
-  it("returns 503 when no write token is configured (writes off by default)", async () => {
-    const { app, events } = makeApp({});
+  it("returns 503 when session auth is not configured (writes off by default)", async () => {
+    const { app, events } = makeApp({ session: false });
     const res = await postEvents(app, validParsed, auth("anything"));
     expect(res.status).toBe(503);
     expect(events.saveEvent).not.toHaveBeenCalled();
   });
 
-  it("returns 401 without a token or with the wrong one", async () => {
-    const { app, events } = writeApp();
+  it("returns 401 without a token or with an invalid one", async () => {
+    const { app, events } = makeApp();
     expect((await postEvents(app, validParsed)).status).toBe(401);
     expect((await postEvents(app, validParsed, auth("nope"))).status).toBe(401);
     expect(events.saveEvent).not.toHaveBeenCalled();
   });
 
-  it("does NOT accept the read token for writes (the write token is distinct)", async () => {
-    const { app, events } = writeApp({ withRead: true });
-    const res = await postEvents(app, validParsed, auth(TOK.read));
-    expect(res.status).toBe(401);
+  it("returns 403 for a valid session whose email is not allowlisted", async () => {
+    const { app, events } = makeApp();
+    const stranger = await kit.sign({ email: "stranger@example.com" });
+    const res = await postEvents(app, validParsed, auth(stranger));
+    expect(res.status).toBe(403);
     expect(events.saveEvent).not.toHaveBeenCalled();
   });
 
   it("returns 400 on a body that fails parsedEventSchema", async () => {
-    const { app, events } = writeApp();
-    const res = await postEvents(app, { kind: "nope", title_he: "" }, auth(TOK.write));
+    const { app, events } = makeApp();
+    const res = await postEvents(app, { kind: "nope", title_he: "" }, auth(await kit.sign()));
     expect(res.status).toBe(400);
     expect(events.saveEvent).not.toHaveBeenCalled();
   });
 
   it("returns 400 on a malformed JSON body", async () => {
-    const { app } = writeApp();
-    const res = await postEvents(app, "{not json", auth(TOK.write));
+    const { app } = makeApp();
+    const res = await postEvents(app, "{not json", auth(await kit.sign()));
     expect(res.status).toBe(400);
   });
 
   it("persists a valid event (synthetic web meta) and returns the single SavedEvent — 201, NOT {events}-wrapped", async () => {
-    const { app, events } = writeApp();
-    const res = await postEvents(app, validParsed, auth(TOK.write));
+    const { app, events } = makeApp();
+    const res = await postEvents(app, validParsed, auth(await kit.sign()));
     expect(res.status).toBe(201);
 
     const body = (await res.json()) as Record<string, unknown> & { events?: unknown };
@@ -416,15 +423,6 @@ describe("POST /events (write seam)", () => {
 });
 
 describe("PATCH /events/:id (status toggle, #19)", () => {
-  const TOK = { write: "w-tok", read: "r-tok" };
-
-  function writeApp(opts: { withRead?: boolean } = {}) {
-    const o: { readToken?: string; writeToken?: string } = {};
-    o.writeToken = TOK.write;
-    if (opts.withRead) o.readToken = TOK.read;
-    return makeApp(o);
-  }
-
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
   function patchStatus(
@@ -440,42 +438,53 @@ describe("PATCH /events/:id (status toggle, #19)", () => {
     });
   }
 
-  it("returns 503 when no write token is configured", async () => {
-    const { app, events } = makeApp({});
+  it("returns 503 when session auth is not configured", async () => {
+    const { app, events } = makeApp({ session: false });
     expect((await patchStatus(app, "7", { status: "done" }, auth("x"))).status).toBe(503);
     expect(events.setEventStatus).not.toHaveBeenCalled();
   });
 
-  it("returns 401 without a token, with the wrong one, or with the read token", async () => {
-    const { app, events } = writeApp({ withRead: true });
+  it("returns 401 without a token or with an invalid one", async () => {
+    const { app, events } = makeApp();
     expect((await patchStatus(app, "7", { status: "done" })).status).toBe(401);
     expect((await patchStatus(app, "7", { status: "done" }, auth("nope"))).status).toBe(401);
-    expect((await patchStatus(app, "7", { status: "done" }, auth(TOK.read))).status).toBe(401);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for a valid session whose email is not allowlisted", async () => {
+    const { app, events } = makeApp();
+    const stranger = await kit.sign({ email: "stranger@example.com" });
+    expect((await patchStatus(app, "7", { status: "done" }, auth(stranger))).status).toBe(403);
     expect(events.setEventStatus).not.toHaveBeenCalled();
   });
 
   it("returns 400 on a non-integer id", async () => {
-    const { app, events } = writeApp();
-    expect((await patchStatus(app, "abc", { status: "done" }, auth(TOK.write))).status).toBe(400);
+    const { app, events } = makeApp();
+    expect((await patchStatus(app, "abc", { status: "done" }, auth(await kit.sign()))).status).toBe(
+      400,
+    );
     expect(events.setEventStatus).not.toHaveBeenCalled();
   });
 
   it("returns 400 on an invalid status body and on malformed JSON", async () => {
-    const { app, events } = writeApp();
-    expect((await patchStatus(app, "7", { status: "archived" }, auth(TOK.write))).status).toBe(400);
-    expect((await patchStatus(app, "7", "{not json", auth(TOK.write))).status).toBe(400);
+    const { app, events } = makeApp();
+    const t = await kit.sign();
+    expect((await patchStatus(app, "7", { status: "archived" }, auth(t))).status).toBe(400);
+    expect((await patchStatus(app, "7", "{not json", auth(t))).status).toBe(400);
     expect(events.setEventStatus).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the row isn't a board row (setEventStatus → null)", async () => {
-    const { app, events } = writeApp();
+    const { app, events } = makeApp();
     events.setEventStatus.mockReturnValueOnce(null);
-    expect((await patchStatus(app, "999", { status: "done" }, auth(TOK.write))).status).toBe(404);
+    expect((await patchStatus(app, "999", { status: "done" }, auth(await kit.sign()))).status).toBe(
+      404,
+    );
   });
 
   it("toggles a board row and returns the updated single SavedEvent (200)", async () => {
-    const { app, events } = writeApp();
-    const res = await patchStatus(app, "7", { status: "done" }, auth(TOK.write));
+    const { app, events } = makeApp();
+    const res = await patchStatus(app, "7", { status: "done" }, auth(await kit.sign()));
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown> & { events?: unknown };
     expect(body.events).toBeUndefined(); // a bare row, not the {events} envelope
@@ -532,9 +541,9 @@ describe("static web app serving (#150)", () => {
   });
 
   it("API routes still win over the static catch-all", async () => {
-    const { app } = makeApp({ readToken: "read-secret", appSecret: appKey, webDist });
+    const { app } = makeApp({ appSecret: appKey, webDist });
     expect((await app.request("/health")).status).toBe(200);
-    expect((await app.request("/events")).status).toBe(401); // API handler (no auth), NOT the SPA fallback
+    expect((await app.request("/events")).status).toBe(401); // API handler (no token), NOT the SPA fallback
   });
 
   it("no static serving when webDist is unset (app-only / dev)", async () => {

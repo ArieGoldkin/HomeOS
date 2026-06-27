@@ -1,3 +1,4 @@
+import type { AuthState } from "@shared/auth";
 import { ThemeProvider } from "@shared/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
@@ -5,13 +6,36 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRouter } from "./router";
 
-function renderAt(path: string) {
+// #225 — the route guard reads auth off the router context. Default the tests to an authenticated session
+// (the board is the subject of most cases); the guard cases pass UNAUTH explicitly.
+const AUTHED: AuthState = {
+  status: "authenticated",
+  isLoading: false,
+  isAuthenticated: true,
+  userId: "u1",
+  email: "fam@homeos.test",
+  full_name: "משפחה",
+  avatar_url: null,
+  signOut: async () => {},
+};
+const UNAUTH: AuthState = {
+  status: "unauthenticated",
+  isLoading: false,
+  isAuthenticated: false,
+  userId: null,
+  email: null,
+  full_name: null,
+  avatar_url: null,
+  signOut: async () => {},
+};
+
+function renderAt(path: string, auth: AuthState = AUTHED) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createTestRouter(path);
   return render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} context={{ auth }} />
       </ThemeProvider>
     </QueryClientProvider>,
   );
@@ -62,5 +86,28 @@ describe("router (one responsive app)", () => {
   it("resolves the deferred Lists route to a placeholder", async () => {
     renderAt("/lists");
     await waitFor(() => expect(screen.getByText("בקרוב")).toBeInTheDocument());
+  });
+
+  // #225 — auth guard
+  it("bounces an unauthenticated visit to /today to the login screen", async () => {
+    renderAt("/today", UNAUTH);
+    await waitFor(() => expect(screen.getByTestId("login-screen")).toBeInTheDocument());
+    expect(screen.queryByText("אסיפת הורים בגן")).not.toBeInTheDocument();
+  });
+
+  it("bounces an unauthenticated visit to / to the login screen (via /today)", async () => {
+    renderAt("/", UNAUTH);
+    await waitFor(() => expect(screen.getByTestId("login-screen")).toBeInTheDocument());
+  });
+
+  it("renders the login screen at /login for an unauthenticated visitor", async () => {
+    renderAt("/login", UNAUTH);
+    await waitFor(() => expect(screen.getByTestId("login-screen")).toBeInTheDocument());
+  });
+
+  it("sends an authenticated visitor away from /login to the board", async () => {
+    renderAt("/login", AUTHED);
+    await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
+    expect(screen.queryByTestId("login-screen")).not.toBeInTheDocument();
   });
 });

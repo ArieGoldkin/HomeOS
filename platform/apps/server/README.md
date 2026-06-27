@@ -36,17 +36,19 @@ Forwarded message text lands in two places, both bounded by design (data-minimiz
 | `GET`  | `/health`  | Liveness (`{ "status": "ok" }`)                                       |
 | `GET`  | `/webhook` | Meta verification handshake — echoes `hub.challenge` if token matches   |
 | `POST` | `/webhook` | Inbound messages — **acks 200 immediately**, then parses/persists async |
-| `GET`  | `/events`  | Board read seam (the family app). Bearer `READ_TOKEN`; returns `{ events }`. 503 if unset |
-| `POST` | `/events`  | Board write seam (web/phone add). Bearer `WRITE_TOKEN`; body = a `ParsedEvent` → the single created `SavedEvent` (201). 503 if unset |
-| `GET`  | `/oauth/google/status`      | Connection status for the web Connect screen. Bearer `READ_TOKEN`; `{ connected }` (+ `scopes`, `expiresAt` when connected) — never any token material. 503 if Google unconfigured |
+| `GET`  | `/events`  | Board read seam (the family app). #225 session-gated; returns `{ events }`. 401 unauth · 403 non-allowlisted · 503 if session auth unset |
+| `POST` | `/events`  | Board write seam (web/phone add). #225 session-gated; body = a `ParsedEvent` → the single created `SavedEvent` (201). 401/403/503 like `/events` |
+| `GET`  | `/oauth/google/status`      | Connection status for the web Connect screen. #225 session-gated; `{ connected }` (+ `scopes`, `expiresAt` when connected) — never any token material. 503 if Google unconfigured |
 | `GET`  | `/oauth/google/connect-url` | Mint the consent URL. Rate-limited per IP; Bearer **`SETUP_TOKEN`** (or `ADMIN_TOKEN`) → `{ url }`. 401 wrong code · 429 too many · 503 dark |
 | `GET`  | `/oauth/google/callback`    | Google's redirect target. Validates single-use `state`, pins the account, stores the credential, then **bounces** to the web app (or renders a static Hebrew page) |
 | `POST` | `/oauth/google/disconnect`  | Revoke at Google + delete locally + purge derived rows. Bearer `SETUP_TOKEN` (or `ADMIN_TOKEN`) → `{ disconnected: true }`. 503 dark |
 
-> **`WRITE_TOKEN` is a DISTINCT credential from `READ_TOKEN`** (never aliased) so a read-only client
-> can't mutate the board — both optional, unset ⇒ that seam returns 503. For local dev set
-> `WRITE_TOKEN` (server) **and** `VITE_HOMEOS_WRITE_TOKEN` (web app) to the same string so the AddEvent
-> form persists; the web client's `?? READ_TOKEN` fallback is a dev convenience the server does not honor.
+> **#225 — the read/write seams are gated by a real per-user Supabase session** (`requireSession`), not the
+> retired build-embedded READ/WRITE/MESSAGES bearer tokens. The browser sends the same-origin auth cookie;
+> the server verifies the JWT locally against the cached JWKS (asymmetric ES256) and checks the email against
+> `ALLOWED_LOGIN_EMAILS` (401 unauth · 403 non-allowlisted). Set `SUPABASE_URL` + `ALLOWED_LOGIN_EMAILS` to
+> enable the gate; leave both unset ⇒ those routes return 503 (app-only / dev). `family_id` stays `"default"`
+> for now — real per-member roles arrive with the membership model (#226+).
 
 ## Connect Google (self-serve OAuth, #10)
 
@@ -58,7 +60,7 @@ absent ⇒ admin-only mode, unchanged):
 
 | Var | What | Constraints |
 |-----|------|-------------|
-| `SETUP_TOKEN` | the bearer the web connect/disconnect flow needs | Generate `openssl rand -base64 32`. Boot-validated: **≥ 32 bytes** of base64 entropy AND **distinct** from `READ_TOKEN` *and* `ADMIN_TOKEN` (a third, independent credential — never aliased). **Never a `VITE_*` var** — it's typed into the web dialog at runtime, never built into the bundle. |
+| `SETUP_TOKEN` | the bearer the web connect/disconnect flow needs | Generate `openssl rand -base64 32`. Boot-validated: **≥ 32 bytes** of base64 entropy AND **distinct** from `ADMIN_TOKEN` (an independent credential — never aliased). **Never a `VITE_*` var** — it's typed into the web dialog at runtime, never built into the bundle. |
 | `WEB_BASE_URL` | where the callback bounces the browser back | Absolute **`https://`** URL whose origin is on the in-code `ALLOWED_WEB_ORIGINS` allowlist (boot-validated, so a misconfigured/attacker-set base URL can't divert the post-consent redirect). |
 | `ALLOWED_GOOGLE_EMAIL` | the one Google account the flow accepts | The consenting account's email must match (case-insensitive), else `bad_account`. Unset ⇒ unenforced. |
 

@@ -25,8 +25,6 @@ export interface GoogleOAuthDeps {
   adminToken: string;
   /** #107 — self-serve Connect-Google bearer; a valid SETUP_TOKEN OR ADMIN_TOKEN passes the gate. */
   setupToken?: string;
-  /** #106 — the family app's read token, threaded for the self-serve flow (#108 wires it). */
-  readToken?: string;
   /** #106 — absolute return URL (`${WEB_BASE_URL}/connections`) for the self-serve flow. */
   webReturnUrl?: string;
   /** #106 — the single Google email the self-serve flow accepts (dogfood guard; #108 enforces it). */
@@ -54,15 +52,14 @@ export function gateMatches(
  * Compose GoogleOAuthDeps from the validated settings — the composition seam index.ts calls. Takes
  * the admin bearer as a plain param (read at the call site) so the wiring stays simple.
  *
- * #106 — threads the self-serve optionals: `setupToken` / `allowedEmail` straight from settings,
- * `webReturnUrl` derived as `${webBaseUrl}/connections` (undefined in admin-only mode), and the
- * family `readToken` passed by the caller (the route behavior change itself lands in #108).
+ * #106 — threads the self-serve optionals: `setupToken` / `allowedEmail` straight from settings and
+ * `webReturnUrl` derived as `${webBaseUrl}/connections` (undefined in admin-only mode). #225 retired the
+ * `readToken` param — the `/oauth/google/status` route is now session-gated by `requireSession`.
  */
 export function buildGoogleDeps(
   settings: GoogleOAuthSettings,
   dbPath: string,
   events: Pick<EventStore, "deleteByProvider">,
-  readToken?: string,
   log?: (msg: string, meta?: Record<string, unknown>) => void,
 ): GoogleOAuthDeps {
   const adminToken = settings["adminToken"]; // index read (matches config.ts env access)
@@ -74,7 +71,6 @@ export function buildGoogleDeps(
     config: settings,
     adminToken,
     setupToken: settings.setupToken,
-    readToken,
     webReturnUrl,
     allowedEmail: settings.allowedEmail,
     log,

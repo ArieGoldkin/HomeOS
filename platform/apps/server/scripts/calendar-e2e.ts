@@ -54,7 +54,7 @@ async function main() {
 
   // In-memory board (no pollution); the credential store opens your REAL db where /connect stored it.
   const events = createEventStore(":memory:");
-  const googleDeps = buildGoogleDeps(config.google, config.dbPath, events, undefined, log);
+  const googleDeps = buildGoogleDeps(config.google, config.dbPath, events, log);
 
   const cred = googleDeps.credentials.get(FAMILY_ID);
   if (!cred) {

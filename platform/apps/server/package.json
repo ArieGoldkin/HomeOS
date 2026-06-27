@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "HomeOS WhatsApp webhook service (M1: echo bot \u2014 proves receive\u2192send)",
+  "description": "HomeOS WhatsApp webhook service (M1: echo bot — proves receive→send)",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
@@ -20,8 +20,11 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@homeos/shared": "workspace:*",
     "@hono/node-server": "^1.13.7",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
     "dotenv": "^16.4.7",
     "hono": "^4.6.14",
+    "jose": "^6.2.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {

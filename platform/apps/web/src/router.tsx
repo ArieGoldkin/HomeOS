@@ -1,4 +1,5 @@
 import { AppShell, ListsPlaceholder } from "@app/shell";
+import { LoginScreen } from "@features/auth";
 import { ConnectionsView } from "@features/connections";
 import { TodayScreen } from "@features/day-view";
 import { FamilyView } from "@features/family";
@@ -6,10 +7,11 @@ import { Onboarding } from "@features/onboarding";
 import { SettingsView } from "@features/settings";
 import { CalendarScreen } from "@features/week-view";
 import { type ConnectOutcome, connectOutcomeSchema } from "@homeos/shared";
+import type { AuthState } from "@shared/auth";
 import { coerceDateIso, ISO_DATE_RE } from "@shared/lib";
 import {
   createMemoryHistory,
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   getRouteApi,
@@ -97,6 +99,28 @@ function WelcomeScreen() {
 }
 
 /**
+ * #225 — the router carries the live Supabase auth state in its context (App.tsx feeds it in from
+ * `useCurrentUser`). The default is UNAUTHENTICATED so a router that's never given context fails safe to
+ * the login screen rather than leaking the board.
+ */
+export interface RouterContext {
+  auth: AuthState;
+}
+
+const UNAUTHENTICATED_CONTEXT: RouterContext = {
+  auth: {
+    status: "unauthenticated",
+    isLoading: false,
+    isAuthenticated: false,
+    userId: null,
+    email: null,
+    full_name: null,
+    avatar_url: null,
+    signOut: async () => {},
+  },
+};
+
+/**
  * Build a FRESH route tree. Each router must own its own tree — createRouter mutates the tree it's
  * given, so sharing one across the prod router and per-test routers leaks state between them.
  *
@@ -104,7 +128,7 @@ function WelcomeScreen() {
  * to `/today`. The old `/`, `/phone/*`, and `/web/*` route trees are gone.
  */
 function buildRouteTree() {
-  const rootRoute = createRootRoute({ component: RootLayout });
+  const rootRoute = createRootRouteWithContext<RouterContext>()({ component: RootLayout });
 
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -115,10 +139,16 @@ function buildRouteTree() {
   });
 
   // The app shell (icon rail + header) wraps every screen via <Outlet/>. Pathless so children own the
-  // flat top-level paths.
+  // flat top-level paths. #225 — guard every authed screen here in one place: an unauthenticated visit
+  // bounces to /login (the Google OAuth round-trip returns the user to /today with a cookie session).
   const appRoute = createRoute({
     getParentRoute: () => rootRoute,
     id: "app",
+    beforeLoad: ({ context }) => {
+      if (!context.auth.isAuthenticated) {
+        throw redirect({ to: "/login" });
+      }
+    },
     component: AppShell,
   });
 
@@ -162,6 +192,19 @@ function buildRouteTree() {
     component: ListsPlaceholder,
   });
 
+  // #225 — the standalone login screen (no shell chrome). An already-authenticated visit (e.g. landing
+  // back here after the OAuth return) skips straight to the board.
+  const loginRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/login",
+    beforeLoad: ({ context }) => {
+      if (context.auth.isAuthenticated) {
+        throw redirect({ to: "/today" });
+      }
+    },
+    component: LoginScreen,
+  });
+
   // Standalone routes (no shell chrome): first-run onboarding + the dev token gallery.
   const welcomeRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -185,13 +228,19 @@ function buildRouteTree() {
       settingsRoute,
       listsRoute,
     ]),
+    loginRoute,
     welcomeRoute,
     tokensRoute,
   ]);
 }
 
 export function createAppRouter(history?: ReturnType<typeof createMemoryHistory>) {
-  return createRouter({ routeTree: buildRouteTree(), history });
+  return createRouter({
+    routeTree: buildRouteTree(),
+    history,
+    // App.tsx overrides this with the live auth state via RouterProvider's `context` prop.
+    context: UNAUTHENTICATED_CONTEXT,
+  });
 }
 
 export const router = createAppRouter();

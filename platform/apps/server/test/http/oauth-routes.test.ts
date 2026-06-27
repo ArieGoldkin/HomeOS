@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { connectionStatusSchema } from "@homeos/shared";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { GoogleOAuthSettings } from "../../src/config.ts";
 import { createCredentialStore } from "../../src/db/credential-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
@@ -13,6 +13,16 @@ import {
   registerOAuthRoutes,
 } from "../../src/http/oauth-routes/index.ts";
 import { createRateLimiter } from "../../src/http/rate-limit.ts";
+import { requireSession } from "../../src/http/session/index.ts";
+import { type JwtKit, makeJwtKit } from "./session/jwt-test-kit.ts";
+
+// #225 — the shared ES256 JWT kit. /oauth/google/status is now session-gated (it replaced the retired
+// build-embedded readToken), so the status tests mint tokens with this kit and the harness wires the
+// `requireSession` middleware as registerOAuthRoutes's 3rd arg.
+let kit: JwtKit;
+beforeAll(async () => {
+  kit = await makeJwtKit();
+});
 
 const ADMIN = "admin-tok";
 const NEW_ACCESS = "access-new";
@@ -43,7 +53,7 @@ const tokens = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function harness(over: Partial<GoogleOAuthDeps> = {}) {
+function harness(over: Partial<GoogleOAuthDeps> = {}, opts: { session?: boolean } = {}) {
   const credentials = createCredentialStore(":memory:", key, fixedNow);
   const client = over.client ?? fakeClient();
   const events = over.events ?? {
@@ -62,7 +72,11 @@ function harness(over: Partial<GoogleOAuthDeps> = {}) {
     ...over,
   };
   const app = new Hono();
-  registerOAuthRoutes(app, deps);
+  // #225 — the session middleware that gates GET /oauth/google/status. `session: false` omits it so the
+  // route falls back to its dark 503 (the "auth not configured" path).
+  const guard =
+    opts.session === false ? undefined : requireSession(kit.sessionConfig(["dad@example.com"]));
+  registerOAuthRoutes(app, deps, guard);
   return { app, client, credentials, events };
 }
 
@@ -373,28 +387,39 @@ describe("POST /oauth/google/disconnect (#108)", () => {
   });
 });
 
-describe("GET /oauth/google/status (#108)", () => {
-  const READ = "read-tok";
-
-  it("401s when the read token is wrong or unset", async () => {
-    const { app: noReadToken } = harness(); // readToken unset
-    expect((await noReadToken.request("/oauth/google/status")).status).toBe(401);
-    // readToken unset must NOT be bypassable with an empty `Bearer ` header (timingSafeEqual([],[])).
+describe("GET /oauth/google/status (#108/#225)", () => {
+  it("401s without a session token, with an invalid one, or an empty Bearer", async () => {
+    const { app } = harness();
+    expect((await app.request("/oauth/google/status")).status).toBe(401);
+    // An empty `Bearer ` header (empty token) must NOT bypass the gate.
     expect(
-      (await noReadToken.request("/oauth/google/status", { headers: { authorization: "Bearer " } }))
-        .status,
+      (await app.request("/oauth/google/status", { headers: { authorization: "Bearer " } })).status,
     ).toBe(401);
-    const { app } = harness({ readToken: READ });
     expect(
       (await app.request("/oauth/google/status", { headers: { authorization: "Bearer wrong" } }))
         .status,
     ).toBe(401);
   });
 
-  it("{connected:false} when no credential is stored", async () => {
-    const { app } = harness({ readToken: READ });
+  it("403 for a valid session whose email is not allowlisted", async () => {
+    const { app } = harness();
+    const stranger = await kit.sign({ email: "stranger@example.com" });
     const res = await app.request("/oauth/google/status", {
-      headers: { authorization: `Bearer ${READ}` },
+      headers: { authorization: `Bearer ${stranger}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("503 when the status route is session-unconfigured (no guard wired)", async () => {
+    const { app } = harness({}, { session: false });
+    const res = await app.request("/oauth/google/status");
+    expect(res.status).toBe(503);
+  });
+
+  it("{connected:false} when no credential is stored", async () => {
+    const { app } = harness();
+    const res = await app.request("/oauth/google/status", {
+      headers: { authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -404,14 +429,11 @@ describe("GET /oauth/google/status (#108)", () => {
 
   it("{connected:true,scopes,expiresAt} with NO token material (OG3) when stored", async () => {
     const exchangeCode = vi.fn(async () => tokens());
-    const { app, credentials } = harness({
-      readToken: READ,
-      client: fakeClient({ exchangeCode }),
-    });
+    const { app, credentials } = harness({ client: fakeClient({ exchangeCode }) });
     const state = credentials.issueState(FAMILY_ID);
     await app.request(`/oauth/google/callback?code=C&state=${state}`); // connect first
     const res = await app.request("/oauth/google/status", {
-      headers: { authorization: `Bearer ${READ}` },
+      headers: { authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
@@ -466,17 +488,16 @@ describe("buildGoogleDeps — threads the self-serve optionals (#106)", () => {
   };
   const events = { deleteByProvider: vi.fn(() => 0) };
 
-  it("derives webReturnUrl from webBaseUrl and threads setupToken / allowedEmail / readToken", () => {
+  it("derives webReturnUrl from webBaseUrl and threads setupToken / allowedEmail", () => {
     const settings: GoogleOAuthSettings = {
       ...baseSettings,
       setupToken: "setup-tok",
       webBaseUrl: "https://homeos-production-83a4.up.railway.app",
       allowedEmail: "parent@example.com",
     };
-    const deps = buildGoogleDeps(settings, ":memory:", events, "read-tok");
+    const deps = buildGoogleDeps(settings, ":memory:", events);
     expect(deps.setupToken).toBe("setup-tok");
     expect(deps.allowedEmail).toBe("parent@example.com");
-    expect(deps.readToken).toBe("read-tok");
     expect(deps.webReturnUrl).toBe("https://homeos-production-83a4.up.railway.app/connections");
   });
 
@@ -485,6 +506,5 @@ describe("buildGoogleDeps — threads the self-serve optionals (#106)", () => {
     expect(deps.webReturnUrl).toBeUndefined();
     expect(deps.setupToken).toBeUndefined();
     expect(deps.allowedEmail).toBeUndefined();
-    expect(deps.readToken).toBeUndefined();
   });
 });
