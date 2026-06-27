@@ -19,7 +19,7 @@ import { createInboundStore } from "./db/inbound-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
-import { buildGoogleDeps } from "./http/oauth-routes.ts";
+import { buildGoogleDeps } from "./http/oauth-routes/index.ts";
 import { createServer, type ServerDeps } from "./http/server.ts";
 import type { InboundMessage } from "./http/webhook.ts";
 import { noopUploader, scheduleBackup } from "./infra/backup.ts";

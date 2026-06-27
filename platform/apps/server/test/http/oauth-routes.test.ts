@@ -11,7 +11,7 @@ import {
   type GoogleOAuthDeps,
   gateMatches,
   registerOAuthRoutes,
-} from "../../src/http/oauth-routes.ts";
+} from "../../src/http/oauth-routes/index.ts";
 import { createRateLimiter } from "../../src/http/rate-limit.ts";
 
 const ADMIN = "admin-tok";
