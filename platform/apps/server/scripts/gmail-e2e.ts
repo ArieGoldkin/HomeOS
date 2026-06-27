@@ -7,7 +7,7 @@ import { handleInbound } from "../src/core/handler.ts";
 import { createEventStore } from "../src/db/event-store/index.ts";
 import { FAMILY_ID } from "../src/db/schema.ts";
 import { httpGmailClient } from "../src/google/gmail.ts";
-import { buildGoogleDeps } from "../src/http/oauth-routes.ts";
+import { buildGoogleDeps } from "../src/http/oauth-routes/index.ts";
 import { anthropicRawParse, createParser } from "../src/parsing/parser.ts";
 import { extractEventsTool, type GmailToolDeps, readGmailTool } from "../src/tools/index.ts";
 
