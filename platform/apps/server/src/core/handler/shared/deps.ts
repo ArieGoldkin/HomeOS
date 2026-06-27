@@ -7,7 +7,7 @@ import { FAMILY_ID } from "../../../db/schema.ts";
 import type { ParseMessage } from "../../../parsing/parser.ts";
 import type { CalendarToolDeps, GmailToolDeps } from "../../../tools/index.ts";
 import type { SendText } from "../../../whatsapp/client.ts";
-import type { Agent } from "../../agent.ts";
+import type { Agent } from "../../agent/index.ts";
 
 export interface HandlerDeps {
   allowlist: readonly string[];

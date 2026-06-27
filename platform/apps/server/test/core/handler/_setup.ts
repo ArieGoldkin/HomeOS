@@ -1,6 +1,6 @@
 import type { ParsedEvent } from "@homeos/shared";
 import { vi } from "vitest";
-import type { AgentResult } from "../../../src/core/agent.ts";
+import type { AgentResult } from "../../../src/core/agent/index.ts";
 import type { HandlerDeps } from "../../../src/core/handler/index.ts";
 import type { BindingStore } from "../../../src/db/binding-store.ts";
 import type { ConversationStore } from "../../../src/db/conversation-store.ts";

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
-import { anthropicCallModel, createAgent, RESOLVE_SYSTEM } from "./core/agent.ts";
+import { anthropicCallModel, createAgent, RESOLVE_SYSTEM } from "./core/agent/index.ts";
 import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
