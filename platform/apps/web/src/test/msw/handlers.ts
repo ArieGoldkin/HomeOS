@@ -56,6 +56,18 @@ export const sampleMessages = [
   },
 ];
 
+// #235 — a wrapped { family, members } payload mirroring GET /family: the family display name + the 4-member
+// roster with real Hebrew names (what the web app reads instead of the hardcoded KNOWN_ROSTER/HOUSEHOLD).
+export const sampleFamily = {
+  family: { display_name: "משפחת הבית" },
+  members: [
+    { name: "אבא", role: "owner" },
+    { name: "אמא", role: "member" },
+    { name: "יואב", role: "member" },
+    { name: "נועה", role: "member" },
+  ],
+};
+
 /**
  * #111 — a CONNECTED `GET /oauth/google/status` payload (mirrors the shared `connectionStatusSchema`
  * connected member): the granted scopes + the access-token `expiresAt`. Use it with `server.use(...)` or
@@ -121,6 +133,11 @@ export const handlers = [
   // #135/#225 — session-gated GET /messages, returning the wrapped { messages } feed.
   http.get("*/messages", () => {
     return HttpResponse.json({ messages: sampleMessages });
+  }),
+
+  // #235 — session-gated GET /family, returning the wrapped { family, members } roster.
+  http.get("*/family", () => {
+    return HttpResponse.json(sampleFamily);
   }),
 
   /**

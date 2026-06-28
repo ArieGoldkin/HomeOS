@@ -38,11 +38,13 @@ describe("TodayScreen", () => {
     expect(screen.getByText("דנה")).toBeInTheDocument();
   });
 
-  it("shows the tasks-left chip and the household card", () => {
+  it("shows the tasks-left chip and the server-driven household card (#235)", async () => {
     render(wrap(<TodayScreen dateIso="2026-06-21" />));
     expect(screen.getByText(/משימות היום/)).toBeInTheDocument();
     expect(screen.getByText("משק הבית")).toBeInTheDocument();
-    expect(screen.getByText("4 בני בית")).toBeInTheDocument();
+    // The roster + count now come from GET /family (4 members in the default msw handler), not a mock.
+    await waitFor(() => expect(screen.getByText("4 בני בית")).toBeInTheDocument());
+    expect(screen.getByText("אבא")).toBeInTheDocument();
   });
 
   it("renders the data-connected schedule (today's event)", async () => {

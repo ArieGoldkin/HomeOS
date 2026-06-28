@@ -3,7 +3,7 @@ import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import type { SavedEvent } from "@homeos/shared";
 import { useCurrentUser } from "@shared/auth";
 import { PersonAvatar } from "@shared/board";
-import { useDayEvents, useNow, useToggleEventStatus } from "@shared/hooks";
+import { useDayEvents, useFamily, useNow, useToggleEventStatus } from "@shared/hooks";
 import { greetingHe, hebDateLong, hebrewDateLabel, holidaysOn } from "@shared/lib";
 import { Button, Card, SectionLabel } from "@shared/ui";
 import { useState } from "react";
@@ -14,10 +14,6 @@ export interface TodayScreenProps {
   dateIso: string;
 }
 
-// #230 — the greeting name now comes from the signed-in Google session (useCurrentUser). HOUSEHOLD is
-// still a placeholder roster (mirrors FamilyView's KNOWN_ROSTER) until the #235 GET /family route lands.
-const HOUSEHOLD = ["אבא", "אמא", "יואב", "נועה"] as const;
-
 /**
  * The Today screen (#179) — the Modern greeting header + action chips over a card grid. The schedule
  * card hosts the data-connected DayView (timed spine + anytime tasks + tomorrow peek); a household card
@@ -27,6 +23,8 @@ const HOUSEHOLD = ["אבא", "אמא", "יואב", "נועה"] as const;
 export function TodayScreen({ dateIso }: TodayScreenProps) {
   const now = useNow();
   const { full_name, email } = useCurrentUser();
+  // #235 — the household roster from the real GET /family route (was the hardcoded HOUSEHOLD mock).
+  const household = useFamily().data?.members.map((m) => m.name) ?? [];
   // #230 — first name from the Google session; no hardcoded fallback (empty greeting beats a fake name).
   const me = full_name?.split(" ")[0] ?? email?.split("@")[0] ?? "";
   const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(dateIso, now);
@@ -98,11 +96,11 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
           <div className="mb-3.5 flex items-center justify-between">
             <SectionLabel>משק הבית</SectionLabel>
             <span className="font-accent text-[14px] text-muted-foreground">
-              {HOUSEHOLD.length} בני בית
+              {household.length} בני בית
             </span>
           </div>
           <ul className="flex flex-col gap-3">
-            {HOUSEHOLD.map((name) => (
+            {household.map((name) => (
               <li key={name} className="flex items-center gap-3">
                 <PersonAvatar name={name} size={32} />
                 <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">

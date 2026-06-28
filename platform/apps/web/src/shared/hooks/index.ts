@@ -2,6 +2,7 @@ export { googleStatusQueryKey, useConnectionStatus } from "./use-connection-stat
 export { useCreateEvent } from "./use-create-event";
 export { type DayEvents, type DayStatus, useDayEvents } from "./use-day-events";
 export { eventsQueryKey, useEvents } from "./use-events";
+export { familyQueryKey, useFamily } from "./use-family";
 export { messagesQueryKey, useMessages } from "./use-messages";
 export { useNow } from "./use-now";
 export { usePrefersReducedMotion } from "./use-prefers-reduced-motion";

@@ -65,13 +65,13 @@ const inbound = createInboundStore(config.dbPath);
 // index; the boot `expireStale` below both sweeps stale threads and acts as a table-exists boot check.
 const conversations = createConversationStore(config.dbPath);
 // 👨‍👩‍👧 Identity spine (#227, milestone #13): stand up families/family_members/family_phones and
-// idempotently seed our one family on boot. The return is discarded — this is a seed-only side effect;
-// the phone→family resolver (#229) is the first real reader (it opens its own handle below). Members come
-// from the existing config.members (#14 phone:name) map, keyed on the UNIQUE phone — NOT the display
-// name, so two members sharing a name can't collapse under the (family_id, user_id) PK; the whole
-// `user_id` is a PLACEHOLDER until Supabase login (#225) supplies the real auth.uid(). Seeding is
-// first-wins (INSERT OR IGNORE), so the owner/member role freezes at first boot and later MEMBERS drift
-// isn't reconciled here — intentional for this placeholder spine.
+// idempotently seed our one family on boot. The handle is RETAINED (#235) and threaded into the server
+// for GET /family (the first web reader); the phone→family resolver (#229) opens its own handle below.
+// Members come from the existing config.members (#14 phone:name) map: keyed on the UNIQUE phone — NOT the
+// display name, so two members sharing a name can't collapse under the (family_id, user_id) PK — while the
+// name becomes the member's `display_name` (#235, what GET /family serves). The whole `user_id` is a
+// PLACEHOLDER until Supabase login (#225) supplies the real auth.uid(). The role is FIRST-WINS (frozen at
+// first boot); display_name is upserted, so a config.members rename reflects on the next boot (#235).
 //
 // 🔑 #229 N=1 BOOTSTRAP: seed family_phones from the allowlist so every already-trusted family number
 // RESOLVES via FamilyResolver from day one — the live bot keeps working before the wa.me/OTP ceremony's
@@ -81,11 +81,12 @@ const conversations = createConversationStore(config.dbPath);
 // stored digit-normalized by the store, matching the resolver's read-side `normalizePhone`. A SECOND
 // family never gets auto-seeded — it earns its bindings through the ceremony, never from a config list.
 const bootVerifiedAt = sqliteUtc(new Date());
-createFamilyStore(config.dbPath, {
+const family = createFamilyStore(config.dbPath, {
   family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
-  members: Object.keys(config.members).map((phone, i) => ({
+  members: Object.entries(config.members).map(([phone, name], i) => ({
     userId: `placeholder:${phone}`,
     role: i === 0 ? "owner" : "member",
+    displayName: name, // #235 — the #14 config name, served by GET /family (not the placeholder user_id)
   })),
   phones: config.allowlist.map((fromPhone) => ({ fromPhone, verifiedAt: bootVerifiedAt })),
 });
@@ -199,6 +200,7 @@ const serverDeps: ServerDeps = {
   inbound,
   process: runInbound,
   events,
+  family, // #235 — read-only FamilyStore backing GET /family (the roster the web app un-mocks)
   allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
   appSecret: config.appSecret,
   google: googleDeps,

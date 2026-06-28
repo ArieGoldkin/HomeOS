@@ -288,3 +288,27 @@ export const connectionStatusSchema = z.discriminatedUnion("connected", [
   }),
 ]);
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
+
+/**
+ * #235 — one family-roster member as served by `GET /family`: a display `name` (sourced from the #14
+ * `config.members` map, NOT the placeholder `user_id`) + a free-text `role` ("owner"/"member" today).
+ * `name` is a Hebrew display string; render numerals/phones LTR-wrapped per the RTL rules.
+ */
+export const familyMemberSchema = z.object({
+  name: z.string(),
+  role: z.string(),
+});
+export type FamilyMember = z.infer<typeof familyMemberSchema>;
+
+/**
+ * #235 — the `GET /family` response envelope (server produces, web consumes): the single dogfood family's
+ * `display_name` + its members. The web data layer (`useFamily`) parses against this so any shape drift
+ * fails loudly at the boundary, exactly like {@link savedEventsResponseSchema}. `family_id` is intentionally
+ * NOT served — the route is already `familyId`-scoped server-side (N=1 `FAMILY_ID`), and a tenant id on the
+ * wire is noise the single-family web app never needs (it stays additive for Phase-B/RLS).
+ */
+export const familyRosterResponseSchema = z.object({
+  family: z.object({ display_name: z.string() }),
+  members: z.array(familyMemberSchema),
+});
+export type FamilyRosterResponse = z.infer<typeof familyRosterResponseSchema>;

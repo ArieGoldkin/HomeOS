@@ -208,13 +208,23 @@ export const CREATE_FAMILIES_TABLE = `
  */
 export const CREATE_FAMILY_MEMBERS_TABLE = `
   CREATE TABLE IF NOT EXISTS family_members (
-    family_id   TEXT NOT NULL,
-    user_id     TEXT NOT NULL,
-    role        TEXT NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    family_id    TEXT NOT NULL,
+    user_id      TEXT NOT NULL,
+    role         TEXT NOT NULL,
+    display_name TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (family_id, user_id)
   );
 `;
+
+/**
+ * #235 — idempotent migration: add the `display_name` column to a PRE-EXISTING family_members table
+ * (mirrors ADD_EVENTS_SOURCE_PROVIDER). Fresh DBs get it from the DDL above; older DBs (seeded by #227
+ * before this column existed) get it here. Nullable — the boot seed upserts the real name from the #14
+ * `config.members` map (`ON CONFLICT … DO UPDATE SET display_name`), so it backfills on the same boot.
+ */
+export const ADD_FAMILY_MEMBERS_DISPLAY_NAME =
+  "ALTER TABLE family_members ADD COLUMN display_name TEXT;";
 
 /**
  * `family_phones(family_id, from_phone, verified_at)` — the DURABLE result of the wa.me/OTP binding
@@ -246,6 +256,10 @@ export interface FamilyMemberRow {
   /** Supabase `auth.uid()`; a placeholder until #225 lands. */
   user_id: string;
   role: string;
+  /** #235 — display name from the #14 `config.members` map; nullable column, but the boot seed upserts it
+   *  for every config member, so it's populated for every seeded row (null only for a hypothetical
+   *  non-config member written by a future path). */
+  display_name: string | null;
   created_at: string;
 }
 

@@ -27,11 +27,16 @@ afterEach(() => {
 function seedFamily(
   path: string,
   familyId: string,
-  opts: { phone?: string; members?: Array<{ userId: string; role: string }> } = {},
+  opts: {
+    phone?: string;
+    members?: Array<{ userId: string; role: string; displayName: string }>;
+  } = {},
 ): void {
   const seed: FamilySeed = {
     family: { familyId, displayName: `Family ${familyId}` },
-    members: opts.members ?? [{ userId: `placeholder:${familyId}`, role: "owner" }],
+    members: opts.members ?? [
+      { userId: `placeholder:${familyId}`, role: "owner", displayName: "Owner" },
+    ],
     ...(opts.phone
       ? { phones: [{ fromPhone: opts.phone, verifiedAt: "2026-06-26 09:00:00" }] }
       : {}),
@@ -112,8 +117,8 @@ describe("FamilyResolver — the phone→family security chokepoint (#229)", () 
     const path = tmpDbPath();
     seedFamily(path, "default", {
       members: [
-        { userId: "auth-uid-arie", role: "owner" },
-        { userId: "auth-uid-partner", role: "member" },
+        { userId: "auth-uid-arie", role: "owner", displayName: "Arie" },
+        { userId: "auth-uid-partner", role: "member", displayName: "Partner" },
       ],
     });
     const resolver = createFamilyResolver(path);
