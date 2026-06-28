@@ -49,3 +49,28 @@ export function scheduleDaily(
   timer = setTimeout(() => void tick(), msUntilNextRun(now(), hour));
   return { stop: () => clearTimeout(timer) };
 }
+
+/**
+ * Run `task` every `intervalMs`, first fire after one interval. Returns `stop()` to cancel. A task
+ * rejection is routed to `onError` (default: swallow) so the loop keeps running. Used by the offsite
+ * backup (#134) where a fixed cadence — not a wall-clock hour — is what bounds the RPO.
+ */
+export function scheduleEvery(
+  intervalMs: number,
+  task: () => Promise<void>,
+  opts: ScheduleOptions = {},
+): { stop: () => void } {
+  let timer: ReturnType<typeof setTimeout>;
+
+  const tick = async () => {
+    try {
+      await task();
+    } catch (err) {
+      opts.onError?.(err);
+    }
+    timer = setTimeout(() => void tick(), intervalMs);
+  };
+
+  timer = setTimeout(() => void tick(), intervalMs);
+  return { stop: () => clearTimeout(timer) };
+}

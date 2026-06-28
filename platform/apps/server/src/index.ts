@@ -23,7 +23,13 @@ import { buildGoogleDeps } from "./http/oauth-routes/index.ts";
 import { createServer, type ServerDeps } from "./http/server.ts";
 import { cookieTokenReader, type RequireSessionConfig, remoteJwks } from "./http/session/index.ts";
 import type { InboundMessage } from "./http/webhook.ts";
-import { noopUploader, scheduleBackup } from "./infra/backup.ts";
+import {
+  backupFreshnessLine,
+  noopUploader,
+  runBackupOnce,
+  scheduleBackup,
+} from "./infra/backup.ts";
+import { r2Uploader } from "./infra/r2-uploader.ts";
 import { anthropicRawParse, createParser } from "./parsing/parser.ts";
 import {
   type CalendarToolDeps,
@@ -224,8 +230,20 @@ if (backlog.length > 0) {
   for (const msg of backlog) void runInbound(msg);
 }
 
-// 📊 Daily self-digest: heartbeat + quality + alert to the founder. Defaults to the first
-// allowlist number if ADMIN_PHONE isn't set.
+// 💾 Offsite durability (#134). With the R2 bundle configured, the real uploader streams the WAL-safe
+// VACUUM-INTO snapshot to Cloudflare R2; unset ⇒ noopUploader (dev/unset = no offsite copy). One
+// object-key prefix per family file (the single FAMILY_ID "default" today).
+const uploader = config.offsite ? r2Uploader(config.offsite) : noopUploader;
+const backupIntervalMs = config.backupIntervalHours * 60 * 60 * 1000;
+const backupMaxAgeMs = backupIntervalMs * 2; // tolerate one missed cycle before the digest flags it
+// The staleness probe for the daily digest — null when offsite is unconfigured (no backup line).
+const backupHealth = config.offsite
+  ? async () =>
+      backupFreshnessLine((await uploader.latestUploadAt?.()) ?? null, new Date(), backupMaxAgeMs)
+  : undefined;
+
+// 📊 Daily self-digest: heartbeat + quality + alert to the founder (defaults to the first allowlist
+// number if ADMIN_PHONE isn't set). #134: it also carries the offsite-backup freshness alert.
 const adminPhone = config.adminPhone ?? config.allowlist[0];
 if (adminPhone) {
   scheduleDigest({
@@ -235,13 +253,29 @@ if (adminPhone) {
     adminPhone,
     familyId: FAMILY_ID,
     hour: config.digestHour,
+    backupHealth,
     log,
   });
 }
 
-// 💾 Nightly WAL-safe backup. The offsite uploader (R2/B2) is wired at the Railway cutover;
-// until then it is a no-op so the snapshot mechanism + schedule run harmlessly in dev.
-scheduleBackup({ dbPath: config.dbPath, uploader: noopUploader, hour: config.backupHour, log });
+// Offsite backup every BACKUP_INTERVAL_HOURS (bounds the RPO). When offsite is configured, also kick
+// one at boot so a fresh deploy gets an offsite copy without waiting a full cycle (and seeds the
+// freshness probe). Failures are logged via the scheduler's onError; the loop keeps running.
+scheduleBackup({
+  dbPath: config.dbPath,
+  uploader,
+  intervalMs: backupIntervalMs,
+  retentionDays: config.backupRetentionDays,
+  log,
+});
+if (config.offsite) {
+  void runBackupOnce({
+    dbPath: config.dbPath,
+    uploader,
+    retentionDays: config.backupRetentionDays,
+    log,
+  }).catch((err) => log("initial backup failed", { error: String(err) }));
+}
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`HomeOS server (agent core: tool-use loop → confirm) listening on :${info.port}`);

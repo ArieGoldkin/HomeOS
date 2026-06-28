@@ -71,8 +71,18 @@ const schema = z.object({
   // the Asia/Jerusalem hour to send it.
   ADMIN_PHONE: z.string().min(1).optional(),
   DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(21),
-  // Nightly WAL-safe backup hour (item I), Asia/Jerusalem.
-  BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+  // #134 — offsite durability. The R2 bundle (endpoint + bucket + both keys) is all-or-nothing: set ⇒
+  // the real uploader streams the WAL-safe snapshot to Cloudflare R2; unset ⇒ `noopUploader` (dev stays
+  // a no-op). R2_PREFIX is the per-family object-key prefix ("one prefix per family file"), "default"
+  // today. The cadence knobs apply to whichever uploader runs: INTERVAL_HOURS bounds the RPO,
+  // RETENTION_DAYS ages out old snapshots (mirrors DEFAULT_RETENTION_DAYS in infra/backup.ts).
+  R2_ENDPOINT: z.string().url().optional(),
+  R2_BUCKET: z.string().min(1).optional(),
+  R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+  R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  R2_PREFIX: z.string().min(1).default("default"),
+  BACKUP_INTERVAL_HOURS: z.coerce.number().int().positive().default(6),
+  BACKUP_RETENTION_DAYS: z.coerce.number().int().positive().default(14),
   // G16: per-sender daily message ceiling (Asia/Jerusalem day). The allowlist bounds *who* and the
   // input cap bounds message *size*; this bounds *rate* — the last unbounded cost axis vs ≤$100/mo.
   // Generous default for a heavy family member; trips only on an abusive/looping device.
@@ -126,6 +136,17 @@ export interface GoogleOAuthSettings {
   allowedEmail?: string;
 }
 
+/** #134 — offsite backup (Cloudflare R2) settings; present only when the full R2 bundle is configured. */
+export interface OffsiteSettings {
+  /** Account endpoint, no bucket — e.g. `https://<acct>.eu.r2.cloudflarestorage.com`. */
+  endpoint: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  /** Per-family object-key prefix; the single `family_id` "default" today. */
+  prefix: string;
+}
+
 /** #225 — Supabase Auth session settings; present only when SUPABASE_URL + ALLOWED_LOGIN_EMAILS are set. */
 export interface SupabaseAuthSettings {
   /** Supabase project URL, e.g. `https://<ref>.supabase.co`. */
@@ -147,7 +168,9 @@ export interface Config {
   appSecret?: string;
   adminPhone?: string;
   digestHour: number;
-  backupHour: number;
+  /** #134 — offsite backup cadence (hours between snapshots) and retention window (days). */
+  backupIntervalHours: number;
+  backupRetentionDays: number;
   maxPerSenderPerDay: number;
   /** #87: open-thread TTL in MS (CONVERSATION_TTL_MIN × 60_000), passed to the handler writers. */
   conversationTtlMs: number;
@@ -161,6 +184,8 @@ export interface Config {
   google?: GoogleOAuthSettings;
   /** #225 — Supabase Auth session gate (url + allowed login emails). Undefined ⇒ read/write routes 503. */
   supabase?: SupabaseAuthSettings;
+  /** #134 — offsite backup target (Cloudflare R2). Undefined ⇒ noopUploader (dev/unset = no offsite copy). */
+  offsite?: OffsiteSettings;
 }
 
 /**
@@ -280,6 +305,45 @@ function readSupabaseBundle(
 }
 
 /**
+ * #134 — the offsite R2 bundle is all-or-nothing: all four (endpoint, bucket, both keys) present ⇒
+ * settings (real uploader active); none present ⇒ undefined (ships dark → `noopUploader`, the dev/unset
+ * no-op). A partial set fails fast naming the missing variable(s) — a half-configured target would
+ * silently drop the offsite copy. `prefix` is always defaulted, so it never gates the bundle.
+ */
+function readOffsiteBundle(
+  endpoint: string | undefined,
+  bucket: string | undefined,
+  accessKeyId: string | undefined,
+  secretAccessKey: string | undefined,
+  prefix: string,
+): OffsiteSettings | undefined {
+  const parts = {
+    R2_ENDPOINT: endpoint,
+    R2_BUCKET: bucket,
+    R2_ACCESS_KEY_ID: accessKeyId,
+    R2_SECRET_ACCESS_KEY: secretAccessKey,
+  };
+  const present = Object.values(parts).filter((v) => v && v.length > 0);
+  if (present.length === 0) return undefined; // ships dark
+  if (present.length < 4) {
+    const missing = Object.entries(parts)
+      .filter(([, v]) => !v || v.length === 0)
+      .map(([k]) => k);
+    throw new Error(
+      `Invalid environment configuration: offsite backup needs all of R2_ENDPOINT, R2_BUCKET, ` +
+        `R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY — missing: ${missing.join(", ")}.`,
+    );
+  }
+  return {
+    endpoint: endpoint!,
+    bucket: bucket!,
+    accessKeyId: accessKeyId!,
+    secretAccessKey: secretAccessKey!,
+    prefix,
+  };
+}
+
+/**
  * Parse and validate the environment, failing fast with a message that names the
  * offending variable(s). Inject `env` in tests; defaults to `process.env`.
  */
@@ -305,7 +369,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     appSecret: e.APP_SECRET,
     adminPhone: e.ADMIN_PHONE,
     digestHour: e.DIGEST_HOUR,
-    backupHour: e.BACKUP_HOUR,
+    backupIntervalHours: e.BACKUP_INTERVAL_HOURS,
+    backupRetentionDays: e.BACKUP_RETENTION_DAYS,
     maxPerSenderPerDay: e.MAX_PER_SENDER_PER_DAY,
     conversationTtlMs: e.CONVERSATION_TTL_MIN * 60_000,
     gmailMaxMessages: e.GMAIL_MAX_MESSAGES,
@@ -317,6 +382,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     calendarAutoPush: e.CALENDAR_AUTO_PUSH,
     google: readGoogleBundle(env),
     supabase: readSupabaseBundle(e.SUPABASE_URL, e.ALLOWED_LOGIN_EMAILS),
+    offsite: readOffsiteBundle(
+      e.R2_ENDPOINT,
+      e.R2_BUCKET,
+      e.R2_ACCESS_KEY_ID,
+      e.R2_SECRET_ACCESS_KEY,
+      e.R2_PREFIX,
+    ),
   };
   return cfg;
 }

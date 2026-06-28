@@ -53,6 +53,14 @@ describe("buildDigest", () => {
   it("omits the reminders section when there are none (heartbeat stays clean)", () => {
     expect(buildDigest({ events: 0, handled: 0, errors: 0, pending: 0 })).not.toContain("🔔");
   });
+
+  it("appends the backup health line only when one is provided (#134)", () => {
+    const stats = { events: 0, handled: 0, errors: 0, pending: 0 };
+    expect(buildDigest(stats, [], "⚠️ הגיבוי לא עודכן מעל 10 שעות")).toContain(
+      "⚠️ הגיבוי לא עודכן מעל 10 שעות",
+    );
+    expect(buildDigest(stats, [], null)).not.toContain("⚠️"); // healthy ⇒ no noise
+  });
 });
 
 describe("msUntilNextRun (Asia/Jerusalem)", () => {
@@ -66,6 +74,77 @@ describe("msUntilNextRun (Asia/Jerusalem)", () => {
   it("wraps to tomorrow when the hour already passed", () => {
     expect(msUntilNextRun(now, 13)).toBe(24 * 3600 * 1000); // exactly now → next day
     expect(msUntilNextRun(now, 12)).toBe(23 * 3600 * 1000); // 1h ago → +23h
+  });
+});
+
+const makeDeps = (
+  sendText: DigestDeps["sendText"],
+  over: Partial<DigestDeps> = {},
+): DigestDeps => ({
+  events: {
+    saveEvent: vi.fn(),
+    listEvents: vi.fn(() => []),
+    deleteLastFromSender: vi.fn(() => 0),
+    countSince: vi.fn(() => 0),
+    deleteByProvider: vi.fn(() => 0),
+    deleteById: vi.fn(() => 1),
+    findEventsByRef: vi.fn(() => []),
+    searchEvents: vi.fn(() => []),
+    findEventsInScope: vi.fn(() => []),
+    remindersDueOn: vi.fn(() => []),
+    updateEvent: vi.fn(() => null),
+    setEventStatus: vi.fn(() => null),
+    findSlotConflict: vi.fn(() => null),
+  },
+  inbound: {
+    enqueue: vi.fn(() => true),
+    markDone: vi.fn(),
+    markFailed: vi.fn(),
+    pending: vi.fn(() => []),
+    listRecent: vi.fn(() => []),
+    statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
+    countFromSenderSince: vi.fn(() => 0),
+  },
+  sendText,
+  adminPhone: "972501234567",
+  familyId: "default",
+  hour: 21,
+  now: () => new Date("2026-06-15T18:00:00Z"),
+  ...over,
+});
+
+describe("runDigestOnce — backup health (#134)", () => {
+  it("appends the freshness warning the backupHealth thunk returns", async () => {
+    const sendText = vi.fn(async (_to: string, _body: string) => {});
+    await runDigestOnce(
+      makeDeps(sendText, { backupHealth: async () => "⚠️ אין גיבוי עדכני באחסון החיצוני" }),
+    );
+    expect(sendText.mock.calls[0]![1]).toContain("⚠️ אין גיבוי עדכני באחסון החיצוני");
+  });
+
+  it("adds no backup line when the thunk reports healthy (null)", async () => {
+    const sendText = vi.fn(async (_to: string, _body: string) => {});
+    await runDigestOnce(makeDeps(sendText, { backupHealth: async () => null }));
+    expect(sendText.mock.calls[0]![1]).not.toContain("⚠️");
+  });
+
+  it("degrades to a 'couldn't verify' line (and still sends) when the probe throws", async () => {
+    const sendText = vi.fn(async (_to: string, _body: string) => {});
+    await runDigestOnce(
+      makeDeps(sendText, {
+        backupHealth: async () => {
+          throw new Error("R2 list failed");
+        },
+      }),
+    );
+    expect(sendText).toHaveBeenCalledTimes(1); // heartbeat still goes out
+    expect(sendText.mock.calls[0]![1]).toContain("⚠️ לא ניתן לאמת את הגיבוי החיצוני");
+  });
+
+  it("sends no backup line when backupHealth is absent (offsite unconfigured)", async () => {
+    const sendText = vi.fn(async (_to: string, _body: string) => {});
+    await runDigestOnce(makeDeps(sendText));
+    expect(sendText.mock.calls[0]![1]).not.toContain("⚠️");
   });
 });
 

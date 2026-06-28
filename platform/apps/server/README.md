@@ -182,6 +182,19 @@ end-to-end is Demo 2.
   accuracy (Haiku mis-resolved weekday idioms in the golden eval — date accuracy is the product wedge,
   and Sonnet stays well inside ≤$100/mo at family volume); swappable per the env.
 
+## Durability — offsite backup (#134)
+
+The DB lives on a single Railway volume, so an offsite copy is the data-loss SPOF fix. A WAL-safe
+`VACUUM INTO` snapshot runs every `BACKUP_INTERVAL_HOURS` (default 6, also once at boot) and is streamed
+to a **private Cloudflare R2 bucket** (EU jurisdiction), under one object-key prefix per family file.
+Snapshots older than `BACKUP_RETENTION_DAYS` (default 14) are pruned. The daily digest carries a
+**freshness alert** — a Hebrew warning line when the newest offsite copy is missing or stale.
+
+Ships **dark**: with the R2 bundle unset the uploader is a no-op (the local snapshot still runs).
+Provisioning the bucket + token + the 4 Railway vars: **`docs/r2-backup-setup.md`**. Only ciphertext
+leaves the box (Google tokens are app-encrypted at rest); keep the bucket private + the token
+least-privilege. Restore = download the newest snapshot and point `DB_PATH` at it.
+
 ## Deferred (deliberate scope cuts)
 
 - **Voice notes (M2b)** — Graph media download + local `mlx_whisper` Hebrew STT, then the same parse pipeline.
