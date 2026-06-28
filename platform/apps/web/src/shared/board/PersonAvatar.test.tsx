@@ -1,5 +1,5 @@
 import { assigneeColor } from "@shared/lib";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { PersonAvatar } from "./PersonAvatar";
 
@@ -60,7 +60,15 @@ describe("PersonAvatar", () => {
     const img = screen.getByRole("img", { hidden: true });
     expect(img).toHaveAttribute("src", "https://example.com/a.png");
     expect(img).toHaveAttribute("alt", "נועה");
+    expect(img).toHaveAttribute("referrerpolicy", "no-referrer"); // Google avatars 403 on referrer
     expect(screen.queryByText("נ")).not.toBeInTheDocument();
+  });
+
+  // #230 fold — a failed avatar load (403/404) reverts to the initial rather than a broken-image glyph.
+  it("falls back to the initial when the image fails to load", () => {
+    render(<PersonAvatar name="נועה" imageUrl="https://example.com/dead.png" />);
+    fireEvent.error(screen.getByRole("img", { hidden: true }));
+    expect(screen.getByText("נ")).toBeInTheDocument();
   });
 
   it("falls back to the initial when imageUrl is null", () => {

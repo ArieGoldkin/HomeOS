@@ -81,7 +81,10 @@ export function ProfileCard() {
           </Button>
           <Button
             variant="ghost"
-            onClick={() => setEditing(false)}
+            onClick={() => {
+              setEditing(false);
+              setFailed(false);
+            }}
             disabled={saving}
             className="min-h-0 rounded-full px-4 py-2 text-[13px]"
           >

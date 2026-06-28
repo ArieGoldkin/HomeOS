@@ -1,6 +1,6 @@
 import { assigneeColor, cn } from "@shared/lib";
 import { useThemeMode } from "@shared/theme";
-import type { CSSProperties, HTMLAttributes } from "react";
+import { type CSSProperties, type HTMLAttributes, useState } from "react";
 
 export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
   /** The person — drives the fill via assigneeColor() (runtime, never a --who-* token). */
@@ -26,6 +26,9 @@ export function PersonAvatar({
   ...props
 }: PersonAvatarProps) {
   const color = assigneeColor(name);
+  // #230 — Google avatar URLs can 403 (referrer) or 404; fall back to the initial on load error.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImage = !!imageUrl && !imgFailed;
   const mode = useThemeMode();
   const initial = [...name.trim()][0] ?? "?";
   const dims: CSSProperties = {
@@ -33,7 +36,7 @@ export function PersonAvatar({
     height: size,
     fontSize: Math.round(size * 0.52),
     // #230 — a photo fills the circle; otherwise the stable per-person color backs the initial.
-    background: imageUrl ? undefined : mode === "dark" ? color.night : color.light,
+    background: showImage ? undefined : mode === "dark" ? color.night : color.light,
     ...style,
   };
 
@@ -47,7 +50,17 @@ export function PersonAvatar({
       style={dims}
       {...props}
     >
-      {imageUrl ? <img src={imageUrl} alt={name} className="size-full object-cover" /> : initial}
+      {showImage ? (
+        <img
+          src={imageUrl ?? undefined}
+          alt={name}
+          referrerPolicy="no-referrer"
+          onError={() => setImgFailed(true)}
+          className="size-full object-cover"
+        />
+      ) : (
+        initial
+      )}
     </span>
   );
 }
