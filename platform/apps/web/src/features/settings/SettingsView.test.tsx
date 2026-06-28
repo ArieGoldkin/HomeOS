@@ -2,7 +2,22 @@ import { ThemeProvider } from "@shared/theme";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// #230 — ProfileCard (inside SettingsView) reads the Google session; mock it (no <AuthProvider> here).
+vi.mock("@shared/auth", () => ({
+  useCurrentUser: () => ({
+    status: "authenticated",
+    isLoading: false,
+    isAuthenticated: true,
+    userId: "u1",
+    email: "fam@homeos.test",
+    full_name: "משפחה",
+    avatar_url: null,
+    signOut: async () => {},
+  }),
+  updateDisplayName: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { SettingsView } from "./SettingsView";
 
@@ -27,7 +42,8 @@ describe("SettingsView", () => {
   it("renders the profile card (name + email + edit)", () => {
     render(wrap(<SettingsView />));
     expect(screen.getByTestId("profile-card")).toBeInTheDocument();
-    expect(screen.getByText("ima@mishpachat-homeos.co.il")).toBeInTheDocument();
+    expect(screen.getByText("fam@homeos.test")).toBeInTheDocument(); // session email, not the old mock
+    expect(screen.getByText("משפחה")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "עריכה" })).toBeInTheDocument();
   });
 

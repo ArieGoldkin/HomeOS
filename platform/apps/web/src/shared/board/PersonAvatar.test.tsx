@@ -1,5 +1,5 @@
 import { assigneeColor } from "@shared/lib";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { PersonAvatar } from "./PersonAvatar";
 
@@ -52,5 +52,27 @@ describe("PersonAvatar", () => {
   it("merges a caller className", () => {
     const { container } = render(<PersonAvatar name="x" className="ring-2" />);
     expect((container.firstChild as HTMLElement).className).toContain("ring-2");
+  });
+
+  // #230 — when given a photo URL (the Google avatar), render the image instead of the initial.
+  it("renders the image when imageUrl is set (alt = name), not the initial", () => {
+    render(<PersonAvatar name="נועה" imageUrl="https://example.com/a.png" />);
+    const img = screen.getByRole("img", { hidden: true });
+    expect(img).toHaveAttribute("src", "https://example.com/a.png");
+    expect(img).toHaveAttribute("alt", "נועה");
+    expect(img).toHaveAttribute("referrerpolicy", "no-referrer"); // Google avatars 403 on referrer
+    expect(screen.queryByText("נ")).not.toBeInTheDocument();
+  });
+
+  // #230 fold — a failed avatar load (403/404) reverts to the initial rather than a broken-image glyph.
+  it("falls back to the initial when the image fails to load", () => {
+    render(<PersonAvatar name="נועה" imageUrl="https://example.com/dead.png" />);
+    fireEvent.error(screen.getByRole("img", { hidden: true }));
+    expect(screen.getByText("נ")).toBeInTheDocument();
+  });
+
+  it("falls back to the initial when imageUrl is null", () => {
+    render(<PersonAvatar name="נועה" imageUrl={null} />);
+    expect(screen.getByText("נ")).toBeInTheDocument();
   });
 });

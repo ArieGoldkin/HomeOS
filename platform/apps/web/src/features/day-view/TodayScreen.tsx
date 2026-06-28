@@ -1,6 +1,7 @@
 import { AddEventDialog } from "@features/add-event";
 import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import type { SavedEvent } from "@homeos/shared";
+import { useCurrentUser } from "@shared/auth";
 import { PersonAvatar } from "@shared/board";
 import { useDayEvents, useNow, useToggleEventStatus } from "@shared/hooks";
 import { greetingHe, hebDateLong, hebrewDateLabel, holidaysOn } from "@shared/lib";
@@ -13,9 +14,8 @@ export interface TodayScreenProps {
   dateIso: string;
 }
 
-// Placeholder current user + household until a real identity model exists (deferred). The roster is the
-// known family (mirrors FamilyView's KNOWN_ROSTER); presence/roles aren't server-backed yet.
-const CURRENT_USER = "אמא";
+// #230 — the greeting name now comes from the signed-in Google session (useCurrentUser). HOUSEHOLD is
+// still a placeholder roster (mirrors FamilyView's KNOWN_ROSTER) until the #235 GET /family route lands.
 const HOUSEHOLD = ["אבא", "אמא", "יואב", "נועה"] as const;
 
 /**
@@ -26,6 +26,9 @@ const HOUSEHOLD = ["אבא", "אמא", "יואב", "נועה"] as const;
  */
 export function TodayScreen({ dateIso }: TodayScreenProps) {
   const now = useNow();
+  const { full_name, email } = useCurrentUser();
+  // #230 — first name from the Google session; no hardcoded fallback (empty greeting beats a fake name).
+  const me = full_name?.split(" ")[0] ?? email?.split("@")[0] ?? "";
   const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(dateIso, now);
   const { selected, openDetail, closeDetail } = useEventDetail();
   const toggleStatus = useToggleEventStatus();
@@ -50,8 +53,7 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
           {hebrewDate && ` · ${hebrewDate}`}
         </div>
         <h1 className="mt-2 font-display font-extrabold text-[34px] text-[color:var(--ink)] leading-[1.05] tracking-tight">
-          {greetingHe(now)},{" "}
-          <span className="font-accent font-medium text-primary">{CURRENT_USER}</span>
+          {greetingHe(now)}, <span className="font-accent font-medium text-primary">{me}</span>
         </h1>
 
         <div className="mt-5 flex flex-wrap items-center gap-2.5">

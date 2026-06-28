@@ -4,6 +4,19 @@ import { HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw/server";
+
+// #230 — the greeting name comes from the session; mock it (TodayScreen renders outside <AuthProvider>
+// here). "דנה" is deliberately NOT in the mock HOUSEHOLD roster, so finding it proves the greeting is
+// session-sourced, not the old CURRENT_USER constant.
+vi.mock("@shared/auth", () => ({
+  useCurrentUser: () => ({
+    status: "authenticated",
+    full_name: "דנה לוי",
+    email: "dana@example.com",
+    avatar_url: null,
+  }),
+}));
+
 import { TodayScreen } from "./TodayScreen";
 
 function wrap(node: ReactNode) {
@@ -18,11 +31,11 @@ describe("TodayScreen", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("renders the greeting header for the current user", () => {
+  it("greets the signed-in user by their session first name (#230)", () => {
     render(wrap(<TodayScreen dateIso="2026-06-21" />));
     expect(screen.getByText("בוקר טוב,", { exact: false })).toBeInTheDocument();
-    // The name renders in the accent span.
-    expect(screen.getAllByText("אמא").length).toBeGreaterThanOrEqual(1);
+    // First name from the session full_name "דנה לוי" — renders in the accent span.
+    expect(screen.getByText("דנה")).toBeInTheDocument();
   });
 
   it("shows the tasks-left chip and the household card", () => {
