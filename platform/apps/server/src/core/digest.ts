@@ -17,6 +17,12 @@ export interface DigestDeps {
   familyId: string;
   /** Hour of day (0–23) to send, in Asia/Jerusalem. */
   hour: number;
+  /**
+   * #134 — offsite-backup freshness probe. Returns a Hebrew warning line when the offsite copy is
+   * stale/missing, else null. Kept as a thunk so the digest stays decoupled from the uploader; absent
+   * (no offsite configured) ⇒ no backup line. A thrown probe degrades to a "couldn't verify" line.
+   */
+  backupHealth?: () => Promise<string | null>;
   now?: () => Date;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
 }
@@ -35,7 +41,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * that the bot is down — heartbeat + quality monitor + error alert in one message. #28: when there are
  * reminders due today it also lists them (the morning nudge — "remind me tomorrow" surfaces here).
  */
-export function buildDigest(stats: DigestStats, reminders: SavedEvent[] = []): string {
+export function buildDigest(
+  stats: DigestStats,
+  reminders: SavedEvent[] = [],
+  healthLine: string | null = null,
+): string {
   const lines = [
     "📊 סיכום יומי",
     `אירועים שנוספו: ${stats.events}`,
@@ -43,6 +53,8 @@ export function buildDigest(stats: DigestStats, reminders: SavedEvent[] = []): s
     `שגיאות: ${stats.errors}`,
   ];
   if (stats.pending > 0) lines.push(`ממתינות: ${stats.pending}`);
+  // #134 — surface a stale/missing offsite backup on the daily heartbeat (only when unhealthy).
+  if (healthLine) lines.push("", healthLine);
   if (reminders.length > 0) {
     lines.push("", "🔔 תזכורות להיום");
     for (const r of reminders) lines.push(`• ${r.time ? `${r.time} ` : ""}${r.title_he}`);
@@ -64,8 +76,19 @@ export async function runDigestOnce(deps: DigestDeps): Promise<void> {
   // #28: reminders due TODAY (Asia/Jerusalem at send time) — a "remind me tomorrow" item, dated tomorrow,
   // surfaces in tomorrow's digest. Open-only, so it fires once and drops once acted on.
   const reminders = deps.events.remindersDueOn(deps.familyId, jerusalemWallClock(now).dateIso);
-  deps.log?.("daily digest", { ...stats, reminders: reminders.length });
-  await deps.sendText(deps.adminPhone, buildDigest(stats, reminders));
+  // #134 — probe offsite-backup freshness; a thrown probe degrades to a "couldn't verify" line so the
+  // digest (the heartbeat) still goes out.
+  let healthLine: string | null = null;
+  if (deps.backupHealth) {
+    try {
+      healthLine = await deps.backupHealth();
+    } catch (err) {
+      deps.log?.("backup health check failed", { error: String(err) });
+      healthLine = "⚠️ לא ניתן לאמת את הגיבוי החיצוני";
+    }
+  }
+  deps.log?.("daily digest", { ...stats, reminders: reminders.length, backupAlert: !!healthLine });
+  await deps.sendText(deps.adminPhone, buildDigest(stats, reminders, healthLine));
 }
 
 /** Schedule the digest at `hour` Asia/Jerusalem, then daily — via the shared scheduler. */

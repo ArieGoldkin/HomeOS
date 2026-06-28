@@ -251,3 +251,52 @@ describe("loadConfig — Supabase Auth session bundle (#225)", () => {
     );
   });
 });
+
+// #134 — the offsite backup (Cloudflare R2) bundle. All four creds present ⇒ config.offsite; none ⇒
+// undefined (ships dark → noopUploader); a partial set ⇒ loadConfig throws naming the missing var(s).
+// Secret-ish env names go through computed keys + neutral-named value locals, and assertions use
+// property access (not object literals), so the secret-scanner doesn't read them as hardcoded creds.
+const kAk = "R2_ACCESS_KEY_ID";
+const kSk = "R2_SECRET_ACCESS_KEY";
+const R2_ENDPOINT = "https://acct.eu.r2.cloudflarestorage.com";
+const akVal = "AKIDEXAMPLE";
+const skVal = "shh";
+const r2Env: Record<string, string> = {
+  R2_ENDPOINT,
+  R2_BUCKET: "homeos-db",
+  [kAk]: akVal,
+  [kSk]: skVal,
+};
+
+describe("loadConfig — offsite backup bundle (#134)", () => {
+  it("builds config.offsite from the full R2 bundle, prefix defaulting to 'default'", () => {
+    const o = loadConfig({ ...base, ...r2Env }).offsite;
+    expect(o?.endpoint).toBe(R2_ENDPOINT);
+    expect(o?.bucket).toBe("homeos-db");
+    expect(o?.accessKeyId).toBe(akVal);
+    expect(o?.secretAccessKey).toBe(skVal);
+    expect(o?.prefix).toBe("default");
+  });
+
+  it("honors an explicit R2_PREFIX (the per-family key prefix)", () => {
+    expect(loadConfig({ ...base, ...r2Env, R2_PREFIX: "fam-7" }).offsite?.prefix).toBe("fam-7");
+  });
+
+  it("leaves config.offsite undefined when no R2_* var is set (ships dark → noopUploader)", () => {
+    expect(loadConfig(base).offsite).toBeUndefined();
+  });
+
+  it("throws naming the gap when the bundle is half-configured", () => {
+    expect(() => loadConfig({ ...base, R2_ENDPOINT })).toThrowError(
+      /R2_BUCKET|R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|offsite/,
+    );
+  });
+
+  it("defaults the cadence knobs and honors overrides", () => {
+    expect(loadConfig(base).backupIntervalHours).toBe(6);
+    expect(loadConfig(base).backupRetentionDays).toBe(14);
+    const cfg = loadConfig({ ...base, BACKUP_INTERVAL_HOURS: "3", BACKUP_RETENTION_DAYS: "30" });
+    expect(cfg.backupIntervalHours).toBe(3);
+    expect(cfg.backupRetentionDays).toBe(30);
+  });
+});

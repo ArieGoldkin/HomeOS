@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventStore } from "../../src/db/event-store/index.ts";
 import {
   backupDatabase,
+  backupFreshnessLine,
   DEFAULT_RETENTION_DAYS,
   runBackupOnce,
   type Uploader,
@@ -70,7 +71,7 @@ describe("runBackupOnce — offsite retention (#61/MF4)", () => {
     const now = () => new Date("2026-06-18T03:00:00Z");
     const prune = vi.fn(async () => {});
     const uploader: Uploader = { upload: vi.fn(async () => {}), prune };
-    await runBackupOnce({ dbPath, uploader, hour: 3, tmpDir: dir, retentionDays: 30, now });
+    await runBackupOnce({ dbPath, uploader, tmpDir: dir, retentionDays: 30, now });
     expect(prune).toHaveBeenCalledWith(30, new Date("2026-06-18T03:00:00Z"));
   });
 
@@ -82,10 +83,58 @@ describe("runBackupOnce — offsite retention (#61/MF4)", () => {
     await runBackupOnce({
       dbPath,
       uploader,
-      hour: 3,
       tmpDir: dir,
       now: () => new Date("2026-06-18T03:00:00Z"),
     });
     expect(prune).toHaveBeenCalledWith(DEFAULT_RETENTION_DAYS, expect.any(Date));
+  });
+});
+
+describe("runBackupOnce — local snapshot cleanup (#134)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "homeos-backup-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const snapshots = () => readdirSync(dir).filter((f) => f.startsWith("homeos-"));
+
+  it("removes the transient local snapshot after a successful upload", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const uploader: Uploader = { upload: vi.fn(async () => {}) };
+    await runBackupOnce({ dbPath, uploader, tmpDir: dir });
+    expect(snapshots()).toEqual([]); // offsite copy kept; local snapshot not accumulated
+  });
+
+  it("removes the snapshot even when the upload fails (no disk leak on repeated failures)", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const uploader: Uploader = {
+      upload: vi.fn(async () => {
+        throw new Error("upload boom");
+      }),
+    };
+    await expect(runBackupOnce({ dbPath, uploader, tmpDir: dir })).rejects.toThrow(/upload boom/);
+    expect(snapshots()).toEqual([]);
+  });
+});
+
+describe("backupFreshnessLine (#134 — staleness half of the alert)", () => {
+  const now = new Date("2026-06-28T12:00:00Z");
+  const sixHoursMs = 6 * 60 * 60 * 1000;
+
+  it("returns null when the newest snapshot is within the freshness window", () => {
+    const fresh = new Date("2026-06-28T09:00:00Z"); // 3h old, window 6h
+    expect(backupFreshnessLine(fresh, now, sixHoursMs)).toBeNull();
+  });
+
+  it("warns (with the age in hours) when the snapshot is older than the window", () => {
+    const stale = new Date("2026-06-28T02:00:00Z"); // 10h old, window 6h
+    expect(backupFreshnessLine(stale, now, sixHoursMs)).toBe("⚠️ הגיבוי לא עודכן מעל 10 שעות");
+  });
+
+  it("warns when there is no offsite snapshot at all", () => {
+    expect(backupFreshnessLine(null, now, sixHoursMs)).toBe("⚠️ אין גיבוי עדכני באחסון החיצוני");
   });
 });
