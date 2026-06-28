@@ -75,7 +75,14 @@ export async function backupDatabase(
     db.close();
   }
 
-  await uploader.upload(dest, key);
+  try {
+    await uploader.upload(dest, key);
+  } catch (err) {
+    // Don't leak the full-DB snapshot in tmp if the upload failed (a repeatedly-failing upload would
+    // otherwise fill the disk one DB-copy per cycle). The caller still gets the error.
+    rmSync(dest, { force: true });
+    throw err;
+  }
   return dest;
 }
 
@@ -85,10 +92,16 @@ export async function runBackupOnce(deps: BackupDeps): Promise<void> {
     now: deps.now,
     tmpDir: deps.tmpDir,
   });
-  deps.log?.("nightly backup uploaded", { dest });
-  // #61/MF4: age out old offsite snapshots (defense-in-depth on the encrypted-token-in-backup path).
-  const now = (deps.now ?? (() => new Date()))();
-  await deps.uploader.prune?.(deps.retentionDays ?? DEFAULT_RETENTION_DAYS, now);
+  try {
+    deps.log?.("offsite backup uploaded", { dest });
+    // #61/MF4: age out old offsite snapshots (defense-in-depth on the encrypted-token-in-backup path).
+    const now = (deps.now ?? (() => new Date()))();
+    await deps.uploader.prune?.(deps.retentionDays ?? DEFAULT_RETENTION_DAYS, now);
+  } finally {
+    // The offsite copy is what we keep; the local snapshot is transient. Remove it so successive
+    // runs (every BACKUP_INTERVAL_HOURS) don't accumulate full-DB copies in tmp.
+    rmSync(dest, { force: true });
+  }
 }
 
 /**

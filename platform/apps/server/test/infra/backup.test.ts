@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ParsedEvent } from "@homeos/shared";
@@ -87,6 +87,36 @@ describe("runBackupOnce — offsite retention (#61/MF4)", () => {
       now: () => new Date("2026-06-18T03:00:00Z"),
     });
     expect(prune).toHaveBeenCalledWith(DEFAULT_RETENTION_DAYS, expect.any(Date));
+  });
+});
+
+describe("runBackupOnce — local snapshot cleanup (#134)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "homeos-backup-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const snapshots = () => readdirSync(dir).filter((f) => f.startsWith("homeos-"));
+
+  it("removes the transient local snapshot after a successful upload", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const uploader: Uploader = { upload: vi.fn(async () => {}) };
+    await runBackupOnce({ dbPath, uploader, tmpDir: dir });
+    expect(snapshots()).toEqual([]); // offsite copy kept; local snapshot not accumulated
+  });
+
+  it("removes the snapshot even when the upload fails (no disk leak on repeated failures)", async () => {
+    const dbPath = join(dir, "homeos.db");
+    createEventStore(dbPath);
+    const uploader: Uploader = {
+      upload: vi.fn(async () => {
+        throw new Error("upload boom");
+      }),
+    };
+    await expect(runBackupOnce({ dbPath, uploader, tmpDir: dir })).rejects.toThrow(/upload boom/);
+    expect(snapshots()).toEqual([]);
   });
 });
 

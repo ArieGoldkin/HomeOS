@@ -191,9 +191,13 @@ Snapshots older than `BACKUP_RETENTION_DAYS` (default 14) are pruned. The daily 
 **freshness alert** — a Hebrew warning line when the newest offsite copy is missing or stale.
 
 Ships **dark**: with the R2 bundle unset the uploader is a no-op (the local snapshot still runs).
-Provisioning the bucket + token + the 4 Railway vars: **`docs/r2-backup-setup.md`**. Only ciphertext
-leaves the box (Google tokens are app-encrypted at rest); keep the bucket private + the token
-least-privilege. Restore = download the newest snapshot and point `DB_PATH` at it.
+Provisioning the bucket + token + the 4 Railway vars: **`docs/r2-backup-setup.md`**.
+
+**Privacy:** the snapshot is the full DB, so it carries **plaintext family data** (event text, the
+inbound queue's forwarded WhatsApp text, phone numbers) to a third party (Cloudflare). Only the Google
+OAuth tokens are encrypted at rest. Mitigations: **private** bucket, **least-privilege** token, **EU**
+jurisdiction (data residency, feeds #29). Snapshot-level client-side encryption is a deliberate future
+hardening (not in #134). Restore = download the newest snapshot and point `DB_PATH` at it.
 
 ## Deferred (deliberate scope cuts)
 

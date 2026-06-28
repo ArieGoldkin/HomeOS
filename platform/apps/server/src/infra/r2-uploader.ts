@@ -56,14 +56,22 @@ export function r2Uploader(cfg: R2Config, fetchImpl: FetchLike = (r) => fetch(r)
     return res;
   }
 
-  // S3 ListObjectsV2 returns XML; we only need the <Key> values (retention keeps the set small —
-  // ~4/day × 14d ≈ 56 objects, well under the 1000-key page limit, so no pagination).
+  // S3 ListObjectsV2 returns XML; we only need the <Key> values. Retention normally keeps the set
+  // small (~4/day × 14d ≈ 56 ≪ the 1000-key page limit), but an aggressive cadence could exceed a
+  // page — and since keys sort chronologically, a truncated first page would hold only the OLDEST
+  // keys (false "stale" alert + incomplete prune). So follow the continuation token to the end.
   async function listKeys(): Promise<string[]> {
-    const url = `${base}?list-type=2&prefix=${encodeURIComponent(`${cfg.prefix}/`)}`;
-    const res = await send(url, { method: "GET" });
-    const xml = await res.text();
     const keys: string[] = [];
-    for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) keys.push(m[1]!);
+    let token: string | undefined;
+    do {
+      const params = new URLSearchParams({ "list-type": "2", prefix: `${cfg.prefix}/` });
+      if (token) params.set("continuation-token", token);
+      const res = await send(`${base}?${params}`, { method: "GET" });
+      const xml = await res.text();
+      for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) keys.push(m[1]!);
+      const next = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml);
+      token = /<IsTruncated>\s*true\s*<\/IsTruncated>/i.test(xml) && next ? next[1] : undefined;
+    } while (token);
     return keys;
   }
 

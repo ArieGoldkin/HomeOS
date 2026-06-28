@@ -5,9 +5,10 @@ The server takes a WAL-safe `VACUUM INTO` snapshot of the SQLite DB every `BACKU
 single-volume data-loss SPOF. The feature **ships dark** — until the four `R2_*` Railway vars below are
 set, the uploader is a no-op (the local snapshot still runs harmlessly).
 
-> The DB carries **app-encrypted** Google tokens, so only ciphertext ever leaves the box. Still: keep
-> the bucket **private** and the API token **least-privilege**. EU jurisdiction keeps data residency in
-> the EU (feeds #29).
+> **Privacy:** the snapshot is the full DB — it carries **plaintext family data** (event text, the
+> inbound queue's forwarded WhatsApp text, phone numbers) to a third party (Cloudflare); only the Google
+> OAuth tokens are encrypted at rest. Keep the bucket **private** + the token **least-privilege**; EU
+> jurisdiction keeps data residency in the EU (feeds #29). Snapshot-level encryption is a future hardening.
 
 ## 1. Create the bucket (Cloudflare dashboard)
 

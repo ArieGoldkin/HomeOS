@@ -117,3 +117,27 @@ describe("r2Uploader.latestUploadAt", () => {
     expect(await r2Uploader(cfg, f.fetch).latestUploadAt!()).toBeNull();
   });
 });
+
+describe("r2Uploader.listKeys (pagination)", () => {
+  it("follows the continuation token across pages", async () => {
+    const page1 =
+      `<?xml version="1.0"?><ListBucketResult>` +
+      `<Contents><Key>default/homeos-2026-06-01-03-00-00.db</Key></Contents>` +
+      `<IsTruncated>true</IsTruncated><NextContinuationToken>TOKEN2</NextContinuationToken>` +
+      `</ListBucketResult>`;
+    const page2 = listXml(["default/homeos-2026-06-28-03-00-00.db"]);
+    const f = fakeFetch((req) =>
+      req.url.includes("continuation-token=TOKEN2")
+        ? new Response(page2, { status: 200 })
+        : new Response(page1, { status: 200 }),
+    );
+
+    // The newest key only appears on page 2 — getting it back proves both pages were read.
+    const latest = await r2Uploader(cfg, f.fetch).latestUploadAt!();
+    expect(latest).toEqual(new Date("2026-06-28T03:00:00.000Z"));
+
+    const gets = f.calls.filter((c) => c.method === "GET");
+    expect(gets).toHaveLength(2);
+    expect(gets[1]!.url).toContain("continuation-token=TOKEN2");
+  });
+});
