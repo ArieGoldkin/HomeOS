@@ -8,3 +8,4 @@ export {
   useCurrentUser,
 } from "./AuthProvider";
 export { signInWithGoogle } from "./sign-in";
+export { updateDisplayName } from "./update-profile";

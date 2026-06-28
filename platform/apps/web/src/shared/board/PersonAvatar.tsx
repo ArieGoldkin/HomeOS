@@ -7,6 +7,8 @@ export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
   name: string;
   /** Diameter in px (default 20). */
   size?: number;
+  /** #230 — optional photo (e.g. the Google `avatar_url`); when set, renders the image instead of the initial. */
+  imageUrl?: string | null;
 }
 
 /**
@@ -15,7 +17,14 @@ export interface PersonAvatarProps extends HTMLAttributes<HTMLSpanElement> {
  * (`aria-hidden`) by default. White-on-color initial; the color comes from the free-form assignee
  * string at runtime, never a token.
  */
-export function PersonAvatar({ name, size = 20, className, style, ...props }: PersonAvatarProps) {
+export function PersonAvatar({
+  name,
+  size = 20,
+  imageUrl,
+  className,
+  style,
+  ...props
+}: PersonAvatarProps) {
   const color = assigneeColor(name);
   const mode = useThemeMode();
   const initial = [...name.trim()][0] ?? "?";
@@ -23,7 +32,8 @@ export function PersonAvatar({ name, size = 20, className, style, ...props }: Pe
     width: size,
     height: size,
     fontSize: Math.round(size * 0.52),
-    background: mode === "dark" ? color.night : color.light,
+    // #230 — a photo fills the circle; otherwise the stable per-person color backs the initial.
+    background: imageUrl ? undefined : mode === "dark" ? color.night : color.light,
     ...style,
   };
 
@@ -31,13 +41,13 @@ export function PersonAvatar({ name, size = 20, className, style, ...props }: Pe
     <span
       aria-hidden="true"
       className={cn(
-        "inline-grid shrink-0 place-items-center rounded-full font-bold text-white",
+        "inline-grid shrink-0 place-items-center overflow-hidden rounded-full font-bold text-white",
         className,
       )}
       style={dims}
       {...props}
     >
-      {initial}
+      {imageUrl ? <img src={imageUrl} alt={name} className="size-full object-cover" /> : initial}
     </span>
   );
 }

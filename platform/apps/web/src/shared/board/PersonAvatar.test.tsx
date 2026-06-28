@@ -53,4 +53,18 @@ describe("PersonAvatar", () => {
     const { container } = render(<PersonAvatar name="x" className="ring-2" />);
     expect((container.firstChild as HTMLElement).className).toContain("ring-2");
   });
+
+  // #230 — when given a photo URL (the Google avatar), render the image instead of the initial.
+  it("renders the image when imageUrl is set (alt = name), not the initial", () => {
+    render(<PersonAvatar name="נועה" imageUrl="https://example.com/a.png" />);
+    const img = screen.getByRole("img", { hidden: true });
+    expect(img).toHaveAttribute("src", "https://example.com/a.png");
+    expect(img).toHaveAttribute("alt", "נועה");
+    expect(screen.queryByText("נ")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the initial when imageUrl is null", () => {
+    render(<PersonAvatar name="נועה" imageUrl={null} />);
+    expect(screen.getByText("נ")).toBeInTheDocument();
+  });
 });

@@ -6,6 +6,24 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRouter } from "./router";
 
+// #230 — the board screens (TodayScreen, ProfileCard) read the Google session via useCurrentUser; this
+// test mounts the router directly (no <AuthProvider>), so mock the auth module's runtime exports. The
+// route GUARD still uses the `auth` passed via router context below — this only feeds the screens.
+vi.mock("@shared/auth", () => ({
+  useCurrentUser: () => ({
+    status: "authenticated",
+    isLoading: false,
+    isAuthenticated: true,
+    userId: "u1",
+    email: "fam@homeos.test",
+    full_name: "משפחה",
+    avatar_url: null,
+    signOut: async () => {},
+  }),
+  updateDisplayName: vi.fn().mockResolvedValue(undefined),
+  signInWithGoogle: vi.fn(),
+}));
+
 // #225 — the route guard reads auth off the router context. Default the tests to an authenticated session
 // (the board is the subject of most cases); the guard cases pass UNAUTH explicitly.
 const AUTHED: AuthState = {
