@@ -115,6 +115,65 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(arie?.role).toBe("owner"); // role preserved (first-wins, untouched by the upsert)
   });
 
+  it("uid↔member binding — seeds the member's email and UPSERTS it on re-boot (role stays first-wins)", () => {
+    const path = tmpDbPath();
+    createFamilyStore(path, {
+      ...seed,
+      members: [
+        { userId: "placeholder:Arie", role: "owner", displayName: "אבא", email: "arie@gmail.com" },
+      ],
+    });
+    // re-boot with a changed email — upserted like display_name; role frozen at the first boot.
+    const store = createFamilyStore(path, {
+      ...seed,
+      members: [
+        {
+          userId: "placeholder:Arie",
+          role: "member",
+          displayName: "אבא",
+          email: "arie2@gmail.com",
+        },
+      ],
+    });
+    const arie = store.listMembers(FAMILY_ID).find((m) => m.user_id === "placeholder:Arie");
+    expect(arie?.email).toBe("arie2@gmail.com"); // upserted (a config change reflects)
+    expect(arie?.role).toBe("owner"); // frozen (first-wins)
+  });
+
+  it("uid↔member binding — a member seeded WITHOUT an email has email null (not bindable yet)", () => {
+    const store = createFamilyStore(":memory:", seed); // the default seed's members carry no email
+    expect(store.listMembers(FAMILY_ID).every((m) => m.email === null)).toBe(true);
+  });
+
+  it("uid↔member binding — backfills the email column on a PRE-EXISTING column-less table", () => {
+    const path = tmpDbPath();
+    // A #235-era table: it has display_name but NOT the new email column.
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE family_members (
+      family_id    TEXT NOT NULL,
+      user_id      TEXT NOT NULL,
+      role         TEXT NOT NULL,
+      display_name TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (family_id, user_id)
+    );`);
+    old
+      .prepare("INSERT INTO family_members (family_id, user_id, role) VALUES (?, ?, ?);")
+      .run(FAMILY_ID, "placeholder:Arie", "owner");
+    old.close();
+
+    // Boot the real store: PRAGMA detects the missing email column → ALTER adds it → the seed upsert backfills.
+    const store = createFamilyStore(path, {
+      ...seed,
+      members: [
+        { userId: "placeholder:Arie", role: "owner", displayName: "אבא", email: "arie@gmail.com" },
+      ],
+    });
+    const arie = store.listMembers(FAMILY_ID).find((m) => m.user_id === "placeholder:Arie");
+    expect(arie?.email).toBe("arie@gmail.com"); // column added + backfilled on the same boot
+    expect(arie?.display_name).toBe("אבא"); // the pre-existing display_name path still works
+  });
+
   it("#231 — listMembersWithVerification flags a member whose placeholder phone is bound; others false", () => {
     // Two members keyed by their (raw, un-normalized) phones; only the first phone is bound in family_phones.
     const withPhones: FamilySeed = {

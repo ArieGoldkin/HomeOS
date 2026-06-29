@@ -62,6 +62,18 @@ describe("loadConfig", () => {
     expect(cfg.allowlist).toEqual(["972501111111", "972502222222"]);
   });
 
+  it("uid↔member binding — defaults memberEmails to {} and parses the MEMBER_EMAILS phone:email map", () => {
+    expect(loadConfig(base).memberEmails).toEqual({});
+    const cfg = loadConfig({
+      ...base,
+      MEMBER_EMAILS: "972501111111:arie@gmail.com, 972502222222:partner@gmail.com",
+    });
+    expect(cfg.memberEmails).toEqual({
+      "972501111111": "arie@gmail.com",
+      "972502222222": "partner@gmail.com",
+    });
+  });
+
   it("defaults members to {} and parses the MEMBERS phone:name map (#14)", () => {
     expect(loadConfig(base).members).toEqual({});
     const cfg = loadConfig({ ...base, MEMBERS: "972501111111:אבא, 972502222222:אמא" });

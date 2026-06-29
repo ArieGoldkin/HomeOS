@@ -25,14 +25,15 @@ export interface RequireSessionConfig {
    */
   extractCookieToken?: (c: Context) => Promise<string | null> | string | null;
   /**
-   * #226 — resolve the verified user's membership → `{familyId, role}` (the DB family_members lookup), or
-   * null when the uid isn't a member row yet (the N=1 reality until real-uid binding lands). Injected so the
-   * middleware stays unit-testable offline.
+   * #226 / uid↔member binding — resolve the verified user's membership → `{familyId, role}` from the DB,
+   * keyed on the session's verified login EMAIL (the placeholder `user_id` never equals the real
+   * `auth.uid()`, so email is the link). Returns null when no member carries that email yet → the caller
+   * applies the N=1 fallback below (no lockout). Injected so the middleware stays unit-testable offline.
    */
-  resolveMembership: (userId: string) => { familyId: string; role: string } | null;
-  /** #226 — familyId to attach when resolveMembership returns null (N=1: the single FAMILY_ID). */
+  resolveMembershipByEmail: (email: string) => { familyId: string; role: string } | null;
+  /** #226 — familyId to attach when membership resolution returns null (N=1: the single FAMILY_ID). */
   fallbackFamilyId: string;
-  /** #226 — role to attach when resolveMembership returns null. Must permit writes (no lockout at N=1). */
+  /** #226 — role to attach when membership resolution returns null. Must permit writes (no lockout at N=1). */
   defaultRole: string;
 }
 
@@ -67,9 +68,10 @@ export function requireSession(config: RequireSessionConfig): MiddlewareHandler 
     if (!config.allowedEmails.has(claims.email.toLowerCase())) {
       return c.text("Forbidden", 403);
     }
-    // #226 — derive the request's family scope + role from DB membership; fall back at N=1 (no member row
-    // keyed by the real auth.uid yet) to the single family + a writer role so the live login never locks out.
-    const membership = config.resolveMembership(claims.userId);
+    // #226 / uid↔member binding — derive the request's family scope + role from DB membership, matched on
+    // the verified login email; fall back at N=1 (no member carries this email) to the single family + a
+    // writer role so the live login never locks out.
+    const membership = config.resolveMembershipByEmail(claims.email);
     c.set("userId", claims.userId);
     c.set("email", claims.email);
     c.set("familyId", membership?.familyId ?? config.fallbackFamilyId);

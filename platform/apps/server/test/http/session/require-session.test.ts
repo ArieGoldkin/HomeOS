@@ -41,13 +41,13 @@ async function sign(
     .sign(o.key ?? signKey);
 }
 
-// #226 — config defaults: no member row (resolveMembership → null) so familyId/role take the N=1 fallbacks.
+// #226 — config defaults: no member row (resolveMembershipByEmail → null) so familyId/role take the N=1 fallbacks.
 function makeConfig(overrides: Partial<RequireSessionConfig> = {}): RequireSessionConfig {
   return {
     getKey,
     verify: { issuer: ISS, audience: AUD },
     allowedEmails: new Set(["dad@example.com"]),
-    resolveMembership: () => null,
+    resolveMembershipByEmail: () => null,
     fallbackFamilyId: "default",
     defaultRole: "member",
     ...overrides,
@@ -92,16 +92,32 @@ describe("requireSession", () => {
     });
   });
 
-  it("attaches the DB membership {familyId,role} when resolveMembership finds a row (#226)", async () => {
-    const app = makeApp({ resolveMembership: () => ({ familyId: "fam-x", role: "owner" }) });
+  it("attaches the DB membership {familyId,role} when resolveMembershipByEmail finds a row (#226)", async () => {
+    const app = makeApp({ resolveMembershipByEmail: () => ({ familyId: "fam-x", role: "owner" }) });
     const res = await app.request("/protected", {
       headers: { authorization: `Bearer ${await sign()}` },
     });
     expect(await res.json()).toMatchObject({ familyId: "fam-x", role: "owner" });
   });
 
-  it("falls back to {FAMILY_ID, defaultRole} when the uid is not a member row yet (no lockout)", async () => {
-    // resolveMembership → null (default): the N=1 reality until real-uid rows exist.
+  it("resolves membership by the session's EMAIL, not the uid (uid↔member binding)", async () => {
+    // The placeholder user_id never equals the real auth.uid, so membership keys on the verified email.
+    const seen: string[] = [];
+    const app = makeApp({
+      resolveMembershipByEmail: (email) => {
+        seen.push(email);
+        return email === "dad@example.com" ? { familyId: "fam-dad", role: "owner" } : null;
+      },
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` }, // default token email = dad@example.com
+    });
+    expect(seen).toEqual(["dad@example.com"]); // the EMAIL was passed, not "user-123" (the sub/uid)
+    expect(await res.json()).toMatchObject({ familyId: "fam-dad", role: "owner" });
+  });
+
+  it("falls back to {FAMILY_ID, defaultRole} when no member carries this email yet (no lockout)", async () => {
+    // resolveMembershipByEmail → null (default): the N=1 reality until member emails are seeded.
     const app = makeApp({ fallbackFamilyId: "default", defaultRole: "member" });
     const res = await app.request("/protected", {
       headers: { authorization: `Bearer ${await sign()}` },
@@ -172,7 +188,9 @@ describe("requireWrite (#226 — role gate, not a second secret)", () => {
   });
 
   it("passes an owner → 200", async () => {
-    const app = makeWriteApp({ resolveMembership: () => ({ familyId: "default", role: "owner" }) });
+    const app = makeWriteApp({
+      resolveMembershipByEmail: () => ({ familyId: "default", role: "owner" }),
+    });
     const res = await app.request("/write", {
       method: "POST",
       headers: { authorization: `Bearer ${await sign()}` },
@@ -182,7 +200,7 @@ describe("requireWrite (#226 — role gate, not a second secret)", () => {
 
   it("403s a viewer (read-only role)", async () => {
     const app = makeWriteApp({
-      resolveMembership: () => ({ familyId: "default", role: "viewer" }),
+      resolveMembershipByEmail: () => ({ familyId: "default", role: "viewer" }),
     });
     const res = await app.request("/write", {
       method: "POST",
@@ -192,7 +210,9 @@ describe("requireWrite (#226 — role gate, not a second secret)", () => {
   });
 
   it("403s an unknown / mistyped role (fail-closed allow-list, #226)", async () => {
-    const app = makeWriteApp({ resolveMembership: () => ({ familyId: "default", role: "guest" }) });
+    const app = makeWriteApp({
+      resolveMembershipByEmail: () => ({ familyId: "default", role: "guest" }),
+    });
     const res = await app.request("/write", {
       method: "POST",
       headers: { authorization: `Bearer ${await sign()}` },

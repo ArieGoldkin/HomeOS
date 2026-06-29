@@ -29,7 +29,7 @@ function seedFamily(
   familyId: string,
   opts: {
     phone?: string;
-    members?: Array<{ userId: string; role: string; displayName: string }>;
+    members?: Array<{ userId: string; role: string; displayName: string; email?: string }>;
   } = {},
 ): void {
   const seed: FamilySeed = {
@@ -145,6 +145,42 @@ describe("FamilyResolver — the phone→family security chokepoint (#229)", () 
       role: "member",
     });
     expect(resolver.resolveMembership("stranger")).toBeNull();
+  });
+
+  it("resolveMembershipByEmail returns {familyId, role} for a seeded member email (uid↔member binding)", () => {
+    const path = tmpDbPath();
+    seedFamily(path, "default", {
+      members: [
+        { userId: "placeholder:1", role: "owner", displayName: "אבא", email: "Arie@Gmail.com" },
+        { userId: "placeholder:2", role: "member", displayName: "אמא", email: "partner@gmail.com" },
+      ],
+    });
+    const resolver = createFamilyResolver(path);
+    // case-insensitive: a config "Arie@Gmail.com" resolves the JWT's lower-cased "arie@gmail.com"
+    expect(resolver.resolveMembershipByEmail("arie@gmail.com")).toEqual({
+      familyId: "default",
+      role: "owner",
+    });
+    // and tolerant of surrounding whitespace + mixed case on the input
+    expect(resolver.resolveMembershipByEmail("  PARTNER@gmail.com  ")).toEqual({
+      familyId: "default",
+      role: "member",
+    });
+  });
+
+  it("resolveMembershipByEmail returns null for an unknown email, an un-emailed member, and an empty input", () => {
+    const path = tmpDbPath();
+    seedFamily(path, "default", {
+      members: [
+        { userId: "placeholder:1", role: "owner", displayName: "אבא", email: "arie@gmail.com" },
+        { userId: "placeholder:2", role: "member", displayName: "אמא" }, // NO email → not bindable
+      ],
+    });
+    const resolver = createFamilyResolver(path);
+    expect(resolver.resolveMembershipByEmail("stranger@example.com")).toBeNull(); // unknown
+    expect(resolver.resolveMembershipByEmail("")).toBeNull(); // empty never resolves
+    // a member seeded without an email must NOT match a NULL/empty lookup
+    expect(resolver.resolveMembershipByEmail("  ")).toBeNull();
   });
 
   it("is injection-safe — metacharacter-laden input resolves to null and never executes SQL", () => {
