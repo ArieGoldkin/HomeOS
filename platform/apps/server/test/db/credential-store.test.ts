@@ -114,7 +114,7 @@ describe("single-family dogfood guard (#110 — Phase-8 trip-wire in code)", () 
     const store = createCredentialStore(":memory:", key);
     expect(() => store.upsert(FAMILY_ID, sample)).not.toThrow();
     expect(store.get(FAMILY_ID)).toEqual(sample);
-    expect(store.issueState(FAMILY_ID)).toBeTruthy();
+    expect(store.issueState(FAMILY_ID, "dad@example.com")).toBeTruthy();
   });
 
   it("upsert throws the named single-family error for any other family", () => {
@@ -124,36 +124,35 @@ describe("single-family dogfood guard (#110 — Phase-8 trip-wire in code)", () 
 
   it("issueState throws the named single-family error for any other family", () => {
     const store = createCredentialStore(":memory:", key);
-    expect(() => store.issueState("another-family")).toThrowError(/single-family/);
+    expect(() => store.issueState("another-family", "x@example.com")).toThrowError(/single-family/);
   });
 });
 
-describe("oauth_state — CSRF store (OG7, single-use, family-bound)", () => {
+describe("oauth_state — CSRF store (OG7, single-use; carries {familyId, email} #231)", () => {
   it("issues a state that consumes exactly once (single-use)", () => {
     const store = createCredentialStore(":memory:", key);
-    const state = store.issueState(FAMILY_ID);
-    expect(store.consumeState(state, FAMILY_ID)).toBe(true);
-    expect(store.consumeState(state, FAMILY_ID)).toBe(false); // reused → already deleted
+    const state = store.issueState(FAMILY_ID, "dad@example.com");
+    expect(store.consumeState(state)).toEqual({ familyId: FAMILY_ID, email: "dad@example.com" });
+    expect(store.consumeState(state)).toBeNull(); // reused → already deleted
   });
 
   it("rejects a forged / never-issued state", () => {
     const store = createCredentialStore(":memory:", key);
-    expect(store.consumeState("not-a-real-state", FAMILY_ID)).toBe(false);
+    expect(store.consumeState("not-a-real-state")).toBeNull();
   });
 
-  it("is family-bound — a valid state won't consume for a different family", () => {
+  it("returns the minting {familyId, email} on consume (#231 — the callback's identity source)", () => {
     const store = createCredentialStore(":memory:", key);
-    const state = store.issueState(FAMILY_ID);
-    expect(store.consumeState(state, "other-family")).toBe(false);
-    expect(store.consumeState(state, FAMILY_ID)).toBe(true); // the failed attempt didn't delete it
+    const state = store.issueState(FAMILY_ID, "dad@example.com");
+    expect(store.consumeState(state)).toEqual({ familyId: FAMILY_ID, email: "dad@example.com" });
   });
 
   it("expires after its TTL (fake clock)", () => {
     let nowMs = Date.parse("2026-06-18T12:00:00Z");
     const store = createCredentialStore(":memory:", key, () => new Date(nowMs));
-    const state = store.issueState(FAMILY_ID);
+    const state = store.issueState(FAMILY_ID, "dad@example.com");
     nowMs += 11 * 60 * 1000; // 11 min later — past the ~10 min TTL
-    expect(store.consumeState(state, FAMILY_ID)).toBe(false);
+    expect(store.consumeState(state)).toBeNull();
   });
 });
 

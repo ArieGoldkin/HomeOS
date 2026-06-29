@@ -15,9 +15,9 @@ export class GoogleNotConfiguredError extends Error {
 }
 
 /**
- * #111 — the typed `startGoogleConnect` failures the connect dialog maps to distinct Hebrew copy:
- * `auth` (401/403 — wrong setup code), `rate_limited` (429 — too many attempts), `not_configured`
- * (503 — server dark). `unknown` is any other non-2xx. The dialog switches on `reason`, never on a
+ * #111 — the typed `startGoogleConnect` failures the connect UI maps to distinct Hebrew copy:
+ * `auth` (401/403 — no/expired session), `rate_limited` (429 — too many attempts), `not_configured`
+ * (503 — server dark). `unknown` is any other non-2xx. The UI switches on `reason`, never on a
  * raw status code or a parsed message string.
  */
 export type ConnectErrorReason = "auth" | "rate_limited" | "not_configured" | "unknown";
@@ -48,8 +48,8 @@ function connectReasonForStatus(status: number): ConnectErrorReason {
  * tile. The body is parsed with the shared `connectionStatusSchema` (a strictObject): any shape drift —
  * above all a leaked token — fails loudly here, never silently in the UI.
  *
- * NOTE: the connect/disconnect MUTATIONS below are authorized by a different, higher-privilege credential —
- * the setup CODE the user types (a RUNTIME argument, NEVER bundled). That mechanism is unchanged by #225.
+ * NOTE: #231 — the connect/disconnect MUTATIONS below are now session-gated too (the same cookie), so the
+ * whole Google surface rides one credential; there's no separate setup code anymore.
  */
 export async function fetchConnectionStatus(signal?: AbortSignal): Promise<ConnectionStatus> {
   const res = await fetch(`${API_BASE}/oauth/google/status`, {
@@ -67,15 +67,16 @@ export async function fetchConnectionStatus(signal?: AbortSignal): Promise<Conne
 }
 
 /**
- * #111 — GET `/oauth/google/connect-url`: exchange the user-typed setup CODE for the Google consent URL
- * the browser then navigates to. CRITICAL: `setupToken` is a RUNTIME ARGUMENT — the short-lived code the
- * user types into the dialog — and is NEVER read from `import.meta.env` / bundled. Distinct failures are
- * surfaced as a {@link GoogleConnectError} carrying a `reason` (auth/rate_limited/not_configured/unknown)
- * so the dialog can show distinct Hebrew messages. Returns the `{ url }` JSON on 200.
+ * #231 — GET `/oauth/google/connect-url`: exchange the logged-in SESSION for the Google consent URL the
+ * browser then navigates to. Authorized by the Supabase session cookie (`credentials: "include"`, like
+ * {@link fetchConnectionStatus} / {@link fetchEvents}) — there is NO setup code / bearer, the connect
+ * mutation is session-gated. Distinct failures surface as a {@link GoogleConnectError} carrying a `reason`
+ * (auth/rate_limited/not_configured/unknown) so the dialog can show distinct Hebrew messages. Returns the
+ * `{ url }` JSON on 200.
  */
-export async function startGoogleConnect(setupToken: string): Promise<{ url: string }> {
+export async function startGoogleConnect(): Promise<{ url: string }> {
   const res = await fetch(`${API_BASE}/oauth/google/connect-url`, {
-    headers: { Authorization: `Bearer ${setupToken}` },
+    credentials: "include",
   });
   if (!res.ok) {
     throw new GoogleConnectError(connectReasonForStatus(res.status), res.status);
@@ -85,15 +86,15 @@ export async function startGoogleConnect(setupToken: string): Promise<{ url: str
 }
 
 /**
- * #111 — POST `/oauth/google/disconnect`: revoke + delete the stored Google credential. Like
- * `startGoogleConnect`, the setup CODE is a RUNTIME argument (the user re-types it to confirm a destroy),
- * NEVER from `import.meta.env`. Throws a {@link GoogleConnectError} (same typed reasons) on any non-2xx so
- * the confirm dialog can surface a distinct Hebrew message.
+ * #231 — POST `/oauth/google/disconnect`: revoke + delete the stored Google credential. Like
+ * {@link startGoogleConnect} it's authorized by the Supabase session cookie (`credentials: "include"`),
+ * NOT a setup code / bearer — the disconnect mutation is session-gated. Throws a {@link GoogleConnectError}
+ * (same typed reasons) on any non-2xx so the confirm dialog can surface a distinct Hebrew message.
  */
-export async function disconnectGoogle(setupToken: string): Promise<void> {
+export async function disconnectGoogle(): Promise<void> {
   const res = await fetch(`${API_BASE}/oauth/google/disconnect`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${setupToken}` },
+    credentials: "include",
   });
   if (!res.ok) {
     throw new GoogleConnectError(connectReasonForStatus(res.status), res.status);

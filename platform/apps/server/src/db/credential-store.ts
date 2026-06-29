@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { sqliteUtc } from "../core/time.ts";
 import { decrypt, encrypt } from "../google/crypto.ts";
 import {
+  ADD_OAUTH_STATE_EMAIL,
   CREATE_CREDENTIALS_TABLE,
   CREATE_KEY_CANARY_TABLE,
   CREATE_OAUTH_STATE_TABLE,
@@ -65,10 +66,17 @@ export interface CredentialStore {
   /** Disconnect / revoke / degrade. Returns the number of rows removed. */
   delete(familyId: string): number;
   // --- OAuth state / CSRF (OG7), folded in over the same DB handle ---
-  /** Mint a single-use, family-bound, ~10-min `state` for the consent redirect. */
-  issueState(familyId: string): string;
-  /** Atomically consume a `state` — true iff it was valid, unexpired, and bound to `familyId`. */
-  consumeState(state: string, familyId: string): boolean;
+  /**
+   * #231 — mint a single-use, family-bound, ~10-min `state` for the consent redirect, carrying the
+   * connect-initiator's session `email` so the callback can enforce connected-email == this.
+   */
+  issueState(familyId: string, email: string): string;
+  /**
+   * #231 — atomically consume a `state`: returns the minting `{familyId, email}` iff it was valid +
+   * unexpired (then it's gone), else null. No longer takes a familyId — the unguessable single-use state
+   * IS the carrier, and the callback gets the family it was minted for.
+   */
+  consumeState(state: string): { familyId: string; email: string | null } | null;
 }
 
 export function createCredentialStore(
@@ -82,6 +90,11 @@ export function createCredentialStore(
   db.exec(CREATE_CREDENTIALS_TABLE);
   db.exec(CREATE_KEY_CANARY_TABLE);
   db.exec(CREATE_OAUTH_STATE_TABLE);
+  // #231: ensure `email` exists on a PRE-EXISTING oauth_state table (CREATE IF NOT EXISTS won't add it).
+  const oauthStateCols = db.prepare("PRAGMA table_info(oauth_state);").all() as Array<{
+    name: string;
+  }>;
+  if (!oauthStateCols.some((c) => c.name === "email")) db.exec(ADD_OAUTH_STATE_EMAIL);
 
   // Boot key-canary (MF4): written once on first init, verified on every later boot. A changed key
   // fails LOUD here instead of letting every credential silently degrade-to-app-only (which would
@@ -130,12 +143,12 @@ export function createCredentialStore(
   const deleteStmt = db.prepare("DELETE FROM credentials WHERE family_id = ? AND provider = ?;");
 
   const insertStateStmt = db.prepare(
-    "INSERT INTO oauth_state (state, family_id, expires_at) VALUES (?, ?, ?);",
+    "INSERT INTO oauth_state (state, family_id, email, expires_at) VALUES (?, ?, ?, ?);",
   );
-  // Atomic single-use: delete-and-return in one step (no read-then-delete race), bound to the family
-  // and unexpired. A returned row ⇒ the state was valid and is now gone (OG7).
+  // Atomic single-use: delete-and-return in one step (no read-then-delete race), unexpired. A returned
+  // row ⇒ the state was valid and is now gone (OG7); return its family_id + email to the callback (#231).
   const consumeStateStmt = db.prepare(
-    "DELETE FROM oauth_state WHERE state = ? AND family_id = ? AND expires_at > ? RETURNING state;",
+    "DELETE FROM oauth_state WHERE state = ? AND expires_at > ? RETURNING family_id, email;",
   );
 
   return {
@@ -172,15 +185,18 @@ export function createCredentialStore(
     delete(familyId) {
       return Number(deleteStmt.run(familyId, PROVIDER).changes);
     },
-    issueState(familyId) {
+    issueState(familyId, email) {
       assertSingleFamily(familyId);
       const state = randomBytes(32).toString("base64url"); // unguessable
       const expiresAt = sqliteUtc(new Date(now().getTime() + STATE_TTL_MS));
-      insertStateStmt.run(state, familyId, expiresAt);
+      insertStateStmt.run(state, familyId, email, expiresAt);
       return state;
     },
-    consumeState(state, familyId) {
-      return consumeStateStmt.get(state, familyId, sqliteUtc(now())) !== undefined;
+    consumeState(state) {
+      const row = consumeStateStmt.get(state, sqliteUtc(now())) as
+        | { family_id: string; email: string | null }
+        | undefined;
+      return row ? { familyId: row.family_id, email: row.email } : null;
     },
   };
 }
