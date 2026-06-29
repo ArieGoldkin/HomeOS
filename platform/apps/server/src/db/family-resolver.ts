@@ -82,6 +82,9 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
   );
   // uid↔member binding — match on the LOWER-cased email so a config "Arie@Gmail.com" resolves the JWT's
   // "arie@gmail.com". Parameterized + deterministic, exactly like byUserStmt (the cross-tenant chokepoint).
+  // The `email` column is added by createFamilyStore's self-healing ALTER on a pre-existing (#235-era) table;
+  // this resolver's CREATE-IF-NOT-EXISTS won't add it, so it relies on the store booting FIRST (index.ts
+  // builds the store before the resolver). Fresh DBs get the column straight from the CREATE DDL above.
   const byEmailStmt = db.prepare(
     "SELECT family_id, role FROM family_members WHERE LOWER(email) = ? ORDER BY family_id LIMIT 1;",
   );
