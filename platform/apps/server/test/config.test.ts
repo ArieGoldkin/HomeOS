@@ -12,14 +12,12 @@ const base = {
 // secret-scanner doesn't read them as hardcoded key:value secrets.
 const kCs = "GOOGLE_CLIENT_SECRET";
 const kEnc = "GOOGLE_TOKEN_ENC_KEY";
-const kAdmin = "ADMIN_TOKEN";
 const ENC32_B64 = Buffer.alloc(32, 1).toString("base64"); // a valid 32-byte key
 const googleEnv: Record<string, string> = {
   GOOGLE_CLIENT_ID: "gcid",
   GOOGLE_REDIRECT_URI: "http://localhost:3000/oauth/google/callback",
   [kCs]: "gsec",
   [kEnc]: ENC32_B64,
-  [kAdmin]: "admtok",
 };
 
 describe("loadConfig", () => {
@@ -117,7 +115,6 @@ describe("loadConfig", () => {
     const g = loadConfig({ ...base, ...googleEnv }).google;
     expect(g?.clientId).toBe("gcid");
     expect(g?.redirectUri).toBe("http://localhost:3000/oauth/google/callback");
-    expect(g?.adminToken).toBe("admtok");
     expect(g?.encKey).toHaveLength(32);
   });
 
@@ -136,54 +133,21 @@ describe("loadConfig", () => {
   });
 });
 
-// #106 — self-serve OAuth adds three OPTIONAL bundle vars (SETUP_TOKEN, WEB_BASE_URL,
-// ALLOWED_GOOGLE_EMAIL). The five required vars stay required; none present ⇒ ships dark; required
-// present + these absent ⇒ admin-only mode preserved (the new fields read undefined).
-const kSetup = "SETUP_TOKEN";
-const SETUP32_B64 = Buffer.alloc(32, 7).toString("base64"); // a valid ≥32-byte SETUP_TOKEN
+// #231 — the Google bundle's only OPTIONAL var is now WEB_BASE_URL (the post-consent return origin). The
+// four required vars stay required; none present ⇒ ships dark; required present + WEB_BASE_URL absent ⇒ the
+// callback renders the static Hebrew page (webBaseUrl reads undefined). The retired SETUP_TOKEN/ADMIN_TOKEN
+// gate + the ALLOWED_GOOGLE_EMAIL pin are gone — connect/disconnect are session-gated (#231).
 const ALLOWED_ORIGIN_URL = "https://homeos-production-83a4.up.railway.app/connections";
 
-describe("loadConfig — self-serve OAuth optionals (#106)", () => {
+describe("loadConfig — Google OAuth WEB_BASE_URL optional (#106/#231)", () => {
   it("ships dark: no GOOGLE_* ⇒ config.google undefined (unchanged)", () => {
     expect(loadConfig(base).google).toBeUndefined();
   });
 
-  it("admin-only mode preserved: required set, the 3 optionals absent ⇒ fields undefined", () => {
+  it("WEB_BASE_URL absent ⇒ webBaseUrl undefined (static-page mode)", () => {
     const g = loadConfig({ ...base, ...googleEnv }).google;
     expect(g).toBeDefined();
-    expect(g?.setupToken).toBeUndefined();
     expect(g?.webBaseUrl).toBeUndefined();
-    expect(g?.allowedEmail).toBeUndefined();
-  });
-
-  it("builds the optionals when set (valid distinct ≥32-byte SETUP_TOKEN, allowlisted https origin)", () => {
-    const g = loadConfig({
-      ...base,
-      ...googleEnv,
-      [kSetup]: SETUP32_B64,
-      WEB_BASE_URL: "https://homeos-production-83a4.up.railway.app",
-      ALLOWED_GOOGLE_EMAIL: "parent@example.com",
-    }).google;
-    expect(g?.setupToken).toBe(SETUP32_B64);
-    expect(g?.webBaseUrl).toBe("https://homeos-production-83a4.up.railway.app");
-    expect(g?.allowedEmail).toBe("parent@example.com");
-  });
-
-  it("rejects a SETUP_TOKEN with < 32 decoded bytes of entropy", () => {
-    expect(() =>
-      loadConfig({ ...base, ...googleEnv, [kSetup]: Buffer.alloc(16, 7).toString("base64") }),
-    ).toThrowError(/SETUP_TOKEN/);
-  });
-
-  it("rejects a SETUP_TOKEN equal to ADMIN_TOKEN", () => {
-    expect(() =>
-      loadConfig({ ...base, ...googleEnv, [kAdmin]: SETUP32_B64, [kSetup]: SETUP32_B64 }),
-    ).toThrowError(/SETUP_TOKEN/);
-  });
-
-  it("accepts a valid distinct ≥32-byte SETUP_TOKEN", () => {
-    const g = loadConfig({ ...base, ...googleEnv, [kSetup]: SETUP32_B64 }).google;
-    expect(g?.setupToken).toBe(SETUP32_B64);
   });
 
   it("rejects a WEB_BASE_URL that is not absolute", () => {

@@ -101,27 +101,19 @@ export const handlers = [
   }),
 
   /**
-   * #111 — Bearer-gated `GET /oauth/google/connect-url`. The Bearer here is the user-typed SETUP CODE
-   * (a runtime arg, never bundled); the default echoes a consent URL on 200. Tests assert the distinct
-   * error reasons (401/403/429/503) by overriding with `server.use(...)`.
+   * #231 — session-gated `GET /oauth/google/connect-url`. The Supabase session cookie rides the request
+   * (like /status, /events) — no setup code / bearer. The default echoes a consent URL on 200; tests assert
+   * the distinct error reasons (401/403/429/503) by overriding with `server.use(...)`.
    */
-  http.get("*/oauth/google/connect-url", ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
+  http.get("*/oauth/google/connect-url", () => {
     return HttpResponse.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?mock=1" });
   }),
 
   /**
-   * #111 — Bearer-gated `POST /oauth/google/disconnect`. The Bearer is again the user-typed setup code.
-   * Returns 204 on success; tests override to assert non-2xx handling.
+   * #231 — session-gated `POST /oauth/google/disconnect` (the same session cookie, no setup code). Returns
+   * 204 on success; tests override to assert non-2xx handling.
    */
-  http.post("*/oauth/google/disconnect", ({ request }) => {
-    const auth = request.headers.get("authorization");
-    if (!auth?.startsWith("Bearer")) {
-      return new HttpResponse("Unauthorized", { status: 401 });
-    }
+  http.post("*/oauth/google/disconnect", () => {
     return new HttpResponse(null, { status: 204 });
   }),
 

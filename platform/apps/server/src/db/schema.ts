@@ -171,14 +171,24 @@ export const CREATE_OAUTH_STATE_TABLE = `
   CREATE TABLE IF NOT EXISTS oauth_state (
     state      TEXT PRIMARY KEY,
     family_id  TEXT NOT NULL,
+    email      TEXT,
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `;
 
+/**
+ * #231 — idempotent migration: add the connect-initiator `email` to a PRE-EXISTING oauth_state table
+ * (CREATE IF NOT EXISTS won't alter it). Nullable: a state minted post-migration always carries the
+ * session email (the callback enforces connected-email == this); pre-migration rows are transient
+ * (TTL'd minutes) and fail closed at the callback.
+ */
+export const ADD_OAUTH_STATE_EMAIL = "ALTER TABLE oauth_state ADD COLUMN email TEXT;";
+
 export interface OAuthStateRow {
   state: string;
   family_id: string;
+  email: string | null;
   expires_at: string;
   created_at: string;
 }

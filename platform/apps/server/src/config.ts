@@ -32,10 +32,6 @@ const membersMap = z
     }, {}),
   );
 
-// #106 — env name held as a quoted string (scanner-exempt) so the self-serve Connect-Google bearer can be
-// read via index access. A DISTINCT token from ADMIN_TOKEN; boot enforces ≥32 bytes of base64 entropy.
-const kSetup = "SETUP_TOKEN";
-
 /**
  * #106 — the origins WEB_BASE_URL may point at. A self-serve "Connect Google" return URL is bounded
  * to this allowlist (defence vs an attacker-set base URL diverting the post-consent redirect). Seeded
@@ -127,13 +123,8 @@ export interface GoogleOAuthSettings {
   clientSecret: string;
   redirectUri: string;
   encKey: Buffer;
-  adminToken: string;
-  /** #106 — self-serve Connect-Google bearer (≥32 bytes; distinct from READ/ADMIN). Unset ⇒ admin-only. */
-  setupToken?: string;
-  /** #106 — allowlisted https origin the post-consent return URL is built from. Unset ⇒ admin-only. */
+  /** #106 — allowlisted https origin the post-consent return URL is built from. Unset ⇒ static Hebrew page. */
   webBaseUrl?: string;
-  /** #106 — the single Google email the self-serve flow accepts (dogfood guard). Unset ⇒ unenforced. */
-  allowedEmail?: string;
 }
 
 /** #134 — offsite backup (Cloudflare R2) settings; present only when the full R2 bundle is configured. */
@@ -189,25 +180,6 @@ export interface Config {
 }
 
 /**
- * #106 — validate the optional SETUP_TOKEN when present: ≥32 bytes of base64-decoded entropy AND distinct
- * from the bundle's ADMIN_TOKEN (never aliased — the self-serve gate is an independent credential). Throws
- * a NAMED error (mentions SETUP_TOKEN) on any violation. (#225 retired READ_TOKEN, so it's no longer compared.)
- */
-function validateSetupToken(setupToken: string, adminToken: string): void {
-  if (Buffer.from(setupToken, "base64").length < 32) {
-    throw new Error(
-      "Invalid environment configuration: SETUP_TOKEN must carry at least 32 bytes of base64 entropy.",
-    );
-  }
-  if (setupToken === adminToken) {
-    throw new Error(
-      "Invalid environment configuration: SETUP_TOKEN must be DISTINCT from ADMIN_TOKEN " +
-        "(the self-serve gate is an independent credential, never aliased).",
-    );
-  }
-}
-
-/**
  * #106 — validate the optional WEB_BASE_URL when present: an absolute `https://` URL whose `origin`
  * is a member of {@link ALLOWED_WEB_ORIGINS} (an attacker-set base URL must not divert the
  * post-consent return). Throws a NAMED error (mentions WEB_BASE_URL) on any violation.
@@ -235,12 +207,14 @@ function validateWebBaseUrl(webBaseUrl: string): void {
 
 /**
  * The Google OAuth bundle (#16) is validated here rather than in the zod schema: ALL-OR-NOTHING —
- * five REQUIRED vars present ⇒ settings; none ⇒ `undefined` (ships dark); a partial set fails fast
+ * four REQUIRED vars present ⇒ settings; none ⇒ `undefined` (ships dark); a partial set fails fast
  * naming the gap. `encKey` is parseKey-validated at boot (a wrong-length key throws here). Read via
  * index access so the env names stay strings, not hardcoded key/value pairs.
  *
- * #106 — three OPTIONAL self-serve vars (SETUP_TOKEN / WEB_BASE_URL / ALLOWED_GOOGLE_EMAIL) ride
- * alongside: each absent ⇒ admin-only mode (the field reads undefined); each present is boot-validated.
+ * #106 — one OPTIONAL var (WEB_BASE_URL) rides alongside: absent ⇒ the callback renders the static
+ * Hebrew page (webBaseUrl reads undefined); present ⇒ boot-validated against the origin allowlist. (#231
+ * retired the SETUP_TOKEN/ADMIN_TOKEN gate + the ALLOWED_GOOGLE_EMAIL pin — connect/disconnect are now
+ * session-gated and the callback pins to the session email carried on the state.)
  */
 function readGoogleBundle(
   env: Record<string, string | undefined>,
@@ -249,33 +223,25 @@ function readGoogleBundle(
   const cs = env["GOOGLE_CLIENT_SECRET"];
   const redirectUri = env.GOOGLE_REDIRECT_URI;
   const encB64 = env["GOOGLE_TOKEN_ENC_KEY"];
-  const adminToken = env["ADMIN_TOKEN"];
-  const vals = [clientId, cs, redirectUri, encB64, adminToken];
+  const vals = [clientId, cs, redirectUri, encB64];
   const present = vals.filter((v) => v && v.length > 0).length;
   if (present === 0) return undefined; // ships dark
   if (present < vals.length) {
     throw new Error(
       "Invalid environment configuration: the Google OAuth bundle is all-or-nothing — set every " +
-        "GOOGLE_* var (GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URI/_TOKEN_ENC_KEY + ADMIN_TOKEN) or none.",
+        "GOOGLE_* var (GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URI/_TOKEN_ENC_KEY) or none.",
     );
   }
-  const admin = adminToken as string;
-  const setupToken = env[kSetup];
-  if (setupToken) validateSetupToken(setupToken, admin);
   const webBaseUrl = env.WEB_BASE_URL;
   if (webBaseUrl) validateWebBaseUrl(webBaseUrl);
-  const allowedEmail = env.ALLOWED_GOOGLE_EMAIL;
 
   const csField = "clientSecret"; // computed key, so the field name isn't a literal key/value pair
   return {
     clientId: clientId as string,
     redirectUri: redirectUri as string,
-    adminToken: admin,
     encKey: parseKey(encB64 as string),
     [csField]: cs as string,
-    setupToken: setupToken || undefined,
     webBaseUrl: webBaseUrl || undefined,
-    allowedEmail: allowedEmail || undefined,
   } as GoogleOAuthSettings;
 }
 

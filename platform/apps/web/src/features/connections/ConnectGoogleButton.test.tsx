@@ -5,12 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw/server";
 import { ConnectGoogleButton } from "./ConnectGoogleButton";
 
-const SETUP_CODE = "super-secret-setup-code";
-
 // jsdom's window.location.assign throws "Not implemented"; stub it so the success path is observable.
 let assignSpy: ReturnType<typeof vi.fn>;
-let localSetSpy: ReturnType<typeof vi.spyOn>;
-let sessionSetSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   assignSpy = vi.fn();
@@ -18,58 +14,52 @@ beforeEach(() => {
     configurable: true,
     value: { ...window.location, assign: assignSpy },
   });
-  localSetSpy = vi.spyOn(Storage.prototype, "setItem");
-  sessionSetSpy = vi.spyOn(Object.getPrototypeOf(window.sessionStorage), "setItem");
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function openAndSubmit(code: string) {
+async function clickConnect() {
   await userEvent.click(screen.getByTestId("connect-google-open"));
-  await userEvent.type(screen.getByTestId("setup-code-input"), code);
-  await userEvent.click(screen.getByRole("button", { name: "המשך לחיבור" }));
 }
 
-describe("ConnectGoogleButton (#112 — dialog, error mapping, token never persisted)", () => {
-  it("opens the dialog with a dir=ltr setup-code field", async () => {
+describe("ConnectGoogleButton (#231 — session-gated, no setup code)", () => {
+  it("renders a plain 'חבר Google' button with no setup-code input", () => {
     render(<ConnectGoogleButton />);
-    await userEvent.click(screen.getByTestId("connect-google-open"));
-    const input = screen.getByTestId("setup-code-input");
-    expect(input).toHaveAttribute("dir", "ltr");
-    expect(input).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: /חבר Google/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("setup-code-input")).not.toBeInTheDocument();
   });
 
-  it("on success exchanges the code and navigates to the consent URL", async () => {
+  it("on click exchanges the session and navigates to the consent URL", async () => {
     server.use(
       http.get("*/oauth/google/connect-url", () =>
         HttpResponse.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?ok=1" }),
       ),
     );
     render(<ConnectGoogleButton />);
-    await openAndSubmit(SETUP_CODE);
+    await clickConnect();
     await waitFor(() =>
       expect(assignSpy).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth?ok=1"),
     );
   });
 
-  it("maps 401 to 'קוד שגוי'", async () => {
+  it("maps 401 to the no-session message", async () => {
     server.use(
       http.get("*/oauth/google/connect-url", () => new HttpResponse(null, { status: 401 })),
     );
     render(<ConnectGoogleButton />);
-    await openAndSubmit("wrong");
-    await waitFor(() => expect(screen.getByText("קוד שגוי")).toBeInTheDocument());
+    await clickConnect();
+    await waitFor(() => expect(screen.getByText("ההתחברות פגה, התחברו מחדש")).toBeInTheDocument());
   });
 
-  it("maps 403 to 'קוד שגוי'", async () => {
+  it("maps 403 to the no-session message", async () => {
     server.use(
       http.get("*/oauth/google/connect-url", () => new HttpResponse(null, { status: 403 })),
     );
     render(<ConnectGoogleButton />);
-    await openAndSubmit("wrong");
-    await waitFor(() => expect(screen.getByText("קוד שגוי")).toBeInTheDocument());
+    await clickConnect();
+    await waitFor(() => expect(screen.getByText("ההתחברות פגה, התחברו מחדש")).toBeInTheDocument());
   });
 
   it("maps 429 to the too-many-attempts message", async () => {
@@ -77,50 +67,19 @@ describe("ConnectGoogleButton (#112 — dialog, error mapping, token never persi
       http.get("*/oauth/google/connect-url", () => new HttpResponse(null, { status: 429 })),
     );
     render(<ConnectGoogleButton />);
-    await openAndSubmit("code");
+    await clickConnect();
     await waitFor(() =>
       expect(screen.getByText("יותר מדי ניסיונות, נסו שוב מאוחר יותר")).toBeInTheDocument(),
     );
   });
 
-  it("maps 503 to 'Google לא מוגדר בשרת'", async () => {
+  it("maps 503 to 'Google לא מוגדר בשרת' and does not navigate", async () => {
     server.use(
       http.get("*/oauth/google/connect-url", () => new HttpResponse(null, { status: 503 })),
     );
     render(<ConnectGoogleButton />);
-    await openAndSubmit("code");
+    await clickConnect();
     await waitFor(() => expect(screen.getByText("Google לא מוגדר בשרת")).toBeInTheDocument());
-  });
-
-  it("NEVER persists the setup code to localStorage or sessionStorage", async () => {
-    server.use(
-      http.get("*/oauth/google/connect-url", () =>
-        HttpResponse.json({ url: "https://accounts.google.com/o/oauth2/v2/auth?ok=1" }),
-      ),
-    );
-    render(<ConnectGoogleButton />);
-    await openAndSubmit(SETUP_CODE);
-    await waitFor(() => expect(assignSpy).toHaveBeenCalled());
-
-    // No persistence call carried the secret code (nor any value at all, for this flow).
-    for (const call of localSetSpy.mock.calls) {
-      expect(call[1]).not.toContain(SETUP_CODE);
-    }
-    for (const call of sessionSetSpy.mock.calls) {
-      expect(call[1]).not.toContain(SETUP_CODE);
-    }
-    expect(window.localStorage.getItem("google-setup-code")).toBeNull();
-    expect(window.sessionStorage.getItem("google-setup-code")).toBeNull();
-  });
-
-  it("clears the code from the field when the dialog is closed", async () => {
-    render(<ConnectGoogleButton />);
-    await userEvent.click(screen.getByTestId("connect-google-open"));
-    await userEvent.type(screen.getByTestId("setup-code-input"), SETUP_CODE);
-    // close via the dialog's close button
-    await userEvent.click(screen.getByRole("button", { name: "סגירה" }));
-    // re-open: the field is empty again (in-memory state was cleared)
-    await userEvent.click(screen.getByTestId("connect-google-open"));
-    expect(screen.getByTestId("setup-code-input")).toHaveValue("");
+    expect(assignSpy).not.toHaveBeenCalled();
   });
 });
