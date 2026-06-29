@@ -13,6 +13,7 @@ import type { InboundStore } from "../db/inbound-store.ts";
 // FAMILY_ID constant). The bot WRITE path — the chokepoint with no RLS backstop — resolves via
 // db/family-resolver.ts.
 import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
+import { type CalendarToolDeps, pushSavedEventsToCalendar } from "../tools/index.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes/index.ts";
 import {
   type RequireSessionConfig,
@@ -48,6 +49,12 @@ export interface ServerDeps {
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
   google?: GoogleOAuthDeps;
+  /** #18 — Calendar tool deps for auto-pushing app-created events (POST /events) to Google Calendar, the
+   *  same seam the WhatsApp inbound handler uses. Undefined ⇒ app-only / not connected ⇒ no push. */
+  calendar?: CalendarToolDeps;
+  /** #18 — CALENDAR_AUTO_PUSH: gates the POST /events auto-push (paired with `calendar`). Undefined ⇒ no
+   *  push (the env var itself defaults ON in config, so prod pushes unless explicitly disabled). */
+  autoPushCalendar?: boolean;
   /**
    * #225 — session auth config gating the read/write routes (GET /events, /messages, POST/PATCH /events,
    * GET /oauth/google/status). Replaces the retired build-embedded readToken/writeToken/messagesToken with
@@ -171,6 +178,20 @@ export function createServer(deps: ServerDeps): Hono {
       fromPhone: "web",
       waMessageId: `web:${randomUUID()}`,
     });
+    // #18 — auto-push the new board event to Google Calendar, the SAME seam the WhatsApp inbound handler
+    // uses (parse-and-confirm.ts). FIRE-AND-FORGET (not awaited): like the bot path confirms BEFORE pushing,
+    // we return the 201 first so the (non-optimistic) Add-Event dialog isn't blocked on two Google round-trips.
+    // The helper is best-effort by contract — it swallows token/write errors and never throws, so the floating
+    // promise can't reject. The board is the source of truth; only source_provider-null rows are written (a
+    // manual add qualifies). Scoped to the session's resolved familyId.
+    if (deps.autoPushCalendar && deps.calendar) {
+      const familyId = (c.var as SessionVars).familyId;
+      void pushSavedEventsToCalendar([saved], deps.calendar, familyId, deps.log).then(
+        ({ pushed }) => {
+          if (pushed > 0) deps.log?.("auto-pushed web event to calendar", { id: saved.id, pushed });
+        },
+      );
+    }
     return c.json(saved, 201);
   });
 

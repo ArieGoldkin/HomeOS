@@ -211,6 +211,8 @@ const serverDeps: ServerDeps = {
   botPhone: config.botPhone, // #231 — human-readable bot number served by GET /channel (display-only)
   appSecret: config.appSecret,
   google: googleDeps,
+  calendar: calendarDeps, // #18 — POST /events auto-pushes to Calendar like the bot path (best-effort)
+  autoPushCalendar: config.calendarAutoPush,
   session, // #225 — per-user Supabase session gate (undefined ⇒ read/write routes 503)
   log,
 };

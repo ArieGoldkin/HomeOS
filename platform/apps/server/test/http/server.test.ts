@@ -9,6 +9,7 @@ import { FAMILY_ID, type InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
+import type { CalendarToolDeps } from "../../src/tools/index.ts";
 import { type JwtKit, makeJwtKit } from "./session/jwt-test-kit.ts";
 
 // #135 — the test allowlist for the GET /messages filter (inbound_messages is persisted pre-allowlist).
@@ -103,6 +104,12 @@ function makeApp(
     resolveMembership?: (userId: string) => { familyId: string; role: string } | null;
     /** #231 — the human-readable bot number served by GET /channel; undefined ⇒ the route serves null. */
     botPhone?: string;
+    /** #18 — when defined, wires deps.calendar; true ⇒ a connected credential (push writes), false ⇒ none. */
+    calendar?: boolean;
+    /** #18 — CALENDAR_AUTO_PUSH equivalent; pairs with `calendar` to exercise the POST /events auto-push. */
+    autoPush?: boolean;
+    /** #18 — force the calendar insert to throw, to prove a push failure never fails the save/201. */
+    calendarInsertThrows?: boolean;
   } = {
     appSecret: appKey,
   },
@@ -149,6 +156,35 @@ function makeApp(
     opts.familySeed === null
       ? createFamilyStore(":memory:")
       : createFamilyStore(":memory:", opts.familySeed ?? defaultFamilySeed);
+  // #18 — a fake Calendar seam mirroring the handler-test mock (_setup.ts): `calendar: true` → a stored
+  // credential so getValidAccessToken returns ok and the push writes; `false` → not connected (no writes).
+  const calendar: CalendarToolDeps | undefined =
+    opts.calendar === undefined
+      ? undefined
+      : ({
+          client: {
+            list: vi.fn(),
+            findEventIdByPrivateProp: vi.fn(async () => null),
+            insertEvent: vi.fn(async () => {
+              if (opts.calendarInsertThrows) throw new Error("gcal insert 500");
+              return { id: "gcal-new" };
+            }),
+            patchEvent: vi.fn(async () => ({ id: "gcal-p" })),
+          },
+          oauthClient: { exchangeCode: vi.fn(), refresh: vi.fn(), revoke: vi.fn() },
+          credentials: {
+            get: vi.fn(() =>
+              opts.calendar
+                ? { accessToken: "a", refreshToken: "r", expiry: "2099-01-01 00:00:00", scopes: [] }
+                : null,
+            ),
+            updateTokens: vi.fn(),
+            delete: vi.fn(),
+          },
+          calendarId: "primary",
+          windowDays: 30,
+          maxEvents: 20,
+        } as unknown as CalendarToolDeps);
   const deps: ServerDeps = {
     verifyToken: "secret",
     inbound,
@@ -156,6 +192,8 @@ function makeApp(
     events,
     family,
     botPhone: opts.botPhone,
+    calendar,
+    autoPushCalendar: opts.autoPush,
     allowlist: MSG_ALLOWLIST,
     appSecret: opts.appSecret,
   };
@@ -171,7 +209,7 @@ function makeApp(
         });
   deps.session = gate;
   deps.webDist = opts.webDist;
-  return { app: createServer(deps), process, inbound, events };
+  return { app: createServer(deps), process, inbound, events, calendar };
 }
 
 function post(
@@ -547,6 +585,49 @@ describe("POST /events (write seam)", () => {
     });
     expect(metaArg).toMatchObject({ fromPhone: "web" });
     expect(String(metaArg.waMessageId)).toMatch(/^web:/); // synthetic + unique per request
+  });
+
+  // #18 — the app write seam must auto-push to Google Calendar like the bot/inbound path does. Regression
+  // for: an app-created event saved to the board but never synced to Calendar (CALENDAR_AUTO_PUSH=true).
+  it("auto-pushes the new event to Google Calendar when calendar is connected + auto-push is on", async () => {
+    const { app, calendar } = makeApp({ calendar: true, autoPush: true });
+    const res = await postEvents(app, validParsed, auth(await kit.sign()));
+    expect(res.status).toBe(201); // the 201 returns BEFORE the push — the push is fire-and-forget
+    // the board event (source_provider null) is written to the calendar — find→insert (idempotent helper).
+    // vi.waitFor because the push is a floating promise the 201 doesn't await (like the webhook ack path).
+    await vi.waitFor(() => {
+      expect(calendar?.client.findEventIdByPrivateProp).toHaveBeenCalledTimes(1);
+      expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1);
+    });
+    const [, calId, body] = (calendar?.client.insertEvent as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect(calId).toBe("primary");
+    expect(body).toMatchObject({ summary: "ארוחת ערב" }); // Hebrew title carried through intact
+  });
+
+  it("does NOT push to Calendar when auto-push is off (calendar connected, kill switch off)", async () => {
+    const { app, calendar } = makeApp({ calendar: true, autoPush: false });
+    const res = await postEvents(app, validParsed, auth(await kit.sign()));
+    expect(res.status).toBe(201);
+    expect(calendar?.client.insertEvent).not.toHaveBeenCalled();
+  });
+
+  it("does NOT push when calendar is unconfigured (app-only deploy) — still saves + 201", async () => {
+    const { app, events } = makeApp({ autoPush: true }); // no calendar seam
+    const res = await postEvents(app, validParsed, auth(await kit.sign()));
+    expect(res.status).toBe(201);
+    expect(events.saveEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("a Calendar push failure is best-effort — the save still returns 201 (board is source of truth)", async () => {
+    const { app, calendar } = makeApp({
+      calendar: true,
+      autoPush: true,
+      calendarInsertThrows: true,
+    });
+    const res = await postEvents(app, validParsed, auth(await kit.sign()));
+    expect(res.status).toBe(201); // the push threw internally but the helper swallows it (and isn't awaited)
+    await vi.waitFor(() => expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1));
   });
 });
 
