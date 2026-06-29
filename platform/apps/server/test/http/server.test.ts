@@ -592,10 +592,13 @@ describe("POST /events (write seam)", () => {
   it("auto-pushes the new event to Google Calendar when calendar is connected + auto-push is on", async () => {
     const { app, calendar } = makeApp({ calendar: true, autoPush: true });
     const res = await postEvents(app, validParsed, auth(await kit.sign()));
-    expect(res.status).toBe(201);
-    // the board event (source_provider null) is written to the calendar — find→insert (idempotent helper)
-    expect(calendar?.client.findEventIdByPrivateProp).toHaveBeenCalledTimes(1);
-    expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(201); // the 201 returns BEFORE the push — the push is fire-and-forget
+    // the board event (source_provider null) is written to the calendar — find→insert (idempotent helper).
+    // vi.waitFor because the push is a floating promise the 201 doesn't await (like the webhook ack path).
+    await vi.waitFor(() => {
+      expect(calendar?.client.findEventIdByPrivateProp).toHaveBeenCalledTimes(1);
+      expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1);
+    });
     const [, calId, body] = (calendar?.client.insertEvent as ReturnType<typeof vi.fn>).mock
       .calls[0]!;
     expect(calId).toBe("primary");
@@ -623,8 +626,8 @@ describe("POST /events (write seam)", () => {
       calendarInsertThrows: true,
     });
     const res = await postEvents(app, validParsed, auth(await kit.sign()));
-    expect(res.status).toBe(201); // the push threw internally but the helper swallows it
-    expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(201); // the push threw internally but the helper swallows it (and isn't awaited)
+    await vi.waitFor(() => expect(calendar?.client.insertEvent).toHaveBeenCalledTimes(1));
   });
 });
 
