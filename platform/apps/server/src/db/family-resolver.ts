@@ -32,6 +32,13 @@ export interface FamilyResolver {
   resolveFamilyByPhone(fromPhone: string): string | null;
   /** Browser read path: user_id (from session) → family_id, or null if not a member. */
   resolveFamilyByUser(userId: string): string | null;
+  /**
+   * #226 — browser read path: user_id (session auth.uid) → the member's `{familyId, role}`, or null if not
+   * a member. `role` drives the read/write gate (requireWrite); `familyId` scopes the request. Same
+   * deterministic `ORDER BY family_id LIMIT 1` as resolveFamilyByUser — a chokepoint with no RLS backstop
+   * must never flap between families across calls if the one-member-row invariant is ever broken upstream.
+   */
+  resolveMembership(userId: string): { familyId: string; role: string } | null;
 }
 
 /**
@@ -62,8 +69,15 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
     "SELECT family_id FROM family_phones WHERE from_phone = ? ORDER BY family_id LIMIT 1;",
   );
   const byUserStmt = db.prepare(
-    "SELECT family_id FROM family_members WHERE user_id = ? ORDER BY family_id LIMIT 1;",
+    "SELECT family_id, role FROM family_members WHERE user_id = ? ORDER BY family_id LIMIT 1;",
   );
+
+  // #226 — one lookup feeds both the familyId scope and the role gate; resolveFamilyByUser delegates to it.
+  // A plain local fn (not a `this.` method) so destructured callers keep working.
+  function resolveMembership(userId: string): { familyId: string; role: string } | null {
+    const row = byUserStmt.get(userId) as { family_id: string; role: string } | undefined;
+    return row ? { familyId: row.family_id, role: row.role } : null;
+  }
 
   return {
     resolveFamilyByPhone(fromPhone) {
@@ -73,8 +87,8 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
       return row?.family_id ?? null;
     },
     resolveFamilyByUser(userId) {
-      const row = byUserStmt.get(userId) as { family_id: string } | undefined;
-      return row?.family_id ?? null;
+      return resolveMembership(userId)?.familyId ?? null;
     },
+    resolveMembership,
   };
 }

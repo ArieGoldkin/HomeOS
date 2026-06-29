@@ -6,13 +6,20 @@ import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store/index.ts";
 import type { FamilyStore } from "../db/family-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
-// #229 — the web read/write surface (served DTO family_id, setEventStatus) still uses the single-family
-// FAMILY_ID. DEFERRED with the OAuth path (see oauth-routes/): it resolves via the session identity,
-// which doesn't exist until #226. The bot WRITE path — the chokepoint with no RLS backstop — is fully
-// resolved (db/family-resolver.ts); the browser path finishes threading when a real session lands.
+// #226 — the browser read/write surface now scopes by the per-request `familyId` the session middleware
+// resolves (`c.get("familyId")`): GET /family + setEventStatus. At N=1 it falls back to FAMILY_ID (no
+// member row keyed by the real auth.uid yet), so behavior is unchanged. The events + messages feeds aren't
+// family-keyed in the stores yet — that migration rides the multi-family/RLS work (so they keep the
+// FAMILY_ID constant). The bot WRITE path — the chokepoint with no RLS backstop — resolves via
+// db/family-resolver.ts.
 import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes/index.ts";
-import { type RequireSessionConfig, requireSession } from "./session/index.ts";
+import {
+  type RequireSessionConfig,
+  requireSession,
+  requireWrite,
+  type SessionVars,
+} from "./session/index.ts";
 import {
   extractMessages,
   type InboundMessage,
@@ -113,10 +120,11 @@ export function createServer(deps: ServerDeps): Hono {
   // placeholder user_id); a member with no name yet (a hypothetical future non-config row) degrades to "".
   // 404 when the family row is absent (no seed / unconfigured DB). Shape mirrors familyRosterResponseSchema.
   app.get("/family", guard, (c) => {
-    const row = deps.family.getFamily(FAMILY_ID);
+    const familyId = (c.var as SessionVars).familyId;
+    const row = deps.family.getFamily(familyId);
     if (row === null) return c.text("Not found", 404);
     const members = deps.family
-      .listMembers(FAMILY_ID)
+      .listMembers(familyId)
       .map((m) => ({ name: m.display_name ?? "", role: m.role }));
     return c.json({ family: { display_name: row.display_name }, members });
   });
@@ -137,7 +145,7 @@ export function createServer(deps: ServerDeps): Hono {
   // key and reuse saveEvent verbatim (sourceProvider omitted → source_provider null, calendar-pushable
   // like a forward). Returns the SINGLE SavedEvent (bare row, NOT {events}-wrapped) so the client's
   // savedEventSchema.parse of one row succeeds.
-  app.post("/events", guard, async (c) => {
+  app.post("/events", guard, requireWrite(), async (c) => {
     let body: unknown;
     try {
       body = await c.req.json();
@@ -157,7 +165,7 @@ export function createServer(deps: ServerDeps): Hono {
   // edits stay handler-level over WhatsApp, #86). #225 session-gated (`guard`), like POST /events. 404 when
   // setEventStatus returns null — the row is synced (source_provider not null, never toggled) or doesn't
   // exist. Returns the updated single SavedEvent.
-  app.patch("/events/:id", guard, async (c) => {
+  app.patch("/events/:id", guard, requireWrite(), async (c) => {
     const id = Number(c.req.param("id"));
     if (!Number.isInteger(id) || id <= 0) return c.text("Invalid id", 400);
     let body: unknown;
@@ -168,7 +176,11 @@ export function createServer(deps: ServerDeps): Hono {
     }
     const parsed = eventStatusPatchSchema.safeParse(body);
     if (!parsed.success) return c.text("Invalid status", 400);
-    const saved = deps.events.setEventStatus(id, parsed.data.status, FAMILY_ID);
+    const saved = deps.events.setEventStatus(
+      id,
+      parsed.data.status,
+      (c.var as SessionVars).familyId,
+    );
     if (saved === null) return c.text("Not found", 404);
     return c.json(saved, 200);
   });

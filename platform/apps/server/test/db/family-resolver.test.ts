@@ -127,6 +127,26 @@ describe("FamilyResolver — the phone→family security chokepoint (#229)", () 
     expect(resolver.resolveFamilyByUser("stranger")).toBeNull();
   });
 
+  it("resolveMembership returns the member's {familyId, role} and null for a non-member (#226)", () => {
+    const path = tmpDbPath();
+    seedFamily(path, "default", {
+      members: [
+        { userId: "auth-uid-arie", role: "owner", displayName: "Arie" },
+        { userId: "auth-uid-partner", role: "member", displayName: "Partner" },
+      ],
+    });
+    const resolver = createFamilyResolver(path);
+    expect(resolver.resolveMembership("auth-uid-arie")).toEqual({
+      familyId: "default",
+      role: "owner",
+    });
+    expect(resolver.resolveMembership("auth-uid-partner")).toEqual({
+      familyId: "default",
+      role: "member",
+    });
+    expect(resolver.resolveMembership("stranger")).toBeNull();
+  });
+
   it("is injection-safe — metacharacter-laden input resolves to null and never executes SQL", () => {
     const path = tmpDbPath();
     seedFamily(path, "default", { phone: "972501234567" });

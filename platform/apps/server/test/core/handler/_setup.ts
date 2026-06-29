@@ -200,6 +200,7 @@ export function makeDeps(
           familyResolver: {
             resolveFamilyByPhone: vi.fn((_from: string) => opts.familyResolves ?? null),
             resolveFamilyByUser: vi.fn((_uid: string) => opts.familyResolves ?? null),
+            resolveMembership: vi.fn((_uid: string) => null),
           },
         }
       : {}),
