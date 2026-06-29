@@ -47,6 +47,24 @@ describe("TodayScreen", () => {
     expect(screen.getByText("אבא")).toBeInTheDocument();
   });
 
+  it("renders the household from the GET /family payload, not a hardcoded list (#235)", async () => {
+    server.use(
+      http.get("*/family", () =>
+        HttpResponse.json({
+          family: { display_name: "x" },
+          members: [
+            { name: "רותם", role: "owner" },
+            { name: "גיל", role: "member" },
+          ],
+        }),
+      ),
+    );
+    render(wrap(<TodayScreen dateIso="2026-06-21" />));
+    await waitFor(() => expect(screen.getByText("2 בני בית")).toBeInTheDocument());
+    expect(screen.getByText("רותם")).toBeInTheDocument();
+    expect(screen.queryByText("אבא")).not.toBeInTheDocument(); // not the default/hardcoded roster
+  });
+
   it("renders the data-connected schedule (today's event)", async () => {
     render(wrap(<TodayScreen dateIso="2026-06-21" />));
     await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());

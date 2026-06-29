@@ -5,7 +5,7 @@ import { useCurrentUser } from "@shared/auth";
 import { PersonAvatar } from "@shared/board";
 import { useDayEvents, useFamily, useNow, useToggleEventStatus } from "@shared/hooks";
 import { greetingHe, hebDateLong, hebrewDateLabel, holidaysOn } from "@shared/lib";
-import { Button, Card, SectionLabel } from "@shared/ui";
+import { Button, Card, SectionLabel, Skeleton } from "@shared/ui";
 import { useState } from "react";
 import { DayView } from "./DayView";
 
@@ -20,11 +20,15 @@ export interface TodayScreenProps {
  * gives the at-a-glance roster. Celebrations + the Tonight-dinner banner are DEFERRED — the grid leaves
  * room for them. The detail drawer (source_text) is safe on the single authenticated app.
  */
+// #235 — skeleton-row keys for the household card while the roster loads (avoids flashing "0 בני בית").
+const HOUSEHOLD_SKELETON = ["hh1", "hh2", "hh3"];
+
 export function TodayScreen({ dateIso }: TodayScreenProps) {
   const now = useNow();
   const { full_name, email } = useCurrentUser();
   // #235 — the household roster from the real GET /family route (was the hardcoded HOUSEHOLD mock).
-  const household = useFamily().data?.members.map((m) => m.name) ?? [];
+  const { data: family, status: familyStatus } = useFamily();
+  const household = family?.members.map((m) => m.name) ?? [];
   // #230 — first name from the Google session; no hardcoded fallback (empty greeting beats a fake name).
   const me = full_name?.split(" ")[0] ?? email?.split("@")[0] ?? "";
   const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(dateIso, now);
@@ -95,20 +99,32 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
         <Card className="p-[18px]">
           <div className="mb-3.5 flex items-center justify-between">
             <SectionLabel>משק הבית</SectionLabel>
-            <span className="font-accent text-[14px] text-muted-foreground">
-              {household.length} בני בית
-            </span>
+            {familyStatus !== "pending" && (
+              <span className="font-accent text-[14px] text-muted-foreground">
+                {household.length} בני בית
+              </span>
+            )}
           </div>
-          <ul className="flex flex-col gap-3">
-            {household.map((name) => (
-              <li key={name} className="flex items-center gap-3">
-                <PersonAvatar name={name} size={32} />
-                <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">
-                  {name}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {familyStatus === "pending" ? (
+            <ul className="flex flex-col gap-3">
+              {HOUSEHOLD_SKELETON.map((k) => (
+                <li key={k}>
+                  <Skeleton variant="line" className="w-full" />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {household.map((name) => (
+                <li key={name} className="flex items-center gap-3">
+                  <PersonAvatar name={name} size={32} />
+                  <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">
+                    {name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
 
