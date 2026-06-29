@@ -43,6 +43,10 @@ const schema = z.object({
   VERIFY_TOKEN: z.string().min(1),
   WHATSAPP_TOKEN: z.string().min(1),
   PHONE_NUMBER_ID: z.string().min(1),
+  // #231 (Slice B) — the human-readable WhatsApp bot number shown on the connections page (e.g.
+  // "+972 50-123 4567"). Optional and PURELY a display value: PHONE_NUMBER_ID above is the opaque Meta id
+  // the Graph API uses, never a dialable number. Unset ⇒ GET /channel serves `{ botPhone: null }`.
+  BOT_PHONE_NUMBER: z.string().min(1).optional(),
   GRAPH_VERSION: z.string().min(1).default("v21.0"),
   // An empty allowlist means nobody could use the bot — treat it as misconfiguration.
   ALLOWLIST: csvList.pipe(z.array(z.string()).min(1)),
@@ -150,6 +154,8 @@ export interface Config {
   verifyToken: string;
   whatsappToken: string;
   phoneNumberId: string;
+  /** #231 (Slice B) — display-only human-readable bot number (GET /channel). Distinct from phoneNumberId. */
+  botPhone?: string;
   graphVersion: string;
   allowlist: string[];
   members: Record<string, string>;
@@ -326,6 +332,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     verifyToken: e.VERIFY_TOKEN,
     whatsappToken: e.WHATSAPP_TOKEN,
     phoneNumberId: e.PHONE_NUMBER_ID,
+    botPhone: e.BOT_PHONE_NUMBER,
     graphVersion: e.GRAPH_VERSION,
     allowlist: e.ALLOWLIST,
     members: e.MEMBERS,

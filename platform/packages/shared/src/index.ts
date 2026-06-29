@@ -293,10 +293,16 @@ export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
  * #235 — one family-roster member as served by `GET /family`: a display `name` (sourced from the #14
  * `config.members` map, NOT the placeholder `user_id`) + a free-text `role` ("owner"/"member" today).
  * `name` is a Hebrew display string; render numerals/phones LTR-wrapped per the RTL rules.
+ *
+ * #231 (Slice B) — `verified` reports whether this member's phone is bound in `family_phones` (a completed
+ * binding, `verified_at` set). The connections page's `LinkedMembers` shows verified members; the People
+ * board (`FamilyView`) ignores the flag and lists everyone. `.default(false)` keeps the field additive: the
+ * server always emits it, while older fixtures/consumers that omit it parse as unverified rather than failing.
  */
 export const familyMemberSchema = z.object({
   name: z.string(),
   role: z.string(),
+  verified: z.boolean().default(false),
 });
 export type FamilyMember = z.infer<typeof familyMemberSchema>;
 
@@ -312,3 +318,14 @@ export const familyRosterResponseSchema = z.object({
   members: z.array(familyMemberSchema),
 });
 export type FamilyRosterResponse = z.infer<typeof familyRosterResponseSchema>;
+
+/**
+ * #231 (Slice B) — the `GET /channel` response: the family's human-readable WhatsApp bot number, the one
+ * the connections page shows. `null` when the server has no `BOT_PHONE_NUMBER` configured (the opaque Meta
+ * `PHONE_NUMBER_ID` is NOT a dialable number) — the web renders a neutral fallback rather than a fake number.
+ * A display string (e.g. "+972 50-123 4567"), rendered LTR inside the RTL layout.
+ */
+export const channelResponseSchema = z.object({
+  botPhone: z.string().nullable(),
+});
+export type ChannelResponse = z.infer<typeof channelResponseSchema>;

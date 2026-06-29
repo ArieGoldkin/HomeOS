@@ -19,6 +19,14 @@ const { DatabaseSync } = createRequire(import.meta.url)(
 ) as typeof import("node:sqlite");
 
 /**
+ * #231 (Slice B) — the `user_id` prefix index.ts stamps on a seeded member until Supabase login (#225's
+ * successor) supplies the real `auth.uid()`. EXPORTED so the seed (index.ts) and the verified-join below
+ * share ONE source of truth: if the convention changes in one place but not the other, the join silently
+ * zeroes out every member's `verified`. The honest fix is the uid↔member binding; this is the N=1 link.
+ */
+export const PLACEHOLDER_USER_ID_PREFIX = "placeholder:";
+
+/**
  * One-time, idempotent seed for our single dogfood family (#227). The composition root (index.ts)
  * builds `members` from the existing `config.members` (#14 phone:name) map, with a PLACEHOLDER
  * `userId` until the Supabase-login issue (#225) supplies the real `auth.uid()`. `phones` is optional
@@ -38,10 +46,20 @@ export interface FamilySeed {
  * this issue's surface is deliberately read-only. At N=1 every lookup is `WHERE family_id = ?`, which
  * is trivially correct with no second tenant to leak to (no RLS needed; that's deferred).
  */
+/** #231 (Slice B) — a roster member plus a derived `verified`: whether their phone is bound in family_phones. */
+export type VerifiedMemberRow = FamilyMemberRow & { verified: boolean };
+
 export interface FamilyStore {
   getFamily(familyId: string): FamilyRow | null;
   listMembers(familyId: string): FamilyMemberRow[];
   listPhones(familyId: string): FamilyPhoneRow[];
+  /**
+   * #231 (Slice B) — members with a derived `verified` flag: true iff the member's placeholder phone
+   * (the digits after {@link PLACEHOLDER_USER_ID_PREFIX} in `user_id`) is bound in family_phones. Both
+   * sides reduce to digits via `normalizePhone`, so a config "+972 50-…" member matches the normalized
+   * stored `from_phone`. A non-placeholder `user_id` (a future real auth.uid) carries no phone here → false.
+   */
+  listMembersWithVerification(familyId: string): VerifiedMemberRow[];
 }
 
 export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStore {
@@ -105,6 +123,19 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     },
     listPhones(familyId) {
       return listPhonesStmt.all(familyId) as unknown as FamilyPhoneRow[];
+    },
+    listMembersWithVerification(familyId) {
+      const members = listMembersStmt.all(familyId) as unknown as FamilyMemberRow[];
+      // from_phone is stored digit-normalized by the seed/ceremony, so the set holds comparable digits.
+      const verifiedPhones = new Set(
+        (listPhonesStmt.all(familyId) as unknown as FamilyPhoneRow[]).map((p) => p.from_phone),
+      );
+      return members.map((m) => {
+        const phone = m.user_id.startsWith(PLACEHOLDER_USER_ID_PREFIX)
+          ? normalizePhone(m.user_id.slice(PLACEHOLDER_USER_ID_PREFIX.length))
+          : "";
+        return { ...m, verified: phone !== "" && verifiedPhones.has(phone) };
+      });
     },
   };
 }
