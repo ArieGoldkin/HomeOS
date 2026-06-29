@@ -9,6 +9,7 @@ import {
   createConversationStore,
 } from "../../src/db/conversation-store.ts";
 import { createEventStore } from "../../src/db/event-store/index.ts";
+import { createFamilyStore } from "../../src/db/family-store.ts";
 import { createInboundStore } from "../../src/db/inbound-store.ts";
 import type { CalendarClient } from "../../src/google/calendar.ts";
 import type { GoogleOAuthClient } from "../../src/google/oauth.ts";
@@ -227,6 +228,7 @@ function makeSystem(
     inbound,
     process: runInbound,
     events,
+    family: createFamilyStore(":memory:"), // #235 — unseeded; this flow suite doesn't exercise GET /family
     allowlist,
     session: gate,
     appSecret: appKey,

@@ -59,13 +59,27 @@ describe("FamilyView (People, data-connected)", () => {
     expect(screen.getByText("אבא")).toBeInTheDocument();
   });
 
+  it("renders members from the GET /family payload, not a hardcoded list (#235 un-mock)", async () => {
+    server.use(
+      http.get("*/family", () =>
+        HttpResponse.json({
+          family: { display_name: "משפחה" },
+          members: [{ name: "דנה", role: "owner" }],
+        }),
+      ),
+    );
+    render(wrap(<FamilyView />));
+    await waitFor(() => expect(screen.getByText("דנה")).toBeInTheDocument());
+    expect(screen.queryByText("יואב")).not.toBeInTheDocument(); // was a hardcoded KNOWN_ROSTER name pre-#235
+  });
+
   it("shows the invite button", async () => {
     render(wrap(<FamilyView />));
     expect(screen.getByRole("button", { name: INVITE })).toBeInTheDocument();
   });
 
-  it("shows the error message when the events request fails", async () => {
-    server.use(http.get("*/events", () => new HttpResponse("Unauthorized", { status: 401 })));
+  it("shows the error message when the roster request fails (#235 — keyed on GET /family, not events)", async () => {
+    server.use(http.get("*/family", () => new HttpResponse("Unauthorized", { status: 401 })));
     render(wrap(<FamilyView />));
     await waitFor(() => expect(screen.getByText(/שגיאה בטעינת הרשימה/)).toBeInTheDocument());
   });

@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { SavedEvent } from "@homeos/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { InboundRow } from "../../src/db/schema.ts";
+import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
+import { FAMILY_ID, type InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
 import type { InboundMessage } from "../../src/http/webhook.ts";
@@ -78,6 +79,16 @@ const sampleEvents = [
 // HMAC is now mandatory, so makeApp() always wires one unless a test explicitly forces it undefined.
 const appKey = "homeos-webhook-test-key";
 
+// #235 — default roster seed for the GET /family tests: real Hebrew display names (the route serves these,
+// NOT the placeholder user_id) + an owner/member role pair.
+const defaultFamilySeed: FamilySeed = {
+  family: { familyId: FAMILY_ID, displayName: "משפחת הבית" },
+  members: [
+    { userId: "placeholder:1", role: "owner", displayName: "אבא" },
+    { userId: "placeholder:2", role: "member", displayName: "אמא" },
+  ],
+};
+
 function makeApp(
   opts: {
     appSecret?: string;
@@ -86,6 +97,8 @@ function makeApp(
     session?: boolean;
     /** #225 — the allowlist the session gate enforces; defaults to the kit's default token email. */
     allowed?: string[];
+    /** #235 — the family roster seed; `null` ⇒ unseeded store (GET /family 404). Defaults to a 2-member family. */
+    familySeed?: FamilySeed | null;
   } = {
     appSecret: appKey,
   },
@@ -126,11 +139,18 @@ function makeApp(
     ),
     findSlotConflict: vi.fn(() => null),
   };
+  // #235 — a real in-memory FamilyStore so the GET /family test exercises the actual store→route path.
+  // `familySeed: null` boots it unseeded (getFamily → null → the 404 case).
+  const family =
+    opts.familySeed === null
+      ? createFamilyStore(":memory:")
+      : createFamilyStore(":memory:", opts.familySeed ?? defaultFamilySeed);
   const deps: ServerDeps = {
     verifyToken: "secret",
     inbound,
     process,
     events,
+    family,
     allowlist: MSG_ALLOWLIST,
     appSecret: opts.appSecret,
   };
@@ -277,6 +297,54 @@ describe("GET /events (read seam)", () => {
     const { app } = makeApp({ session: false });
     const res = await app.request("/events", { headers: { Authorization: "Bearer anything" } });
     expect(res.status).toBe(503);
+  });
+});
+
+describe("GET /family (roster read seam, #235)", () => {
+  it("returns family.display_name + seeded members (real names, not the placeholder user_id)", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/family", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      family: { display_name: string };
+      members: Array<{ name: string; role: string }>;
+    };
+    expect(body.family.display_name).toBe("משפחת הבית");
+    expect(body.members).toEqual([
+      { name: "אבא", role: "owner" },
+      { name: "אמא", role: "member" },
+    ]);
+  });
+
+  it("returns 401 without a token or with an invalid one", async () => {
+    const { app } = makeApp();
+    expect((await app.request("/family")).status).toBe(401);
+    const wrong = await app.request("/family", { headers: { Authorization: "Bearer nope" } });
+    expect(wrong.status).toBe(401);
+  });
+
+  it("returns 403 for a valid session whose email is not allowlisted", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/family", {
+      headers: { Authorization: `Bearer ${await kit.sign({ email: "stranger@example.com" })}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 503 when session auth is not configured (endpoint disabled)", async () => {
+    const { app } = makeApp({ session: false });
+    const res = await app.request("/family", { headers: { Authorization: "Bearer anything" } });
+    expect(res.status).toBe(503);
+  });
+
+  it("returns 404 when no family is seeded (unconfigured/empty DB)", async () => {
+    const { app } = makeApp({ familySeed: null });
+    const res = await app.request("/family", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(res.status).toBe(404);
   });
 });
 

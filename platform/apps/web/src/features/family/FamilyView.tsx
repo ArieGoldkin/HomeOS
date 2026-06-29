@@ -1,11 +1,8 @@
 import type { SavedEvent } from "@homeos/shared";
 import { PersonAvatar } from "@shared/board";
-import { useEvents } from "@shared/hooks";
+import { useEvents, useFamily } from "@shared/hooks";
 import { cn } from "@shared/lib";
 import { Button, Card, Skeleton, StatusPill } from "@shared/ui";
-
-/** The 4 known family persons (excluding "כולם" which is a group term, not a person). */
-const KNOWN_ROSTER = ["אבא", "אמא", "יואב", "נועה"] as const;
 
 const SKELETON_ROWS = ["sk1", "sk2", "sk3", "sk4"];
 
@@ -15,13 +12,19 @@ export interface FamilyViewProps {
   className?: string;
 }
 
-/** Static role label (no server-backed roles yet) — parents vs household member. */
+/**
+ * #235 — the displayed role label stays a NAME-based parent/household heuristic. The server `role` is an
+ * ownership axis ("owner"/"member"), NOT the parent-vs-household-member taxonomy the table shows (e.g. אמא
+ * is a "member" by ownership but a "הורה"/parent here), so mapping the server role would mislabel her.
+ */
 function roleOf(name: string): string {
   return name === "אבא" || name === "אמא" ? "הורה" : "בן בית";
 }
 
-function rosterFrom(events: SavedEvent[] | undefined): string[] {
-  const seen = new Set<string>(KNOWN_ROSTER);
+/** #235 — the roster = the server family members (names) UNION any distinct event assignees not already
+ *  listed (so a person who only shows up as an assignee still appears). */
+function rosterFrom(memberNames: string[], events: SavedEvent[] | undefined): string[] {
+  const seen = new Set<string>(memberNames);
   const extra: string[] = [];
   for (const event of events ?? []) {
     const a = event.assignee;
@@ -30,7 +33,7 @@ function rosterFrom(events: SavedEvent[] | undefined): string[] {
       extra.push(a);
     }
   }
-  return [...KNOWN_ROSTER, ...extra];
+  return [...memberNames, ...extra];
 }
 
 /**
@@ -40,7 +43,9 @@ function rosterFrom(events: SavedEvent[] | undefined): string[] {
  * deferred (not server-backed); roles are a simple parent/member mapping.
  */
 export function FamilyView({ onAddMember, className }: FamilyViewProps) {
-  const { status, data: events } = useEvents();
+  // #235 — roster names from the real GET /family route; events still supply any extra assignees.
+  const { status, data: family } = useFamily();
+  const { data: events } = useEvents();
 
   const header = (
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -84,7 +89,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
     );
   }
 
-  const members = rosterFrom(events);
+  const members = rosterFrom(family?.members.map((m) => m.name) ?? [], events);
 
   return (
     <div className={cn("flex flex-col gap-6", className)}>

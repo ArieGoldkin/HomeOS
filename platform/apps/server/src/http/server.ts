@@ -4,6 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store/index.ts";
+import type { FamilyStore } from "../db/family-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 // #229 — the web read/write surface (served DTO family_id, setEventStatus) still uses the single-family
 // FAMILY_ID. DEFERRED with the OAuth path (see oauth-routes/): it resolves via the session identity,
@@ -27,6 +28,9 @@ export interface ServerDeps {
   process: (msg: InboundMessage) => Promise<void>;
   /** Read model for GET /events (the family app's board read seam). */
   events: EventStore;
+  /** #235 — read-only identity store backing GET /family (the roster the web app reads instead of the
+   *  hardcoded KNOWN_ROSTER/HOUSEHOLD mocks). Scoped to FAMILY_ID server-side (N=1). */
+  family: FamilyStore;
   /** #135 — family allowlist, used to FILTER the GET /messages feed: inbound_messages is persisted
    *  BEFORE the allowlist gate, so the raw table can hold non-family/spam text that must never be served. */
   allowlist: readonly string[];
@@ -101,6 +105,20 @@ export function createServer(deps: ServerDeps): Hono {
       (a, b) => a.date_iso.localeCompare(b.date_iso) || (a.time ?? "").localeCompare(b.time ?? ""),
     );
     return c.json({ events });
+  });
+
+  // #235 — the family roster read seam (the web app un-mocks KNOWN_ROSTER/HOUSEHOLD onto this). #225
+  // session-gated (`guard`); FAMILY_ID-scoped server-side (N=1 — the browser→family resolver is deferred
+  // to #226, like /events). Members carry the seeded display_name (the #14 config name, never the
+  // placeholder user_id); a member with no name yet (a hypothetical future non-config row) degrades to "".
+  // 404 when the family row is absent (no seed / unconfigured DB). Shape mirrors familyRosterResponseSchema.
+  app.get("/family", guard, (c) => {
+    const row = deps.family.getFamily(FAMILY_ID);
+    if (row === null) return c.text("Not found", 404);
+    const members = deps.family
+      .listMembers(FAMILY_ID)
+      .map((m) => ({ name: m.display_name ?? "", role: m.role }));
+    return c.json({ family: { display_name: row.display_name }, members });
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

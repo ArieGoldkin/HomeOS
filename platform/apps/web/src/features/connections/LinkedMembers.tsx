@@ -1,8 +1,9 @@
 import { PersonAvatar } from "@shared/board";
 import { Card, SectionLabel } from "@shared/ui";
 
-// The household whose forwards are allowlisted — a placeholder roster (mirrors FamilyView's KNOWN_ROSTER
-// / TodayScreen's HOUSEHOLD) until a real identity/allowlist model is server-backed (deferred).
+// The household whose forwards are allowlisted — the LAST placeholder roster on the board (FamilyView +
+// TodayScreen now read the real GET /family route, #235). Un-mocking this onto verified members
+// (family_phones.verified_at) is owned by #231.
 const LINKED_MEMBERS = ["אבא", "אמא", "יואב", "נועה"] as const;
 
 /**

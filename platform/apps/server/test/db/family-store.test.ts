@@ -1,15 +1,20 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof import("node:sqlite");
+
 const seed: FamilySeed = {
   family: { familyId: FAMILY_ID, displayName: "Test Household" },
   members: [
-    { userId: "placeholder:Arie", role: "owner" },
-    { userId: "placeholder:Partner", role: "member" },
+    { userId: "placeholder:Arie", role: "owner", displayName: "אבא" },
+    { userId: "placeholder:Partner", role: "member", displayName: "אמא" },
   ],
 };
 
@@ -32,7 +37,12 @@ describe("FamilyStore — seed + reads (#227)", () => {
 
     const members = store.listMembers(FAMILY_ID);
     expect(members.map((m) => m.user_id)).toEqual(["placeholder:Arie", "placeholder:Partner"]);
-    expect(members.find((m) => m.user_id === "placeholder:Arie")?.role).toBe("owner");
+    const arie = members.find((m) => m.user_id === "placeholder:Arie");
+    expect(arie?.role).toBe("owner");
+    // #235: display_name seeded from the #14 config.members map (the real name the route serves, not the
+    // placeholder user_id).
+    expect(arie?.display_name).toBe("אבא");
+    expect(members.find((m) => m.user_id === "placeholder:Partner")?.display_name).toBe("אמא");
   });
 
   it("getFamily returns null for an unknown family", () => {
@@ -67,6 +77,42 @@ describe("FamilyStore — seed + reads (#227)", () => {
     });
     expect(store.getFamily(FAMILY_ID)?.display_name).toBe("Test Household");
     expect(store.listMembers(FAMILY_ID)).toHaveLength(2);
+  });
+
+  it("re-seeding FREEZES role (first-wins) but UPSERTS display_name (#235 — a config rename reflects)", () => {
+    const path = tmpDbPath();
+    createFamilyStore(path, seed); // first boot: Arie = owner, "אבא"
+    // Second boot: same user_id, but a changed role AND a renamed display_name.
+    const store = createFamilyStore(path, {
+      ...seed,
+      members: [{ userId: "placeholder:Arie", role: "member", displayName: "אבאל׳ה" }],
+    });
+    const arie = store.listMembers(FAMILY_ID).find((m) => m.user_id === "placeholder:Arie");
+    expect(arie?.role).toBe("owner"); // frozen at first boot — NOT in the DO UPDATE set
+    expect(arie?.display_name).toBe("אבאל׳ה"); // upserted — the rename took effect
+  });
+
+  it("backfills display_name on a PRE-EXISTING column-less family_members table (#235 migration)", () => {
+    const path = tmpDbPath();
+    // Simulate a DB seeded by #227 BEFORE the display_name column existed: the OLD table shape + a row.
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE family_members (
+      family_id   TEXT NOT NULL,
+      user_id     TEXT NOT NULL,
+      role        TEXT NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (family_id, user_id)
+    );`);
+    old
+      .prepare("INSERT INTO family_members (family_id, user_id, role) VALUES (?, ?, ?);")
+      .run(FAMILY_ID, "placeholder:Arie", "owner");
+    old.close();
+
+    // Boot the real store: PRAGMA detects the missing column → ALTER adds it → the seed upsert backfills.
+    const store = createFamilyStore(path, seed);
+    const arie = store.listMembers(FAMILY_ID).find((m) => m.user_id === "placeholder:Arie");
+    expect(arie?.display_name).toBe("אבא"); // backfilled from the seed (was column-less before)
+    expect(arie?.role).toBe("owner"); // role preserved (first-wins, untouched by the upsert)
   });
 
   it("optionally seeds a bootstrap phone digit-normalized, de-duplicated on the PK", () => {
