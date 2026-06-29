@@ -15,12 +15,15 @@ export interface JwtKit {
   /** Mint a signed session token. Defaults: sub "user-123", email "dad@example.com", 1h expiry. */
   sign(opts?: { email?: string; sub?: string; expSec?: number }): Promise<string>;
   /**
-   * A ready RequireSessionConfig over `getKey` with the given allowlist (lower-cased). #226: pass
-   * `resolveMembership` to drive familyId/role; default → null, so the N=1 fallbacks (default/member) apply.
+   * A ready RequireSessionConfig over `getKey` with the given allowlist (lower-cased). #226 / uid↔member
+   * binding: pass `resolveMembershipByEmail` (called with the session's email) to drive familyId/role;
+   * default → null, so the N=1 fallbacks (default/member) apply.
    */
   sessionConfig(
     allowedEmails: Iterable<string>,
-    opts?: { resolveMembership?: (userId: string) => { familyId: string; role: string } | null },
+    opts?: {
+      resolveMembershipByEmail?: (email: string) => { familyId: string; role: string } | null;
+    },
   ): RequireSessionConfig;
 }
 
@@ -48,7 +51,7 @@ export async function makeJwtKit(): Promise<JwtKit> {
     getKey,
     verify: { issuer: TEST_ISS, audience: TEST_AUD },
     allowedEmails: new Set([...allowedEmails].map((e) => e.toLowerCase())),
-    resolveMembership: opts.resolveMembership ?? (() => null),
+    resolveMembershipByEmail: opts.resolveMembershipByEmail ?? (() => null),
     fallbackFamilyId: "default",
     defaultRole: "member",
   });

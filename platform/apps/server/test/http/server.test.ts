@@ -100,8 +100,8 @@ function makeApp(
     allowed?: string[];
     /** #235 — the family roster seed; `null` ⇒ unseeded store (GET /family 404). Defaults to a 2-member family. */
     familySeed?: FamilySeed | null;
-    /** #226 — inject the session membership ({familyId, role}); default null ⇒ N=1 fallback (default/member). */
-    resolveMembership?: (userId: string) => { familyId: string; role: string } | null;
+    /** #226 — inject the session membership ({familyId, role}) by email; default null ⇒ N=1 fallback. */
+    resolveMembershipByEmail?: (email: string) => { familyId: string; role: string } | null;
     /** #231 — the human-readable bot number served by GET /channel; undefined ⇒ the route serves null. */
     botPhone?: string;
     /** #18 — when defined, wires deps.calendar; true ⇒ a connected credential (push writes), false ⇒ none. */
@@ -205,7 +205,7 @@ function makeApp(
     opts.session === false
       ? undefined
       : kit.sessionConfig(opts.allowed ?? ["dad@example.com"], {
-          resolveMembership: opts.resolveMembership,
+          resolveMembershipByEmail: opts.resolveMembershipByEmail,
         });
   deps.session = gate;
   deps.webDist = opts.webDist;
@@ -713,7 +713,7 @@ describe("requireWrite role gate (#226)", () => {
     recurrence: null,
     source_text: "x",
   };
-  const viewer = { resolveMembership: () => ({ familyId: "default", role: "viewer" }) };
+  const viewer = { resolveMembershipByEmail: () => ({ familyId: "default", role: "viewer" }) };
   const auth = async () => ({
     Authorization: `Bearer ${await kit.sign()}`,
     "Content-Type": "application/json",

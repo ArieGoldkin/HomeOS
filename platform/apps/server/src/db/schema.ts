@@ -222,6 +222,7 @@ export const CREATE_FAMILY_MEMBERS_TABLE = `
     user_id      TEXT NOT NULL,
     role         TEXT NOT NULL,
     display_name TEXT,
+    email        TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (family_id, user_id)
   );
@@ -235,6 +236,15 @@ export const CREATE_FAMILY_MEMBERS_TABLE = `
  */
 export const ADD_FAMILY_MEMBERS_DISPLAY_NAME =
   "ALTER TABLE family_members ADD COLUMN display_name TEXT;";
+
+/**
+ * uid↔member binding — idempotent migration: add the `email` column to a PRE-EXISTING family_members
+ * table (same self-healing pattern as display_name). This is the login-identity link: the session's
+ * verified, allowlisted email is matched against it (`resolveMembershipByEmail`) to derive the member's
+ * real `{familyId, role}` — retiring the placeholder `user_id` for membership resolution. Nullable; the
+ * boot seed upserts it from the new `MEMBER_EMAILS` (phone:email) config so it backfills on the same boot.
+ */
+export const ADD_FAMILY_MEMBERS_EMAIL = "ALTER TABLE family_members ADD COLUMN email TEXT;";
 
 /**
  * `family_phones(family_id, from_phone, verified_at)` — the DURABLE result of the wa.me/OTP binding
@@ -270,6 +280,10 @@ export interface FamilyMemberRow {
    *  for every config member, so it's populated for every seeded row (null only for a hypothetical
    *  non-config member written by a future path). */
   display_name: string | null;
+  /** uid↔member binding — the member's login email (from the new `MEMBER_EMAILS` config), matched against
+   *  the session's verified email to resolve real membership. Nullable: a member with no configured email
+   *  isn't bindable yet and falls back. Stored as configured; matched case-insensitively. */
+  email: string | null;
   created_at: string;
 }
 

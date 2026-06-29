@@ -39,6 +39,15 @@ export interface FamilyResolver {
    * must never flap between families across calls if the one-member-row invariant is ever broken upstream.
    */
   resolveMembership(userId: string): { familyId: string; role: string } | null;
+  /**
+   * uid↔member binding — browser read path: the session's verified login EMAIL → the member's
+   * `{familyId, role}`, or null if no member carries that email. This is what `requireSession` actually
+   * calls: the placeholder `user_id` never equals the real `auth.uid()`, so membership is keyed on the
+   * email the JWT already carries (and the allowlist already trusts). Matched case-insensitively
+   * (`LOWER(email)`, input lower+trimmed); same deterministic `ORDER BY family_id LIMIT 1`. An empty email
+   * never resolves. null → the caller's N=1 fallback (the single family + a writer role; no lockout).
+   */
+  resolveMembershipByEmail(email: string): { familyId: string; role: string } | null;
 }
 
 /**
@@ -71,6 +80,14 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
   const byUserStmt = db.prepare(
     "SELECT family_id, role FROM family_members WHERE user_id = ? ORDER BY family_id LIMIT 1;",
   );
+  // uid↔member binding — match on the LOWER-cased email so a config "Arie@Gmail.com" resolves the JWT's
+  // "arie@gmail.com". Parameterized + deterministic, exactly like byUserStmt (the cross-tenant chokepoint).
+  // The `email` column is added by createFamilyStore's self-healing ALTER on a pre-existing (#235-era) table;
+  // this resolver's CREATE-IF-NOT-EXISTS won't add it, so it relies on the store booting FIRST (index.ts
+  // builds the store before the resolver). Fresh DBs get the column straight from the CREATE DDL above.
+  const byEmailStmt = db.prepare(
+    "SELECT family_id, role FROM family_members WHERE LOWER(email) = ? ORDER BY family_id LIMIT 1;",
+  );
 
   // #226 — one lookup feeds both the familyId scope and the role gate; resolveFamilyByUser delegates to it.
   // A plain local fn (not a `this.` method) so destructured callers keep working.
@@ -90,5 +107,11 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
       return resolveMembership(userId)?.familyId ?? null;
     },
     resolveMembership,
+    resolveMembershipByEmail(email) {
+      const normalized = email.trim().toLowerCase();
+      if (normalized === "") return null; // empty/garbage email never resolves (mirrors the phone guard)
+      const row = byEmailStmt.get(normalized) as { family_id: string; role: string } | undefined;
+      return row ? { familyId: row.family_id, role: row.role } : null;
+    },
   };
 }

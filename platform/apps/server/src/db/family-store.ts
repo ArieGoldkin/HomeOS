@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { normalizePhone } from "../core/allowlist.ts";
 import {
   ADD_FAMILY_MEMBERS_DISPLAY_NAME,
+  ADD_FAMILY_MEMBERS_EMAIL,
   CREATE_FAMILIES_TABLE,
   CREATE_FAMILY_MEMBERS_TABLE,
   CREATE_FAMILY_PHONES_TABLE,
@@ -35,7 +36,7 @@ export const PLACEHOLDER_USER_ID_PREFIX = "placeholder:";
  */
 export interface FamilySeed {
   family: { familyId: string; displayName: string };
-  members: Array<{ userId: string; role: string; displayName: string }>;
+  members: Array<{ userId: string; role: string; displayName: string; email?: string }>;
   phones?: Array<{ fromPhone: string; verifiedAt: string }>;
 }
 
@@ -76,6 +77,9 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     name: string;
   }>;
   if (!memberCols.some((c) => c.name === "display_name")) db.exec(ADD_FAMILY_MEMBERS_DISPLAY_NAME);
+  // uid↔member binding — same self-healing ALTER for the `email` column (independent of display_name; the
+  // PRAGMA snapshot above predates BOTH ALTERs, so each guard is correct even for a DB migrated by #235).
+  if (!memberCols.some((c) => c.name === "email")) db.exec(ADD_FAMILY_MEMBERS_EMAIL);
 
   // Idempotent seed — `INSERT OR IGNORE` (= ON CONFLICT DO NOTHING on the PKs) is safe on every boot,
   // the same posture as the credential_key_canary seed. Re-running never duplicates or overwrites.
@@ -88,11 +92,14 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     // upserted so a config.members rename reflects on the next boot AND so rows seeded before the column
     // existed (#227) get backfilled. ON CONFLICT targets the (family_id, user_id) PK.
     const insertMember = db.prepare(
-      "INSERT INTO family_members (family_id, user_id, role, display_name) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(family_id, user_id) DO UPDATE SET display_name = excluded.display_name;",
+      "INSERT INTO family_members (family_id, user_id, role, display_name, email) VALUES (?, ?, ?, ?, ?) " +
+        "ON CONFLICT(family_id, user_id) DO UPDATE SET display_name = excluded.display_name, " +
+        "email = excluded.email;",
     );
     for (const m of seed.members) {
-      insertMember.run(seed.family.familyId, m.userId, m.role, m.displayName);
+      // role stays first-wins (frozen); display_name + email are upserted so a config change reflects on
+      // the next boot (uid↔member binding — the email is the membership-by-email match key).
+      insertMember.run(seed.family.familyId, m.userId, m.role, m.displayName, m.email ?? null);
     }
     // 🔒 family_phones is only ever a commented dogfood bootstrap here — the honest binding path is the
     // ceremony (#228). `from_phone` is stored digit-normalized so the resolver (#229) compares exactly.
