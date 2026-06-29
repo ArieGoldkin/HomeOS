@@ -99,6 +99,8 @@ function makeApp(
     allowed?: string[];
     /** #235 — the family roster seed; `null` ⇒ unseeded store (GET /family 404). Defaults to a 2-member family. */
     familySeed?: FamilySeed | null;
+    /** #226 — inject the session membership ({familyId, role}); default null ⇒ N=1 fallback (default/member). */
+    resolveMembership?: (userId: string) => { familyId: string; role: string } | null;
   } = {
     appSecret: appKey,
   },
@@ -159,7 +161,11 @@ function makeApp(
   // → deps.session stays undefined → the gated routes return 503 (the dev/app-only path the retired
   // build-embedded tokens expressed).
   const gate =
-    opts.session === false ? undefined : kit.sessionConfig(opts.allowed ?? ["dad@example.com"]);
+    opts.session === false
+      ? undefined
+      : kit.sessionConfig(opts.allowed ?? ["dad@example.com"], {
+          resolveMembership: opts.resolveMembership,
+        });
   deps.session = gate;
   deps.webDist = opts.webDist;
   return { app: createServer(deps), process, inbound, events };
@@ -558,6 +564,56 @@ describe("PATCH /events/:id (status toggle, #19)", () => {
     expect(body.events).toBeUndefined(); // a bare row, not the {events} envelope
     expect(body).toMatchObject({ id: 7, status: "done" });
     expect(events.setEventStatus).toHaveBeenCalledWith(7, "done", "default");
+  });
+});
+
+describe("requireWrite role gate (#226)", () => {
+  const parsed = {
+    kind: "event" as const,
+    title_he: "x",
+    date_iso: "2026-06-25",
+    time: null,
+    location: null,
+    assignee: null,
+    recurrence: null,
+    source_text: "x",
+  };
+  const viewer = { resolveMembership: () => ({ familyId: "default", role: "viewer" }) };
+  const auth = async () => ({
+    Authorization: `Bearer ${await kit.sign()}`,
+    "Content-Type": "application/json",
+  });
+
+  it("403s POST /events for a viewer (read-only) role", async () => {
+    const { app, events } = makeApp(viewer);
+    const res = await app.request("/events", {
+      method: "POST",
+      headers: await auth(),
+      body: JSON.stringify(parsed),
+    });
+    expect(res.status).toBe(403);
+    expect(events.saveEvent).not.toHaveBeenCalled();
+  });
+
+  it("403s PATCH /events/:id for a viewer role", async () => {
+    const { app, events } = makeApp(viewer);
+    const res = await app.request("/events/1", {
+      method: "PATCH",
+      headers: await auth(),
+      body: JSON.stringify({ status: "done" }),
+    });
+    expect(res.status).toBe(403);
+    expect(events.setEventStatus).not.toHaveBeenCalled();
+  });
+
+  it("allows a writer (the default member role) to POST → 201", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/events", {
+      method: "POST",
+      headers: await auth(),
+      body: JSON.stringify(parsed),
+    });
+    expect(res.status).toBe(201);
   });
 });
 

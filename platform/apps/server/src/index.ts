@@ -192,6 +192,12 @@ const session: RequireSessionConfig | undefined = config.supabase
       verify: { issuer: `${config.supabase.url}/auth/v1`, audience: "authenticated" },
       allowedEmails: new Set(config.supabase.allowedLoginEmails.map((e) => e.toLowerCase())),
       extractCookieToken: cookieTokenReader(config.supabase.url),
+      // #226 — resolve the verified user's family + role from DB membership; at N=1 the real-uid member
+      // row doesn't exist yet, so fall back to the single family + a writer role (so the live login never
+      // locks out). resolveMembership reuses the #229 resolver (the same parameterized, deterministic read).
+      resolveMembership: (userId) => familyResolver.resolveMembership(userId),
+      fallbackFamilyId: FAMILY_ID,
+      defaultRole: "member",
     }
   : undefined;
 

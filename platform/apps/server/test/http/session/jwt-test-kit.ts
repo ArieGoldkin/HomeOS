@@ -14,8 +14,14 @@ export interface JwtKit {
   getKey: KeyResolver;
   /** Mint a signed session token. Defaults: sub "user-123", email "dad@example.com", 1h expiry. */
   sign(opts?: { email?: string; sub?: string; expSec?: number }): Promise<string>;
-  /** A ready RequireSessionConfig over `getKey` with the given allowlist (lower-cased). */
-  sessionConfig(allowedEmails: Iterable<string>): RequireSessionConfig;
+  /**
+   * A ready RequireSessionConfig over `getKey` with the given allowlist (lower-cased). #226: pass
+   * `resolveMembership` to drive familyId/role; default → null, so the N=1 fallbacks (default/member) apply.
+   */
+  sessionConfig(
+    allowedEmails: Iterable<string>,
+    opts?: { resolveMembership?: (userId: string) => { familyId: string; role: string } | null },
+  ): RequireSessionConfig;
 }
 
 /** Build a fresh signing kit (call once in a `beforeAll`). */
@@ -38,10 +44,13 @@ export async function makeJwtKit(): Promise<JwtKit> {
       .sign(kp.privateKey);
   };
 
-  const sessionConfig: JwtKit["sessionConfig"] = (allowedEmails) => ({
+  const sessionConfig: JwtKit["sessionConfig"] = (allowedEmails, opts = {}) => ({
     getKey,
     verify: { issuer: TEST_ISS, audience: TEST_AUD },
     allowedEmails: new Set([...allowedEmails].map((e) => e.toLowerCase())),
+    resolveMembership: opts.resolveMembership ?? (() => null),
+    fallbackFamilyId: "default",
+    defaultRole: "member",
   });
 
   return { getKey, sign, sessionConfig };
