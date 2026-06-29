@@ -9,7 +9,21 @@ describe("fetchFamily", () => {
     const roster = await fetchFamily();
     expect(roster.family.display_name).toBe("משפחת הבית");
     expect(roster.members).toHaveLength(4);
-    expect(roster.members[0]).toEqual({ name: "אבא", role: "owner" });
+    // #231 — members now carry `verified` (אבא is a bound parent in the sample roster).
+    expect(roster.members[0]).toEqual({ name: "אבא", role: "owner", verified: true });
+  });
+
+  it("#231 — defaults `verified` to false when the server omits it (additive schema)", async () => {
+    server.use(
+      http.get("*/family", () =>
+        HttpResponse.json({
+          family: { display_name: "x" },
+          members: [{ name: "אבא", role: "owner" }],
+        }),
+      ),
+    );
+    const roster = await fetchFamily();
+    expect(roster.members[0]?.verified).toBe(false);
   });
 
   it("throws on a 401 (bad/missing session)", async () => {

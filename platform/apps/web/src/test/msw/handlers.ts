@@ -56,16 +56,23 @@ export const sampleMessages = [
   },
 ];
 
-// #235 — a wrapped { family, members } payload mirroring GET /family: the family display name + the 4-member
-// roster with real Hebrew names (what the web app reads instead of the hardcoded KNOWN_ROSTER/HOUSEHOLD).
+// #235/#231 — a wrapped { family, members } payload mirroring GET /family: the family display name + the
+// 4-member roster with real Hebrew names (what the web app reads instead of the hardcoded KNOWN_ROSTER/
+// HOUSEHOLD). `verified` (#231) marks who has a bound phone — the parents here, so LinkedMembers shows them.
 export const sampleFamily = {
   family: { display_name: "משפחת הבית" },
   members: [
-    { name: "אבא", role: "owner" },
-    { name: "אמא", role: "member" },
-    { name: "יואב", role: "member" },
-    { name: "נועה", role: "member" },
+    { name: "אבא", role: "owner", verified: true },
+    { name: "אמא", role: "member", verified: true },
+    { name: "יואב", role: "member", verified: false },
+    { name: "נועה", role: "member", verified: false },
   ],
+};
+
+// #231 — a { botPhone } payload mirroring GET /channel: the human-readable bot number the connections page
+// shows. Tests override with `server.use(...)` to assert the null/fallback + loading/error states.
+export const sampleChannel = {
+  botPhone: "+972 50-123 4567",
 };
 
 /**
@@ -130,6 +137,11 @@ export const handlers = [
   // #235 — session-gated GET /family, returning the wrapped { family, members } roster.
   http.get("*/family", () => {
     return HttpResponse.json(sampleFamily);
+  }),
+
+  // #231 — session-gated GET /channel, returning the { botPhone } the connections page shows.
+  http.get("*/channel", () => {
+    return HttpResponse.json(sampleChannel);
   }),
 
   /**

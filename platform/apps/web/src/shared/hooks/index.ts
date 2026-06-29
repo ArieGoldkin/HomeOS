@@ -1,3 +1,4 @@
+export { channelQueryKey, useChannel } from "./use-channel";
 export { googleStatusQueryKey, useConnectionStatus } from "./use-connection-status";
 export { useCreateEvent } from "./use-create-event";
 export { type DayEvents, type DayStatus, useDayEvents } from "./use-day-events";

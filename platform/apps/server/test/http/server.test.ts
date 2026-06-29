@@ -101,6 +101,8 @@ function makeApp(
     familySeed?: FamilySeed | null;
     /** #226 — inject the session membership ({familyId, role}); default null ⇒ N=1 fallback (default/member). */
     resolveMembership?: (userId: string) => { familyId: string; role: string } | null;
+    /** #231 — the human-readable bot number served by GET /channel; undefined ⇒ the route serves null. */
+    botPhone?: string;
   } = {
     appSecret: appKey,
   },
@@ -153,6 +155,7 @@ function makeApp(
     process,
     events,
     family,
+    botPhone: opts.botPhone,
     allowlist: MSG_ALLOWLIST,
     appSecret: opts.appSecret,
   };
@@ -315,13 +318,32 @@ describe("GET /family (roster read seam, #235)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       family: { display_name: string };
-      members: Array<{ name: string; role: string }>;
+      members: Array<{ name: string; role: string; verified: boolean }>;
     };
     expect(body.family.display_name).toBe("משפחת הבית");
+    // #231 — `verified` is present and false here: the default seed binds NO phones (production default).
     expect(body.members).toEqual([
-      { name: "אבא", role: "owner" },
-      { name: "אמא", role: "member" },
+      { name: "אבא", role: "owner", verified: false },
+      { name: "אמא", role: "member", verified: false },
     ]);
+  });
+
+  it("#231 — marks a member verified when their placeholder phone is bound in family_phones", async () => {
+    const familySeed: FamilySeed = {
+      family: { familyId: FAMILY_ID, displayName: "משפחת הבית" },
+      members: [
+        { userId: "placeholder:+972 50-123 4567", role: "owner", displayName: "אבא" },
+        { userId: "placeholder:+972 54-999 8888", role: "member", displayName: "אמא" },
+      ],
+      phones: [{ fromPhone: "972501234567", verifiedAt: "2026-06-26 09:00:00" }],
+    };
+    const { app } = makeApp({ appSecret: appKey, familySeed });
+    const res = await app.request("/family", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    const body = (await res.json()) as { members: Array<{ name: string; verified: boolean }> };
+    expect(body.members.find((m) => m.name === "אבא")?.verified).toBe(true);
+    expect(body.members.find((m) => m.name === "אמא")?.verified).toBe(false);
   });
 
   it("returns 401 without a token or with an invalid one", async () => {
@@ -351,6 +373,38 @@ describe("GET /family (roster read seam, #235)", () => {
       headers: { Authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /channel (bot number read seam, #231)", () => {
+  it("returns the configured bot number for an authed session", async () => {
+    const { app } = makeApp({ appSecret: appKey, botPhone: "+972 50-123 4567" });
+    const res = await app.request("/channel", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { botPhone: string | null }).toEqual({
+      botPhone: "+972 50-123 4567",
+    });
+  });
+
+  it("returns { botPhone: null } when BOT_PHONE_NUMBER is unset", async () => {
+    const { app } = makeApp(); // no botPhone configured
+    const res = await app.request("/channel", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { botPhone: string | null }).botPhone).toBeNull();
+  });
+
+  it("is session-gated: 401 without a valid session, 503 when auth is unconfigured", async () => {
+    expect((await makeApp({ botPhone: "+972 50-123 4567" }).app.request("/channel")).status).toBe(
+      401,
+    );
+    const dark = await makeApp({ session: false }).app.request("/channel", {
+      headers: { Authorization: "Bearer anything" },
+    });
+    expect(dark.status).toBe(503);
   });
 });
 

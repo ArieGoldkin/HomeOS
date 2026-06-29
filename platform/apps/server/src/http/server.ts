@@ -41,6 +41,9 @@ export interface ServerDeps {
   /** #135 — family allowlist, used to FILTER the GET /messages feed: inbound_messages is persisted
    *  BEFORE the allowlist gate, so the raw table can hold non-family/spam text that must never be served. */
   allowlist: readonly string[];
+  /** #231 (Slice B) — the human-readable WhatsApp bot number served by GET /channel (the connections page
+   *  shows it). Undefined ⇒ the route returns `{ botPhone: null }` (the opaque PHONE_NUMBER_ID is NOT it). */
+  botPhone?: string;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
@@ -123,10 +126,20 @@ export function createServer(deps: ServerDeps): Hono {
     const familyId = (c.var as SessionVars).familyId;
     const row = deps.family.getFamily(familyId);
     if (row === null) return c.text("Not found", 404);
+    // #231 (Slice B) — each member carries `verified` (their placeholder phone ∈ family_phones). The People
+    // board ignores it; the connections page's LinkedMembers filters on it. Additive — the {name,role} shape
+    // is unchanged for existing consumers.
     const members = deps.family
-      .listMembers(familyId)
-      .map((m) => ({ name: m.display_name ?? "", role: m.role }));
+      .listMembersWithVerification(familyId)
+      .map((m) => ({ name: m.display_name ?? "", role: m.role, verified: m.verified }));
     return c.json({ family: { display_name: row.display_name }, members });
+  });
+
+  // #231 (Slice B) — the WhatsApp channel's human-readable bot number for the connections page. Session-gated
+  // (`guard`) like /family; `botPhone` is null when BOT_PHONE_NUMBER is unset (the opaque PHONE_NUMBER_ID is
+  // a Meta id, not a dialable number) → the web shows a neutral fallback rather than a fake number.
+  app.get("/channel", guard, (c) => {
+    return c.json({ botPhone: deps.botPhone ?? null });
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

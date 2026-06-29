@@ -14,7 +14,7 @@ import { createBindingStore } from "./db/binding-store.ts";
 import { createConversationStore } from "./db/conversation-store.ts";
 import { createEventStore } from "./db/event-store/index.ts";
 import { createFamilyResolver } from "./db/family-resolver.ts";
-import { createFamilyStore } from "./db/family-store.ts";
+import { createFamilyStore, PLACEHOLDER_USER_ID_PREFIX } from "./db/family-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
@@ -84,7 +84,7 @@ const bootVerifiedAt = sqliteUtc(new Date());
 const family = createFamilyStore(config.dbPath, {
   family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
   members: Object.entries(config.members).map(([phone, name], i) => ({
-    userId: `placeholder:${phone}`,
+    userId: `${PLACEHOLDER_USER_ID_PREFIX}${phone}`,
     role: i === 0 ? "owner" : "member",
     displayName: name, // #235 — the #14 config name, served by GET /family (not the placeholder user_id)
   })),
@@ -208,6 +208,7 @@ const serverDeps: ServerDeps = {
   events,
   family, // #235 — read-only FamilyStore backing GET /family (the roster the web app un-mocks)
   allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
+  botPhone: config.botPhone, // #231 — human-readable bot number served by GET /channel (display-only)
   appSecret: config.appSecret,
   google: googleDeps,
   session, // #225 — per-user Supabase session gate (undefined ⇒ read/write routes 503)

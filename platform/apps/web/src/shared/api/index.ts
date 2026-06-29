@@ -1,3 +1,4 @@
+export { fetchChannel } from "./channel";
 export { createEvent, fetchEvents, setEventStatus } from "./events";
 export { fetchFamily } from "./family";
 export {

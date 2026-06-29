@@ -115,6 +115,40 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(arie?.role).toBe("owner"); // role preserved (first-wins, untouched by the upsert)
   });
 
+  it("#231 — listMembersWithVerification flags a member whose placeholder phone is bound; others false", () => {
+    // Two members keyed by their (raw, un-normalized) phones; only the first phone is bound in family_phones.
+    const withPhones: FamilySeed = {
+      family: { familyId: FAMILY_ID, displayName: "Test Household" },
+      members: [
+        { userId: "placeholder:+972 50-123 4567", role: "owner", displayName: "אבא" },
+        { userId: "placeholder:+972 54-999 8888", role: "member", displayName: "אמא" },
+      ],
+      // stored digit-normalized by the store → "972501234567" — matches אבא's number despite the formatting.
+      phones: [{ fromPhone: "+972-50-123-4567", verifiedAt: "2026-06-26 09:00:00" }],
+    };
+    const store = createFamilyStore(":memory:", withPhones);
+    const members = store.listMembersWithVerification(FAMILY_ID);
+    const byName = (n: string) => members.find((m) => m.display_name === n);
+    expect(byName("אבא")?.verified).toBe(true); // bound phone (normalized match across formats)
+    expect(byName("אמא")?.verified).toBe(false); // no binding → unverified
+  });
+
+  it("#231 — every member is unverified when no phones are bound (the production default)", () => {
+    const store = createFamilyStore(":memory:", seed); // seed has NO phones
+    const members = store.listMembersWithVerification(FAMILY_ID);
+    expect(members).toHaveLength(2);
+    expect(members.every((m) => m.verified === false)).toBe(true);
+  });
+
+  it("#231 — a non-placeholder user_id (a future real auth.uid) carries no phone → unverified", () => {
+    const store = createFamilyStore(":memory:", {
+      family: { familyId: FAMILY_ID, displayName: "Test Household" },
+      members: [{ userId: "auth-uid-abc123", role: "owner", displayName: "אבא" }],
+      phones: [{ fromPhone: "972501234567", verifiedAt: "2026-06-26 09:00:00" }],
+    });
+    expect(store.listMembersWithVerification(FAMILY_ID)[0]?.verified).toBe(false);
+  });
+
   it("optionally seeds a bootstrap phone digit-normalized, de-duplicated on the PK", () => {
     const path = tmpDbPath();
     const withPhone: FamilySeed = {
