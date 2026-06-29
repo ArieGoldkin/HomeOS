@@ -78,16 +78,20 @@ export function requireSession(config: RequireSessionConfig): MiddlewareHandler 
   };
 }
 
+/** #226 — roles permitted to write. An ALLOW-LIST (fail-closed): an unknown / mistyped / missing role is
+ *  DENIED, not granted — the right default for a chokepoint with no RLS backstop. Expand as roles are added. */
+const WRITER_ROLES: ReadonlySet<string> = new Set(["owner", "member"]);
+
 /**
  * #226 — the write gate, replacing the old WRITE-token-vs-READ-token split with a ROLE check on the session
- * resolved by {@link requireSession} (which MUST run first, so `role` is on the context). Any member writes
- * EXCEPT an explicit `viewer`; a missing role (shouldn't happen post-requireSession) is treated as
- * non-writer → 403. At N=1 the default role is a writer, so this is a no-op until a `viewer` exists.
+ * resolved by {@link requireSession} (which MUST run first, so `role` is on the context). FAIL-CLOSED: only a
+ * role in {@link WRITER_ROLES} writes — a `viewer`, an unknown/future role, or a missing one → 403. At N=1 the
+ * default role is `member` (a writer), so writes behave exactly as before until a non-writer role exists.
  */
 export function requireWrite(): MiddlewareHandler {
   return async (c, next) => {
-    const role = c.get("role");
-    if (!role || role === "viewer") return c.text("Forbidden", 403);
+    const role = c.get("role") as string | undefined;
+    if (!role || !WRITER_ROLES.has(role)) return c.text("Forbidden", 403);
     await next();
   };
 }

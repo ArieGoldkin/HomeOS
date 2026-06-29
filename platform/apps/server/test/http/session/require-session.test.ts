@@ -191,6 +191,15 @@ describe("requireWrite (#226 — role gate, not a second secret)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("403s an unknown / mistyped role (fail-closed allow-list, #226)", async () => {
+    const app = makeWriteApp({ resolveMembership: () => ({ familyId: "default", role: "guest" }) });
+    const res = await app.request("/write", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
   it("401 before the role check when there is no valid session (requireSession rejects first)", async () => {
     const res = await makeWriteApp().request("/write", { method: "POST" });
     expect(res.status).toBe(401);
