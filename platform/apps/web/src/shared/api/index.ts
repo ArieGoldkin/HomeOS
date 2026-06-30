@@ -9,4 +9,5 @@ export {
   GoogleNotConfiguredError,
   startGoogleConnect,
 } from "./google";
+export { createInvite, fetchInvites, revokeInvite } from "./invites";
 export { fetchMessages } from "./messages";

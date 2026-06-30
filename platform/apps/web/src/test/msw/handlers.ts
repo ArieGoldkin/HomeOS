@@ -75,6 +75,20 @@ export const sampleChannel = {
   botPhone: "+972 50-123 4567",
 };
 
+// #250 — a pending-invite fixture mirroring the GET /invites { invites } envelope (the owner's pending list).
+// Tests override with `server.use(...)` to assert the 403 owner-gate + the empty/error states.
+export const sampleInvites = [
+  {
+    invite_id: "inv-1",
+    email: "savta@example.com",
+    role: "member",
+    status: "pending",
+    invited_by: "abba@example.com",
+    expires_at: "2026-07-15T12:00:00Z",
+    created_at: "2026-07-01T12:00:00Z",
+  },
+];
+
 /**
  * #111 — a CONNECTED `GET /oauth/google/status` payload (mirrors the shared `connectionStatusSchema`
  * connected member): the granted scopes + the access-token `expiresAt`. Use it with `server.use(...)` or
@@ -143,6 +157,34 @@ export const handlers = [
   http.get("*/channel", () => {
     return HttpResponse.json(sampleChannel);
   }),
+
+  // #250 — session+owner-gated GET /invites, returning the wrapped { invites } pending list. Defaults to a
+  // single pending invite (the owner case); tests override to 403 (non-owner → the card hides) or empty/error.
+  http.get("*/invites", () => {
+    return HttpResponse.json({ invites: sampleInvites });
+  }),
+
+  // #250 — owner-gated POST /invites: echoes the created pending invite (id minted). Tests override for 400/403.
+  http.post("*/invites", async ({ request }) => {
+    const body = (await request.json()) as { email: string; role?: string };
+    return HttpResponse.json(
+      {
+        invite: {
+          invite_id: "inv-new",
+          email: body.email,
+          role: body.role ?? "member",
+          status: "pending",
+          invited_by: "abba@example.com",
+          expires_at: "2026-07-15T12:00:00Z",
+          created_at: "2026-07-01T12:00:00Z",
+        },
+      },
+      { status: 201 },
+    );
+  }),
+
+  // #250 — owner-gated DELETE /invites/:id revoke → 204 No Content. Tests override for the 404 case.
+  http.delete("*/invites/:id", () => new HttpResponse(null, { status: 204 })),
 
   /**
    * #225 — session-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
