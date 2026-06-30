@@ -1,7 +1,6 @@
 import type { InboundOutcome } from "@homeos/shared";
 import type { ConversationRow } from "../../../db/schema.ts";
 import type { InboundMessage } from "../../../http/webhook.ts";
-import { isAllowed } from "../../allowlist.ts";
 import { TransientError } from "../../errors.ts";
 import { sqliteUtc } from "../../time.ts";
 import { routeCancelByRef } from "../cancel/index.ts";
@@ -29,7 +28,7 @@ import { routeOpenThread } from "./components/resume-routing.ts";
 import { trySyncTriggers } from "./components/sync-triggers.ts";
 
 /**
- * M2 inbound handling: allowlist gate → parse (Claude) → persist → Hebrew confirm.
+ * M2 inbound handling: admission gate → parse (Claude) → persist → Hebrew confirm.
  * Voice/media is deferred to M2b, so non-text messages get a friendly "text only" reply.
  * Dedupe + durability now live in the inbound queue (the message is persisted before the
  * ack and de-duped on wa_message_id); `processInbound` wraps this and settles the row.
@@ -53,22 +52,20 @@ export async function handleInbound(
 ): Promise<InboundOutcome | undefined> {
   const log = deps.log ?? (() => {});
 
-  // 🔗 #228 phone-binding ceremony — the ONE deliberate pre-allowlist branch (no code ⇒ CONTINUE).
+  // 🔗 #228 phone-binding ceremony — the ONE deliberate pre-gate branch (no code ⇒ CONTINUE).
   const bound = await tryBindPhone(msg, deps);
   if (bound !== CONTINUE) return bound;
 
-  // 🔒 Allowlist gate — only family numbers are processed.
-  if (!isAllowed(msg.from, deps.allowlist)) {
-    log("rejected non-allowlisted sender", { from: msg.from });
+  // 🔒🔑 #259/#229 — the admission gate AND the family resolve, unified (BEFORE any write/model call). A
+  // sender is admitted iff it resolves to a family in family_phones (the DB-backed allowlist — so a #228-
+  // bound phone works with no ALLOWLIST redeploy); dev/tests with no resolver fall back to the static list.
+  // `"refused"` ⇒ send the Hebrew refusal and skip WITHOUT writing — never FAMILY_ID="default". The resolved
+  // id threads down on the per-request deps clone (`rdeps`), read everywhere via `familyOf`/the `family` local.
+  const resolved = resolveFamilyOrSkip(msg, deps);
+  if (resolved === "refused") {
     await deps.sendText(msg.from, REFUSAL_HE);
     return "refused";
   }
-
-  // 🔑 #229 — resolve the family ONCE, right after the allowlist gate and BEFORE any write/model call.
-  // The resolved id threads down on the per-request deps clone (`rdeps`); every downstream site reads it
-  // via `familyOf`/the `family` local. `"refused"` is the allowlisted-but-UNBOUND skip (no write).
-  const resolved = resolveFamilyOrSkip(msg, deps);
-  if (resolved === "refused") return "refused";
   const rdeps = resolved;
   const family = familyOf(rdeps);
 

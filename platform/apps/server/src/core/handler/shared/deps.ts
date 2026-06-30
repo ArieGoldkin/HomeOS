@@ -43,16 +43,17 @@ export interface HandlerDeps {
   conversations?: ConversationStore;
   /**
    * #228 — phone-binding ceremony store. When wired, a message carrying a valid `HOME-XXXXX` code is
-   * processed BEFORE the allowlist gate (the one deliberate exception — binding CREATES the allowlist
-   * entry) and writes the durable `from_phone → family_id` mapping. Optional/additive: unset ⇒ no binding
-   * branch, the handler behaves exactly as before.
+   * processed BEFORE the admission gate (the one deliberate exception — binding CREATES the `family_phones`
+   * entry the #259 resolver gate reads) and writes the durable `from_phone → family_id` mapping.
+   * Optional/additive: unset ⇒ no binding branch, the handler behaves exactly as before.
    */
   bindings?: BindingStore;
   /**
-   * #229 — the phone→family resolver (the security chokepoint). When wired, `handleInbound` resolves the
-   * sender's `from_phone → family_id` ONCE after the allowlist gate and threads the resolved value down
-   * (an allowlisted-but-unbound phone is skipped without writing). Optional/additive: unwired ⇒ every
-   * handler degrades to the {@link FAMILY_ID} fallback via {@link familyOf}, i.e. the exact prior behavior.
+   * #229/#259 — the phone→family resolver (the security chokepoint) AND, when wired, the admission gate
+   * itself: `handleInbound` resolves the sender's `from_phone → family_id` ONCE and threads the resolved
+   * value down — a phone that does NOT resolve to a family is refused without writing. Optional/additive:
+   * unwired ⇒ the gate falls back to the static `ALLOWLIST` and every handler degrades to the
+   * {@link FAMILY_ID} fallback via {@link familyOf}, i.e. the exact prior behavior.
    */
   familyResolver?: FamilyResolver;
   /**
@@ -86,11 +87,11 @@ export interface ProcessDeps extends HandlerDeps {
 
 /**
  * #229 — the SINGLE seam every bot-write site reads its family from, so no handler hard-codes the
- * constant. In production `handleInbound` has already resolved `deps.familyId` (via the FamilyResolver,
- * after the allowlist gate) and threaded it on a per-request deps clone, so this returns the resolved
- * value. The `?? FAMILY_ID` is the ONE documented fallback for the no-resolver paths (direct-handler unit
- * tests / app-only dev) — it is NOT a production code path, which is why the chokepoint's correctness lives
- * in the resolver + the resolve-once-then-skip-if-unbound logic, not here.
+ * constant. In production `handleInbound` has already resolved `deps.familyId` (via the FamilyResolver gate,
+ * #259) and threaded it on a per-request deps clone, so this returns the resolved value. The `?? FAMILY_ID`
+ * is the ONE documented fallback for the no-resolver paths (direct-handler unit tests / app-only dev) — it
+ * is NOT a production code path, which is why the chokepoint's correctness lives in the resolver + the
+ * resolve-once-then-refuse-if-unresolved logic, not here.
  */
 export function familyOf(deps: Pick<HandlerDeps, "familyId">): string {
   return deps.familyId ?? FAMILY_ID;

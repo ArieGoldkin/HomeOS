@@ -10,12 +10,13 @@ import {
 import { CONTINUE } from "./phase.ts";
 
 /**
- * 🔗 #228 phone-binding ceremony — the ONE deliberate pre-allowlist branch: a not-yet-bound phone is by
- * definition not on the allowlist, and binding is the act that CREATES the allowlist entry, so it must be
- * handled before the gate would reject it. Cheap on the miss path (one regex; the indexed lookup runs
- * ONLY when a code-shaped token is present), so it doesn't widen the pre-auth cost surface. Only a VALID
- * pending code writes anything; a valid bind short-circuits all command routing. Fully additive: unset
- * `deps.bindings` ⇒ no branch. No code ⇒ CONTINUE to the unchanged allowlist gate.
+ * 🔗 #228 phone-binding ceremony — the ONE deliberate pre-gate branch: a not-yet-bound phone is by
+ * definition not on the allowlist, and binding is the act that CREATES the allowlist entry (the
+ * `family_phones` row the #259 resolver gate now reads), so it must be handled before the gate would reject
+ * it. Cheap on the miss path (one regex; the indexed lookup runs ONLY when a code-shaped token is present),
+ * so it doesn't widen the pre-auth cost surface. Only a VALID pending code writes anything; a valid bind
+ * short-circuits all command routing. Fully additive: unset `deps.bindings` ⇒ no branch. No code ⇒ CONTINUE
+ * to the admission gate.
  */
 export async function tryBindPhone(
   msg: InboundMessage,
