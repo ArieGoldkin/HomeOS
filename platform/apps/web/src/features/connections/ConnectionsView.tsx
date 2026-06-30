@@ -2,6 +2,7 @@ import { WhatsAppIngestion } from "@features/ingestion";
 import type { ConnectOutcome } from "@homeos/shared";
 import { ConnectStatusBanner } from "./ConnectStatusBanner";
 import { GoogleConnectionCard } from "./GoogleConnectionCard";
+import { InviteMembers } from "./InviteMembers";
 import { LinkedMembers } from "./LinkedMembers";
 import { RecentIngestion } from "./RecentIngestion";
 import { WhatsAppChannelCard } from "./WhatsAppChannelCard";
@@ -52,6 +53,9 @@ export function ConnectionsView({ connectStatus, onDismissStatus }: ConnectionsV
       </div>
 
       <LinkedMembers />
+
+      {/* #250 — owner-only self-serve invite admin (renders only for an owner; capability-gated). */}
+      <InviteMembers />
 
       <GoogleConnectionCard />
     </div>

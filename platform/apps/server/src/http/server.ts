@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eventStatusPatchSchema, type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
+import {
+  eventStatusPatchSchema,
+  type InboundMessageDTO,
+  type Invite,
+  inviteRequestSchema,
+  parsedEventSchema,
+} from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
-import { z } from "zod/v4";
 import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store/index.ts";
 import type { FamilyStore } from "../db/family-store.ts";
@@ -79,26 +84,18 @@ export interface ServerDeps {
 const MESSAGES_FEED_LIMIT = 200;
 
 /**
- * #250 — POST /invites body. `role` is validated against an allow-list defaulting to `member` (a bug must
- * NEVER mint `owner` — owner is genesis-only, env-seeded). The email is loosely validated (trim + has an
- * `@`): the real security boundary is the email-pin at claim time (Google must prove control of it), and
- * the store re-normalizes on write, so a strict RFC check buys nothing here.
+ * #250 — the owner-facing invite view (the shared {@link Invite} contract). Deliberately OMITS the reserved
+ * `token` (the future option-B shareable secret must never leave the server) and the `claimed_*` audit
+ * columns. `status` is a free `TEXT` column but the store only ever writes a valid `InviteStatus`, so the
+ * narrowing cast is safe (mirrors `rowToInboundDTO`'s `outcome` cast). The POST body is validated against the
+ * shared `inviteRequestSchema` (imported, not re-declared) so the server route and the web client can't drift.
  */
-const inviteRequestSchema = z.object({
-  email: z.string().trim().min(3).includes("@"),
-  role: z.enum(["member", "viewer"]).default("member"),
-});
-
-/**
- * #250 — the owner-facing invite view. Deliberately OMITS the reserved `token` (the future option-B
- * shareable secret must never leave the server before that flow exists) and the `claimed_*` audit columns.
- */
-function toInviteDTO(row: InviteRow) {
+function toInviteDTO(row: InviteRow): Invite {
   return {
     invite_id: row.invite_id,
     email: row.email,
     role: row.role,
-    status: row.status,
+    status: row.status as Invite["status"],
     invited_by: row.invited_by,
     expires_at: row.expires_at,
     created_at: row.created_at,

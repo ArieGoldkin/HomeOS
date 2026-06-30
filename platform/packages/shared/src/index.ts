@@ -329,3 +329,56 @@ export const channelResponseSchema = z.object({
   botPhone: z.string().nullable(),
 });
 export type ChannelResponse = z.infer<typeof channelResponseSchema>;
+
+/**
+ * #250 (Slice 2) — the roles an owner may grant via an invite. Deliberately EXCLUDES `owner`: a bug must
+ * never mint an owner (genesis is env-seeded only). `member` is a writer; `viewer` is read-only (the role
+ * gate, server-side). The web invite UI offers `member` only for now (design §10 forbids viewer-role UI),
+ * but the contract carries both so the server's allow-list and a future role picker share one source.
+ */
+export const INVITE_ROLES = ["member", "viewer"] as const;
+export const inviteRoleSchema = z.enum(INVITE_ROLES);
+export type InviteRole = z.infer<typeof inviteRoleSchema>;
+
+/** #250 — an invite's lifecycle. Only `pending` is ever served (the gate claims it → `claimed`; an owner
+ *  → `revoked`); `claimed`/`revoked` rows are kept for audit and never appear in the owner's pending list. */
+export const INVITE_STATUSES = ["pending", "claimed", "revoked"] as const;
+export const inviteStatusSchema = z.enum(INVITE_STATUSES);
+export type InviteStatus = z.infer<typeof inviteStatusSchema>;
+
+/**
+ * #250 — the body of `POST /invites` (web sends, server validates). ONE source of truth so the server's
+ * route and the web client can't drift. The email is loosely validated (trim + has an `@`): the real
+ * boundary is the email-pin at claim time (Google must prove control of it) and the store re-normalizes
+ * on write, so a strict RFC check buys nothing. `role` defaults to `member` (never `owner`).
+ */
+export const inviteRequestSchema = z.object({
+  email: z.string().trim().min(3).includes("@"),
+  role: inviteRoleSchema.default("member"),
+});
+export type InviteRequest = z.infer<typeof inviteRequestSchema>;
+
+/**
+ * #250 — one owner-facing invite row as served by `GET /invites` / `POST /invites`. Mirrors the server's
+ * `toInviteDTO`: it DELIBERATELY omits the reserved option-B `token` and the `claimed_*` audit columns, so
+ * the shareable secret never reaches a client. `invited_by` is the minting owner's email (nullable). The
+ * web data layer parses against this so any shape drift fails loudly at the boundary, like the other contracts.
+ */
+export const inviteSchema = z.object({
+  invite_id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  status: inviteStatusSchema,
+  invited_by: z.string().nullable(),
+  expires_at: z.string(),
+  created_at: z.string(),
+});
+export type Invite = z.infer<typeof inviteSchema>;
+
+/** #250 — `POST /invites` response: the single minted invite (`{ invite }`). */
+export const inviteResponseSchema = z.object({ invite: inviteSchema });
+export type InviteResponse = z.infer<typeof inviteResponseSchema>;
+
+/** #250 — `GET /invites` response: the owner's pending invites (`{ invites }`), newest-first. */
+export const invitesResponseSchema = z.object({ invites: z.array(inviteSchema) });
+export type InvitesResponse = z.infer<typeof invitesResponseSchema>;
