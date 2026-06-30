@@ -55,6 +55,21 @@ describe("createInviteClaim (#250 — claim-on-first-login orchestrator)", () =>
     expect(addMember).not.toHaveBeenCalled(); // no invite ⇒ no member write
   });
 
+  it("FAIL-CLOSED: returns null when the invite LOOKUP throws (no admission on a DB error)", () => {
+    const addMember = vi.fn();
+    const claim = createInviteClaim({
+      inviteStore: {
+        findPendingByEmail: () => {
+          throw new Error("db read failed");
+        },
+        claimInvite: vi.fn(),
+      },
+      addMember,
+    });
+    expect(claim({ email: "spouse@example.com", userId: "auth-uid-1" })).toBeNull();
+    expect(addMember).not.toHaveBeenCalled();
+  });
+
   it("FAIL-CLOSED: returns null and never marks claimed when the member write throws", () => {
     const claimInvite = vi.fn();
     const claim = createInviteClaim({

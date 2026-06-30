@@ -20,18 +20,21 @@ export function createInviteClaim(deps: {
   addMember: FamilyStore["addMember"];
 }): ClaimPendingInvite {
   return ({ email, userId }) => {
-    const invite = deps.inviteStore.findPendingByEmail(email);
-    if (invite === null) return null;
+    // The ENTIRE flow — lookup AND both writes — is fail-closed: any thrown error (a DB error in
+    // findPendingByEmail just as much as in the writes) returns null → the gate 403s, never admitting a
+    // session without a persisted member row.
     try {
+      const invite = deps.inviteStore.findPendingByEmail(email);
+      if (invite === null) return null;
       // MEMBER-ROW-FIRST, then mark-claimed: if the process dies between the two writes, only a benign stale
       // pending invite remains (TTL-swept), and the membership!=null guard makes the retried login the
       // idempotent fast path. addMember writes the REAL auth.uid (no placeholder) on the FamilyStore
       // connection — the one that ran the email ALTER, so resolveMembershipByEmail resolves it next request.
       deps.addMember({ familyId: invite.family_id, userId, role: invite.role, email });
       deps.inviteStore.claimInvite(invite.invite_id, userId);
+      return { familyId: invite.family_id, role: invite.role };
     } catch {
-      return null; // FAIL-CLOSED: a failed member write must never admit a session without a persisted row.
+      return null;
     }
-    return { familyId: invite.family_id, role: invite.role };
   };
 }
