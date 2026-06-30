@@ -28,7 +28,7 @@ import { routeOpenThread } from "./components/resume-routing.ts";
 import { trySyncTriggers } from "./components/sync-triggers.ts";
 
 /**
- * M2 inbound handling: allowlist gate → parse (Claude) → persist → Hebrew confirm.
+ * M2 inbound handling: admission gate → parse (Claude) → persist → Hebrew confirm.
  * Voice/media is deferred to M2b, so non-text messages get a friendly "text only" reply.
  * Dedupe + durability now live in the inbound queue (the message is persisted before the
  * ack and de-duped on wa_message_id); `processInbound` wraps this and settles the row.

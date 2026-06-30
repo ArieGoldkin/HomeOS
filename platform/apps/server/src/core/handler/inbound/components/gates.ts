@@ -41,9 +41,9 @@ export function resolveFamilyOrSkip(
 }
 
 /**
- * G16: per-sender daily ceiling — the allowlist bounds *who* and the input cap (G2) bounds message
- * *size*; this bounds *rate*, the last unbounded cost axis vs ≤$100/mo. Checked after the allowlist (so
- * non-family senders are never counted) and before any model call. The message is already enqueued
+ * G16: per-sender daily ceiling — the admission gate bounds *who* and the input cap (G2) bounds message
+ * *size*; this bounds *rate*, the last unbounded cost axis vs ≤$100/mo. Checked after the admission gate
+ * (so non-family senders are never counted) and before any model call. The message is already enqueued
  * (persist-before-ack), so the count includes it; resets at Jerusalem midnight. Off unless both the
  * ceiling and the inbound counter are wired.
  */
