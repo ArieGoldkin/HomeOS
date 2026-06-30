@@ -39,6 +39,8 @@ async function sign(
     expSec?: number; // expiry RELATIVE to now (negative ⇒ already expired)
     sub?: string | null; // null ⇒ omit the claim
     email?: string | null; // null ⇒ omit the claim
+    emailVerified?: boolean; // undefined ⇒ omit the top-level claim
+    userMetadata?: Record<string, unknown>; // undefined ⇒ omit the nested object
   } = {},
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -47,6 +49,8 @@ async function sign(
   const email = o.email === undefined ? "dad@example.com" : o.email;
   if (sub !== null) payload.sub = sub;
   if (email !== null) payload.email = email;
+  if (o.emailVerified !== undefined) payload.email_verified = o.emailVerified;
+  if (o.userMetadata !== undefined) payload.user_metadata = o.userMetadata;
   return new SignJWT(payload)
     .setProtectedHeader({ alg: o.alg ?? "ES256", kid: o.kid ?? "test-key-1" })
     .setIssuedAt(now)
@@ -113,6 +117,33 @@ describe("verifyAccessToken", () => {
     expect(await verifyAccessToken(t, getKey, { issuer: ISS })).toEqual({
       userId: "user-123",
       email: "dad@example.com",
+    });
+  });
+
+  describe("#250 — email_verified assertion (defense-in-depth, reject-on-explicit-false)", () => {
+    it("admits a token whose email_verified is true (top-level)", async () => {
+      const t = await sign({ emailVerified: true });
+      expect(await verifyAccessToken(t, getKey, OPTS)).toMatchObject({ email: "dad@example.com" });
+    });
+
+    it("admits a Google-shaped token (user_metadata.email_verified: true)", async () => {
+      const t = await sign({ userMetadata: { email_verified: true, full_name: "Dad" } });
+      expect(await verifyAccessToken(t, getKey, OPTS)).toMatchObject({ email: "dad@example.com" });
+    });
+
+    it("admits a token that OMITS email_verified (no-lockout: absent ≠ unverified)", async () => {
+      const t = await sign(); // neither top-level nor nested flag
+      expect(await verifyAccessToken(t, getKey, OPTS)).toMatchObject({ email: "dad@example.com" });
+    });
+
+    it("REJECTS a token whose email_verified is explicitly false (top-level)", async () => {
+      const t = await sign({ emailVerified: false });
+      expect(await verifyAccessToken(t, getKey, OPTS)).toBeNull();
+    });
+
+    it("REJECTS a token whose user_metadata.email_verified is explicitly false", async () => {
+      const t = await sign({ userMetadata: { email_verified: false } });
+      expect(await verifyAccessToken(t, getKey, OPTS)).toBeNull();
     });
   });
 });

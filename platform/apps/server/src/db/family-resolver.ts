@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { normalizePhone } from "../core/allowlist.ts";
+import { normalizeEmail, normalizePhone } from "../core/allowlist.ts";
 import {
   CREATE_FAMILIES_TABLE,
   CREATE_FAMILY_MEMBERS_TABLE,
@@ -108,7 +108,7 @@ export function createFamilyResolver(dbPath: string): FamilyResolver {
     },
     resolveMembership,
     resolveMembershipByEmail(email) {
-      const normalized = email.trim().toLowerCase();
+      const normalized = normalizeEmail(email);
       if (normalized === "") return null; // empty/garbage email never resolves (mirrors the phone guard)
       const row = byEmailStmt.get(normalized) as { family_id: string; role: string } | undefined;
       return row ? { familyId: row.family_id, role: row.role } : null;

@@ -2,21 +2,24 @@ import { randomUUID } from "node:crypto";
 import { eventStatusPatchSchema, type InboundMessageDTO, parsedEventSchema } from "@homeos/shared";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
+import { z } from "zod/v4";
 import { normalizePhone } from "../core/allowlist.ts";
 import type { EventStore } from "../db/event-store/index.ts";
 import type { FamilyStore } from "../db/family-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
+import type { InviteStore } from "../db/invite-store.ts";
 // #226 — the browser read/write surface now scopes by the per-request `familyId` the session middleware
 // resolves (`c.get("familyId")`): GET /family + setEventStatus. At N=1 it falls back to FAMILY_ID (no
 // member row keyed by the real auth.uid yet), so behavior is unchanged. The events + messages feeds aren't
 // family-keyed in the stores yet — that migration rides the multi-family/RLS work (so they keep the
 // FAMILY_ID constant). The bot WRITE path — the chokepoint with no RLS backstop — resolves via
 // db/family-resolver.ts.
-import { FAMILY_ID, type InboundRow } from "../db/schema.ts";
+import { FAMILY_ID, type InboundRow, type InviteRow } from "../db/schema.ts";
 import { type CalendarToolDeps, pushSavedEventsToCalendar } from "../tools/index.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes/index.ts";
 import {
   type RequireSessionConfig,
+  requireOwner,
   requireSession,
   requireWrite,
   type SessionVars,
@@ -45,6 +48,9 @@ export interface ServerDeps {
   /** #231 (Slice B) — the human-readable WhatsApp bot number served by GET /channel (the connections page
    *  shows it). Undefined ⇒ the route returns `{ botPhone: null }` (the opaque PHONE_NUMBER_ID is NOT it). */
   botPhone?: string;
+  /** #250 (Slice 2) — owner-issued invite store backing the POST/GET/DELETE /invites admin surface. Undefined
+   *  ⇒ those routes return 503 (app-only/dev/tests without an invite store). Always present in prod. */
+  invites?: InviteStore;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
@@ -71,6 +77,33 @@ export interface ServerDeps {
 
 /** #135 — how many recent inbound rows the GET /messages feed returns (newest-first). */
 const MESSAGES_FEED_LIMIT = 200;
+
+/**
+ * #250 — POST /invites body. `role` is validated against an allow-list defaulting to `member` (a bug must
+ * NEVER mint `owner` — owner is genesis-only, env-seeded). The email is loosely validated (trim + has an
+ * `@`): the real security boundary is the email-pin at claim time (Google must prove control of it), and
+ * the store re-normalizes on write, so a strict RFC check buys nothing here.
+ */
+const inviteRequestSchema = z.object({
+  email: z.string().trim().min(3).includes("@"),
+  role: z.enum(["member", "viewer"]).default("member"),
+});
+
+/**
+ * #250 — the owner-facing invite view. Deliberately OMITS the reserved `token` (the future option-B
+ * shareable secret must never leave the server before that flow exists) and the `claimed_*` audit columns.
+ */
+function toInviteDTO(row: InviteRow) {
+  return {
+    invite_id: row.invite_id,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    invited_by: row.invited_by,
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+  };
+}
 
 /**
  * #135 — map a raw inbound queue row to the served {@link InboundMessageDTO}. `family_id` is pinned to
@@ -147,6 +180,46 @@ export function createServer(deps: ServerDeps): Hono {
   // a Meta id, not a dialable number) → the web shows a neutral fallback rather than a fake number.
   app.get("/channel", guard, (c) => {
     return c.json({ botPhone: deps.botPhone ?? null });
+  });
+
+  // #250 (Slice 2) — owner-only, family-scoped self-serve invite admin. Minting an invite GRANTS admission
+  // (the invitee's next Google login claims it inside requireSession), so the surface is gated by
+  // requireOwner() — strictly narrower than the writer gate. All three routes scope to the session's resolved
+  // familyId, so an owner can only ever touch their own family's invites. 503 when the invite store is unwired
+  // (app-only/dev), mirroring `guard`'s posture for an unconfigured dependency.
+  app.post("/invites", guard, requireOwner(), async (c) => {
+    if (!deps.invites) return c.text("Invites not configured", 503);
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.text("Invalid JSON", 400);
+    }
+    const parsed = inviteRequestSchema.safeParse(body);
+    if (!parsed.success) return c.text("Invalid invite", 400);
+    const invite = deps.invites.createInvite({
+      familyId: (c.var as SessionVars).familyId,
+      email: parsed.data.email,
+      role: parsed.data.role,
+      invitedBy: (c.var as SessionVars).email, // audit: which owner minted it
+    });
+    return c.json({ invite: toInviteDTO(invite) }, 201);
+  });
+
+  // The owner's pending-invite list (drives the 2b web admin view). Pending + unexpired only, family-scoped.
+  app.get("/invites", guard, requireOwner(), (c) => {
+    if (!deps.invites) return c.text("Invites not configured", 503);
+    const invites = deps.invites.listPending((c.var as SessionVars).familyId).map(toInviteDTO);
+    return c.json({ invites });
+  });
+
+  // Owner-revoke a pending invite. Family-scoped in the store, so a foreign / unknown id matches nothing → 404
+  // (never a cross-family revoke). 204 No Content on success.
+  app.delete("/invites/:id", guard, requireOwner(), (c) => {
+    if (!deps.invites) return c.text("Invites not configured", 503);
+    const revoked = deps.invites.revokeInvite(c.req.param("id"), (c.var as SessionVars).familyId);
+    if (!revoked) return c.text("Not found", 404);
+    return c.body(null, 204);
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type RequireSessionConfig,
+  requireOwner,
   requireSession,
   requireWrite,
   type SessionVars,
@@ -149,6 +150,65 @@ describe("requireSession", () => {
     expect(res.status).toBe(403);
   });
 
+  it("#250 — claims a pending invite for a NOVEL email and admits with the invite's {familyId, role}", async () => {
+    // Not a returning member, not on the floor → the claim branch fires and admits.
+    const seen: Array<{ email: string; userId: string }> = [];
+    const app = makeApp({
+      allowedEmails: new Set(),
+      resolveMembershipByEmail: () => null,
+      claimInvite: (p) => {
+        seen.push(p);
+        return p.email === "dad@example.com" ? { familyId: "fam-invited", role: "viewer" } : null;
+      },
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` }, // dad@example.com / sub user-123
+    });
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([{ email: "dad@example.com", userId: "user-123" }]); // email + real uid passed
+    expect(await res.json()).toMatchObject({ familyId: "fam-invited", role: "viewer" });
+  });
+
+  it("#250 — 403 when there is no pending invite to claim (claimInvite → null)", async () => {
+    const app = makeApp({
+      allowedEmails: new Set(),
+      resolveMembershipByEmail: () => null,
+      claimInvite: () => null, // no pending invite for this email
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("#250 — a returning member NEVER triggers a claim (fast path wins)", async () => {
+    const claimInvite = vi.fn(() => null);
+    const app = makeApp({
+      resolveMembershipByEmail: () => ({ familyId: "fam-x", role: "member" }),
+      claimInvite,
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(200);
+    expect(claimInvite).not.toHaveBeenCalled(); // membership resolved → claim branch skipped
+  });
+
+  it("#250 — an allowlisted user with no member row NEVER triggers a claim (floor wins, N=1 fallback)", async () => {
+    const claimInvite = vi.fn(() => null);
+    const app = makeApp({
+      allowedEmails: new Set(["dad@example.com"]),
+      resolveMembershipByEmail: () => null,
+      claimInvite,
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(200);
+    expect(claimInvite).not.toHaveBeenCalled(); // on the floor → admitted without claiming
+    expect(await res.json()).toMatchObject({ familyId: "default", role: "member" });
+  });
+
   it("403 for a valid token whose email is NOT allowlisted", async () => {
     const app = makeApp();
     const res = await app.request("/protected", {
@@ -245,6 +305,52 @@ describe("requireWrite (#226 — role gate, not a second secret)", () => {
 
   it("401 before the role check when there is no valid session (requireSession rejects first)", async () => {
     const res = await makeWriteApp().request("/write", { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("requireOwner (#250 — owner-only invite admin gate)", () => {
+  function makeOwnerApp(overrides: Partial<RequireSessionConfig> = {}) {
+    const app = new Hono<{ Variables: SessionVars }>();
+    app.post("/invites", requireSession(makeConfig(overrides)), requireOwner(), (c) =>
+      c.json({ ok: true }),
+    );
+    return app;
+  }
+
+  it("passes an owner → 200", async () => {
+    const app = makeOwnerApp({
+      resolveMembershipByEmail: () => ({ familyId: "default", role: "owner" }),
+    });
+    const res = await app.request("/invites", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("403s a member (a writer, but NOT an owner — narrower than requireWrite)", async () => {
+    // The N=1 default role is `member`, which writes via requireWrite — but must NOT mint invites.
+    const res = await makeOwnerApp().request("/invites", {
+      method: "POST",
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("403s a viewer and an unknown role (fail-closed)", async () => {
+    for (const role of ["viewer", "guest"]) {
+      const app = makeOwnerApp({ resolveMembershipByEmail: () => ({ familyId: "default", role }) });
+      const res = await app.request("/invites", {
+        method: "POST",
+        headers: { authorization: `Bearer ${await sign()}` },
+      });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it("401 before the owner check when there is no valid session (requireSession rejects first)", async () => {
+    const res = await makeOwnerApp().request("/invites", { method: "POST" });
     expect(res.status).toBe(401);
   });
 });

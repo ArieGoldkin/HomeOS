@@ -4,6 +4,7 @@
 export { accessTokenFromCookieHeader, authCookieName, cookieTokenReader } from "./cookie.ts";
 export {
   type RequireSessionConfig,
+  requireOwner,
   requireSession,
   requireWrite,
   type SessionVars,

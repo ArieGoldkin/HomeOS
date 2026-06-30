@@ -208,6 +208,38 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(store.listMembersWithVerification(FAMILY_ID)[0]?.verified).toBe(false);
   });
 
+  it("#250 — addMember inserts a member with the real auth.uid and a normalized email (the claim path)", () => {
+    const store = createFamilyStore(":memory:", seed);
+    store.addMember({
+      familyId: FAMILY_ID,
+      userId: "auth-uid-real-123",
+      role: "member",
+      email: "  NewSpouse@Gmail.com ", // surrounding whitespace + mixed case
+    });
+    const added = store.listMembers(FAMILY_ID).find((m) => m.user_id === "auth-uid-real-123");
+    expect(added?.role).toBe("member");
+    expect(added?.email).toBe("newspouse@gmail.com"); // trim + lower on write (security item #2)
+    expect(added?.display_name).toBeNull(); // claim carries no display name (the user edits it later)
+  });
+
+  it("#250 — addMember's email survives the resolver's LOWER(email) match (write↔read coherence)", async () => {
+    const path = tmpDbPath();
+    const store = createFamilyStore(path, seed);
+    store.addMember({
+      familyId: FAMILY_ID,
+      userId: "auth-uid-resolve",
+      role: "member",
+      email: " Coherence@Example.com ",
+    });
+    // Read back through the resolver's own connection (the membership-by-email gate the claim unblocks).
+    const { createFamilyResolver } = await import("../../src/db/family-resolver.ts");
+    const resolver = createFamilyResolver(path);
+    expect(resolver.resolveMembershipByEmail("coherence@example.com")).toEqual({
+      familyId: FAMILY_ID,
+      role: "member",
+    });
+  });
+
   it("optionally seeds a bootstrap phone digit-normalized, de-duplicated on the PK", () => {
     const path = tmpDbPath();
     const withPhone: FamilySeed = {

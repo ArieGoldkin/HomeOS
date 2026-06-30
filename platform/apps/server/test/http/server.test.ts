@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import type { SavedEvent } from "@homeos/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
+import { createInviteStore } from "../../src/db/invite-store.ts";
 import { FAMILY_ID, type InboundRow } from "../../src/db/schema.ts";
 import type { ServerDeps } from "../../src/http/server.ts";
 import { createServer } from "../../src/http/server.ts";
@@ -110,6 +111,8 @@ function makeApp(
     autoPush?: boolean;
     /** #18 — force the calendar insert to throw, to prove a push failure never fails the save/201. */
     calendarInsertThrows?: boolean;
+    /** #250 — wire a real in-memory invite store so the POST/GET/DELETE /invites routes exercise it. */
+    invites?: boolean;
   } = {
     appSecret: appKey,
   },
@@ -185,12 +188,15 @@ function makeApp(
           windowDays: 30,
           maxEvents: 20,
         } as unknown as CalendarToolDeps);
+  // #250 — a real in-memory invite store when requested, so the /invites routes drive the actual store path.
+  const invites = opts.invites ? createInviteStore(":memory:") : undefined;
   const deps: ServerDeps = {
     verifyToken: "secret",
     inbound,
     process,
     events,
     family,
+    invites,
     botPhone: opts.botPhone,
     calendar,
     autoPushCalendar: opts.autoPush,
@@ -209,7 +215,7 @@ function makeApp(
         });
   deps.session = gate;
   deps.webDist = opts.webDist;
-  return { app: createServer(deps), process, inbound, events, calendar };
+  return { app: createServer(deps), process, inbound, events, calendar, invites };
 }
 
 function post(
@@ -808,5 +814,103 @@ describe("static web app serving (#150)", () => {
   it("no static serving when webDist is unset (app-only / dev)", async () => {
     const { app } = makeApp({ appSecret: appKey });
     expect((await app.request("/web/today")).status).toBe(404); // nothing serves it
+  });
+});
+
+describe("invite admin routes (#250 — owner-only self-serve invites)", () => {
+  // An owner session: membership resolves to role 'owner' for the kit's default email.
+  const asOwner = {
+    invites: true,
+    resolveMembershipByEmail: () => ({ familyId: FAMILY_ID, role: "owner" }),
+  };
+  const postInvite = (app: ReturnType<typeof makeApp>["app"], body: unknown, token: string) =>
+    app.request("/invites", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+
+  it("an owner mints an invite (201) → it appears in GET /invites; the reserved token is NOT exposed", async () => {
+    const { app } = makeApp(asOwner);
+    const res = await postInvite(app, { email: "spouse@example.com" }, await kit.sign());
+    expect(res.status).toBe(201);
+    const { invite } = (await res.json()) as { invite: Record<string, unknown> };
+    expect(invite).toMatchObject({
+      email: "spouse@example.com",
+      role: "member",
+      status: "pending",
+    });
+    expect(invite.invited_by).toBe("dad@example.com"); // audit: the minting owner
+    expect(invite).not.toHaveProperty("token"); // the reserved option-B secret never leaves the server
+    expect(invite).not.toHaveProperty("claimed_user_id");
+
+    const list = await app.request("/invites", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    const { invites } = (await list.json()) as { invites: Array<{ email: string }> };
+    expect(invites.map((i) => i.email)).toEqual(["spouse@example.com"]);
+  });
+
+  it("accepts a viewer role but REJECTS minting an owner (400 — owner is genesis-only)", async () => {
+    const { app } = makeApp(asOwner);
+    expect(
+      (await postInvite(app, { email: "v@example.com", role: "viewer" }, await kit.sign())).status,
+    ).toBe(201);
+    expect(
+      (await postInvite(app, { email: "o@example.com", role: "owner" }, await kit.sign())).status,
+    ).toBe(400);
+    expect((await postInvite(app, { email: "no-at-sign" }, await kit.sign())).status).toBe(400);
+  });
+
+  it("a non-owner (member) is FORBIDDEN from the invite surface (403)", async () => {
+    // Default membership → N=1 fallback role 'member' (a writer, but NOT an owner).
+    const { app } = makeApp({ invites: true });
+    const res = await postInvite(app, { email: "x@example.com" }, await kit.sign());
+    expect(res.status).toBe(403);
+    const list = await app.request("/invites", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(list.status).toBe(403);
+  });
+
+  it("401 without a session (requireSession rejects before requireOwner)", async () => {
+    const { app } = makeApp(asOwner);
+    expect((await app.request("/invites", { method: "POST" })).status).toBe(401);
+    expect((await app.request("/invites")).status).toBe(401);
+  });
+
+  it("an owner revokes a pending invite (204); it then leaves GET /invites; a bad id is 404", async () => {
+    const { app } = makeApp(asOwner);
+    const created = await postInvite(app, { email: "revoke@example.com" }, await kit.sign());
+    const { invite } = (await created.json()) as { invite: { invite_id: string } };
+
+    const del = await app.request(`/invites/${invite.invite_id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(del.status).toBe(204);
+
+    const list = await app.request("/invites", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(((await list.json()) as { invites: unknown[] }).invites).toEqual([]);
+
+    const missing = await app.request("/invites/no-such-id", {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(missing.status).toBe(404);
+  });
+
+  it("503 when the invite store is unwired (app-only / dev), even for an owner", async () => {
+    // Owner session, but no invite store injected → the routes report not-configured.
+    const { app } = makeApp({
+      resolveMembershipByEmail: () => ({ familyId: FAMILY_ID, role: "owner" }),
+    });
+    expect((await postInvite(app, { email: "x@example.com" }, await kit.sign())).status).toBe(503);
+    const list = await app.request("/invites", {
+      headers: { Authorization: `Bearer ${await kit.sign()}` },
+    });
+    expect(list.status).toBe(503);
   });
 });

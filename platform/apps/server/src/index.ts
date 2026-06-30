@@ -16,6 +16,8 @@ import { createEventStore } from "./db/event-store/index.ts";
 import { createFamilyResolver } from "./db/family-resolver.ts";
 import { createFamilyStore, PLACEHOLDER_USER_ID_PREFIX } from "./db/family-store.ts";
 import { createInboundStore } from "./db/inbound-store.ts";
+import { createInviteClaim } from "./db/invite-claim.ts";
+import { createInviteStore } from "./db/invite-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
@@ -101,6 +103,16 @@ const familyResolver = createFamilyResolver(config.dbPath);
 // ride the auth slice (#226); at N=1 nothing reads family_phones until the #229 resolver, so this is the
 // security seam built correct from day one, not yet a user-facing flow.
 const bindings = createBindingStore(config.dbPath);
+// 🪪 Self-serve invite store (#250, Slice 2): its own connection on the same DB file (creates family_invites
+// + its email index). Backs the owner-only POST/GET/DELETE /invites admin surface, and — via the claim
+// orchestrator below — the claim-on-first-login path in requireSession. The orchestrator writes the member
+// row through the FamilyStore connection (the one that ran the email ALTER) and marks the invite claimed on
+// THIS store's connection, member-row-first + fail-closed (db/invite-claim.ts).
+const invites = createInviteStore(config.dbPath);
+const claimInvite = createInviteClaim({
+  inviteStore: invites,
+  addMember: (m) => family.addMember(m),
+});
 const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
 const parse = createParser(anthropicRawParse(anthropic, config.anthropicModel));
 
@@ -198,6 +210,9 @@ const session: RequireSessionConfig | undefined = config.supabase
       // locks out). uid↔member binding: resolve by the session's verified email (the placeholder user_id
       // never equals the real auth.uid), reusing the #229 resolver's parameterized, deterministic read.
       resolveMembershipByEmail: (email) => familyResolver.resolveMembershipByEmail(email),
+      // #250 — claim-on-first-login: a verified, novel (non-member, non-floor) email claims a pending invite
+      // here, self-populating the allowlist with no env edit. Dormant until an owner mints an invite.
+      claimInvite,
       fallbackFamilyId: FAMILY_ID,
       defaultRole: "member",
     }
@@ -211,6 +226,7 @@ const serverDeps: ServerDeps = {
   family, // #235 — read-only FamilyStore backing GET /family (the roster the web app un-mocks)
   allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
   botPhone: config.botPhone, // #231 — human-readable bot number served by GET /channel (display-only)
+  invites, // #250 — owner-only invite store backing POST/GET/DELETE /invites
   appSecret: config.appSecret,
   google: googleDeps,
   calendar: calendarDeps, // #18 — POST /events auto-pushes to Calendar like the bot path (best-effort)

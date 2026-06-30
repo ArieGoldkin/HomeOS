@@ -38,7 +38,12 @@ export async function makeJwtKit(): Promise<JwtKit> {
 
   const sign: JwtKit["sign"] = (o = {}) => {
     const now = Math.floor(Date.now() / 1000);
-    return new SignJWT({ sub: o.sub ?? "user-123", email: o.email ?? "dad@example.com" })
+    // email_verified mirrors a real Supabase Google token (#250 — verifyAccessToken rejects explicit-false).
+    return new SignJWT({
+      sub: o.sub ?? "user-123",
+      email: o.email ?? "dad@example.com",
+      email_verified: true,
+    })
       .setProtectedHeader({ alg: "ES256", kid: "test-key-1" })
       .setIssuedAt(now)
       .setIssuer(TEST_ISS)
