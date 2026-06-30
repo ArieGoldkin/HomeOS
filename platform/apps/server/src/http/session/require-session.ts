@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import type { ClaimPendingInvite } from "../../db/invite-claim.ts";
 import { type KeyResolver, type VerifyOptions, verifyAccessToken } from "./verify.ts";
 
 /** Context vars attached by {@link requireSession} once a session verifies. */
@@ -33,6 +34,14 @@ export interface RequireSessionConfig {
    * and `{familyId, role}` to the N=1 fallback (no lockout). Injected so the middleware stays unit-testable.
    */
   resolveMembershipByEmail: (email: string) => { familyId: string; role: string } | null;
+  /**
+   * #250 (Slice 2) — claim-on-first-login: when a verified session is NEITHER a returning member NOR on the
+   * static floor, try to claim a pending email-scoped invite. A non-null result provisions a real-uid member
+   * row and admits the session with the invite's `{familyId, role}` (self-serve allowlist, no env edit). Null
+   * ⇒ no pending invite (or the write failed, fail-closed) ⇒ 403. OPTIONAL + injected: undefined ⇒ no claim
+   * path (behavior identical to #260 — admission is membership OR the floor only), keeping it dormant-safe.
+   */
+  claimInvite?: ClaimPendingInvite;
   /** #226 — familyId to attach when membership resolution returns null (N=1: the single FAMILY_ID). */
   fallbackFamilyId: string;
   /** #226 — role to attach when membership resolution returns null. Must permit writes (no lockout at N=1). */
@@ -68,20 +77,24 @@ export function requireSession(config: RequireSessionConfig): MiddlewareHandler 
     if (!token) return c.text("Unauthorized", 401);
     const claims = await verifyAccessToken(token, config.getKey, config.verify);
     if (!claims) return c.text("Unauthorized", 401);
-    // #260 — membership is now an AUTHORITATIVE admission path (resolved FIRST, keyed on the verified email):
-    // a `family_members` row admits on its own, so a future invited user (Slice 2 / #250) is let in WITHOUT a
-    // static-list edit. The `ALLOWED_LOGIN_EMAILS` allowlist is retained as the break-glass floor (and the
-    // owner-bootstrap path), so dropping `MEMBER_EMAILS` can never lock the live login out. Admit iff EITHER
-    // holds; otherwise 403. Below, familyId/role come from the row, falling back at N=1 (allowlisted but no
-    // member row yet) to the single family + a writer role.
-    const membership = config.resolveMembershipByEmail(claims.email);
-    if (membership === null && !config.allowedEmails.has(claims.email.toLowerCase())) {
-      return c.text("Forbidden", 403);
+    // #260 — membership is an AUTHORITATIVE admission path (resolved FIRST, keyed on the verified email): a
+    // `family_members` row admits on its own. The `ALLOWED_LOGIN_EMAILS` allowlist is retained as the
+    // break-glass floor (and the owner-bootstrap path), so dropping `MEMBER_EMAILS` can never lock the live
+    // login out. familyId/role come from the row, falling back at N=1 (allowlisted but no member row yet) to
+    // the single family + a writer role.
+    let resolved = config.resolveMembershipByEmail(claims.email);
+    if (resolved === null && !config.allowedEmails.has(claims.email.toLowerCase())) {
+      // #250 — NEITHER a returning member NOR on the floor: this is the self-serve invite path. Try to claim a
+      // pending email-scoped invite (writes a real-uid member row, marks it claimed). A successful claim admits
+      // with the invite's {familyId, role}; no pending invite (or a fail-closed write error) ⇒ 403. When the
+      // claim seam is unwired (undefined), this is exactly the #260 gate — admission is membership OR floor only.
+      resolved = config.claimInvite?.({ email: claims.email, userId: claims.userId }) ?? null;
+      if (resolved === null) return c.text("Forbidden", 403);
     }
     c.set("userId", claims.userId);
     c.set("email", claims.email);
-    c.set("familyId", membership?.familyId ?? config.fallbackFamilyId);
-    c.set("role", membership?.role ?? config.defaultRole);
+    c.set("familyId", resolved?.familyId ?? config.fallbackFamilyId);
+    c.set("role", resolved?.role ?? config.defaultRole);
     await next();
   };
 }
@@ -100,6 +113,19 @@ export function requireWrite(): MiddlewareHandler {
   return async (c, next) => {
     const role = c.get("role") as string | undefined;
     if (!role || !WRITER_ROLES.has(role)) return c.text("Forbidden", 403);
+    await next();
+  };
+}
+
+/**
+ * #250 — the owner-only gate for the invite admin surface (POST/GET/DELETE /invites). FAIL-CLOSED and
+ * narrower than {@link requireWrite}: only the exact role `owner` passes — a `member`, `viewer`, an
+ * unknown/future role, or a missing one → 403. {@link requireSession} MUST run first so `role` is on the
+ * context. This keeps minting invites (which grants admission) an owner-only act, never a writer's.
+ */
+export function requireOwner(): MiddlewareHandler {
+  return async (c, next) => {
+    if (c.get("role") !== "owner") return c.text("Forbidden", 403);
     await next();
   };
 }

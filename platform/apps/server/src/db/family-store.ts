@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { normalizePhone } from "../core/allowlist.ts";
+import { normalizeEmail, normalizePhone } from "../core/allowlist.ts";
 import {
   ADD_FAMILY_MEMBERS_DISPLAY_NAME,
   ADD_FAMILY_MEMBERS_EMAIL,
@@ -61,6 +61,21 @@ export interface FamilyStore {
    * stored `from_phone`. A non-placeholder `user_id` (a future real auth.uid) carries no phone here → false.
    */
   listMembersWithVerification(familyId: string): VerifiedMemberRow[];
+  /**
+   * #250 (Slice 2) — upsert a member, exposing the boot-seed upsert for the claim-on-first-login path. Runs
+   * the EXACT same `INSERT … ON CONFLICT(family_id, user_id) DO UPDATE` as the seed (role FIRST-WINS;
+   * display_name + email upserted), and MUST run on THIS store's connection — the one that ran the
+   * self-healing `email`/`display_name` ALTERs (the resolver's own connection has not). The claim writes the
+   * real `auth.uid()` as `user_id` (no placeholder), lighting up the deferred `auth.uid() = user_id` RLS.
+   * `email` is normalized on write (trim + lower) so it can never drift from the resolver's `LOWER(email)` key.
+   */
+  addMember(member: {
+    familyId: string;
+    userId: string;
+    role: string;
+    displayName?: string | null;
+    email?: string | null;
+  }): void;
 }
 
 export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStore {
@@ -81,6 +96,16 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   // PRAGMA snapshot above predates BOTH ALTERs, so each guard is correct even for a DB migrated by #235).
   if (!memberCols.some((c) => c.name === "email")) db.exec(ADD_FAMILY_MEMBERS_EMAIL);
 
+  // #235/#250: role stays FIRST-WINS (frozen at first boot, NOT in the DO UPDATE set), but `display_name` +
+  // `email` are upserted so a config.members change reflects on the next boot AND rows seeded before those
+  // columns existed (#227) get backfilled. ON CONFLICT targets the (family_id, user_id) PK. Hoisted out of
+  // the seed block (#250) so the boot seed AND the `addMember` claim path share ONE prepared statement.
+  const insertMemberStmt = db.prepare(
+    "INSERT INTO family_members (family_id, user_id, role, display_name, email) VALUES (?, ?, ?, ?, ?) " +
+      "ON CONFLICT(family_id, user_id) DO UPDATE SET display_name = excluded.display_name, " +
+      "email = excluded.email;",
+  );
+
   // Idempotent seed — `INSERT OR IGNORE` (= ON CONFLICT DO NOTHING on the PKs) is safe on every boot,
   // the same posture as the credential_key_canary seed. Re-running never duplicates or overwrites.
   if (seed) {
@@ -88,18 +113,17 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
       seed.family.familyId,
       seed.family.displayName,
     );
-    // #235: role stays FIRST-WINS (frozen at first boot, NOT in the DO UPDATE set), but `display_name` is
-    // upserted so a config.members rename reflects on the next boot AND so rows seeded before the column
-    // existed (#227) get backfilled. ON CONFLICT targets the (family_id, user_id) PK.
-    const insertMember = db.prepare(
-      "INSERT INTO family_members (family_id, user_id, role, display_name, email) VALUES (?, ?, ?, ?, ?) " +
-        "ON CONFLICT(family_id, user_id) DO UPDATE SET display_name = excluded.display_name, " +
-        "email = excluded.email;",
-    );
     for (const m of seed.members) {
       // role stays first-wins (frozen); display_name + email are upserted so a config change reflects on
-      // the next boot (uid↔member binding — the email is the membership-by-email match key).
-      insertMember.run(seed.family.familyId, m.userId, m.role, m.displayName, m.email ?? null);
+      // the next boot (uid↔member binding — the email is the membership-by-email match key, normalized on
+      // write so the stored column can never drift from the resolver's LOWER(email) match).
+      insertMemberStmt.run(
+        seed.family.familyId,
+        m.userId,
+        m.role,
+        m.displayName,
+        m.email == null ? null : normalizeEmail(m.email),
+      );
     }
     // 🔒 family_phones is only ever a commented dogfood bootstrap here — the honest binding path is the
     // ceremony (#228). `from_phone` is stored digit-normalized so the resolver (#229) compares exactly.
@@ -143,6 +167,15 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
           : "";
         return { ...m, verified: phone !== "" && verifiedPhones.has(phone) };
       });
+    },
+    addMember({ familyId, userId, role, displayName, email }) {
+      insertMemberStmt.run(
+        familyId,
+        userId,
+        role,
+        displayName ?? null,
+        email == null ? null : normalizeEmail(email),
+      );
     },
   };
 }

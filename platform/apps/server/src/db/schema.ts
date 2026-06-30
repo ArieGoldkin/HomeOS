@@ -321,6 +321,63 @@ export interface PhoneBindingRow {
 }
 
 /**
+ * Owner-issued, email-scoped invite (#250, Slice 2) — the self-serve login-allowlist seam. An owner mints
+ * a `pending` row scoped to their `family_id`; on the invitee's next Google login `requireSession` matches
+ * the verified `email` against a pending row and CLAIMS it (writes the real-`auth.uid()` member row, marks
+ * the invite `claimed`) — admission self-populates with no env edit. The security boundary is the email-pin:
+ * the claim fires only when `claims.email` equals a pending invite's `email` AND Supabase proved control of
+ * it (verified Google login), and lands in *that invite's* family — never a self-chosen one. `invite_id` is
+ * an unguessable PK (the audit id + the DELETE handle); `email` is stored lower+trimmed (the claim match key
+ * mirrors `family_members.email`); `expires_at` is a SQLite-UTC string checked at READ time (~14d TTL), so a
+ * stale invite never claims. `token` is reserved from day one for the future shareable-link UX (option B) —
+ * UNUSED by the email-pinned claim, purely additive later. Mirrors the `oauth_state`/`phone_binding` posture:
+ * own connection, family-scoped, injected clock.
+ */
+export const CREATE_FAMILY_INVITES_TABLE = `
+  CREATE TABLE IF NOT EXISTS family_invites (
+    invite_id       TEXT PRIMARY KEY,
+    family_id       TEXT NOT NULL,
+    email           TEXT NOT NULL,
+    role            TEXT NOT NULL DEFAULT 'member',
+    token           TEXT,
+    invited_by      TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    expires_at      TEXT NOT NULL,
+    claimed_user_id TEXT,
+    claimed_at      TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+/**
+ * The gate's pending-by-email lookup index (`findPendingByEmail` filters `email` + `status`). The
+ * one-pending-per-(family,email) invariant is held in application code (`createInvite` supersedes any prior
+ * pending row) rather than a partial UNIQUE — deferred to the RLS migration with the other constraints.
+ */
+export const CREATE_FAMILY_INVITES_EMAIL_INDEX = `
+  CREATE INDEX IF NOT EXISTS idx_family_invites_email ON family_invites(email, status);
+`;
+
+export interface InviteRow {
+  invite_id: string;
+  family_id: string;
+  /** Lower+trimmed on write — the claim match key (mirrors `family_members.email`). */
+  email: string;
+  role: string;
+  /** Reserved for the future shareable-link UX (option B); unused by the email-pinned claim. */
+  token: string | null;
+  /** Owner email/uid that minted the invite (audit). */
+  invited_by: string | null;
+  /** pending | claimed | revoked. */
+  status: string;
+  expires_at: string;
+  /** The real `auth.uid()` the invite was claimed by (audit + future RLS). */
+  claimed_user_id: string | null;
+  claimed_at: string | null;
+  created_at: string;
+}
+
+/**
  * Bounded multi-turn conversation thread (#83, Milestone #8) — the "ask → wait → resume" primitive
  * for clarify/cancel/edit, mirroring `inbound_messages`' pending→replay model. Slim 8 columns: the
  * per-kind variant lives in one `payload_json` blob (NOT typed columns), and `status` is pinned to
