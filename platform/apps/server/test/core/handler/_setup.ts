@@ -59,6 +59,9 @@ export function makeDeps(
      * wired, so familyOf degrades to FAMILY_ID — the exact pre-#229 behavior.
      */
     familyResolves?: string | null;
+    /** #259: phones bound via the #228 ceremony but ABSENT from the static allowlist — the phone-aware mock
+     *  resolves these too (to `familyResolves`), proving a bound phone is admitted with no ALLOWLIST redeploy. */
+    boundPhones?: string[];
     /** #84: when set, agent.run (the main path) returns this clarify arm instead of saved rows. */
     clarifyResult?: ClarifyResult;
     /** #84: when defined, wires deps.parse (the clarify-resume re-parse seam) to return this. */
@@ -198,7 +201,15 @@ export function makeDeps(
     ...(opts.familyResolves !== undefined
       ? {
           familyResolver: {
-            resolveFamilyByPhone: vi.fn((_from: string) => opts.familyResolves ?? null),
+            // #259 — phone-aware: resolves only phones KNOWN to a family (the static allowlist seed ∪ any
+            // #228-bound phones via `boundPhones`), mirroring the `family_phones` table that is now the gate.
+            // A stranger → null; `familyResolves: null` forces null for everyone (the non-resolving case).
+            resolveFamilyByPhone: vi.fn((from: string) =>
+              opts.familyResolves &&
+              (allowlist.includes(from) || (opts.boundPhones ?? []).includes(from))
+                ? opts.familyResolves
+                : null,
+            ),
             resolveFamilyByUser: vi.fn((_uid: string) => opts.familyResolves ?? null),
             resolveMembership: vi.fn((_uid: string) => null),
             resolveMembershipByEmail: vi.fn((_email: string) => null),

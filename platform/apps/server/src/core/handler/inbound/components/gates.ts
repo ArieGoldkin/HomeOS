@@ -1,17 +1,23 @@
 import type { InboundOutcome } from "@homeos/shared";
 import type { ConversationRow } from "../../../../db/schema.ts";
 import type { InboundMessage } from "../../../../http/webhook.ts";
+import { isAllowed } from "../../../allowlist.ts";
 import { jerusalemDayStartSqlite } from "../../../time.ts";
 import { type HandlerDeps, RATE_LIMIT_HE } from "../../shared/index.ts";
 import { CONTINUE } from "./phase.ts";
 
 /**
- * 🔑 #229 — resolve the family ONCE, right after the allowlist gate and BEFORE any write/model call.
- * Returns the per-request deps clone carrying the resolved `familyId` (read downstream via `familyOf`),
- * or `"refused"` to SKIP. This is the cross-tenant chokepoint with NO RLS backstop: an allowlisted-but-
- * UNBOUND phone (resolver wired AND returns null) is a bootstrap/config error → log and skip without
- * writing, NEVER fall through to FAMILY_ID="default". No resolver wired (app-only dev / unit tests) ⇒
- * `familyId` stays unset ⇒ `familyOf` degrades to FAMILY_ID, i.e. the exact prior behavior.
+ * 🔒🔑 #259/#229 — the inbound admission gate AND the family resolve, unified into ONE step (run right
+ * after the #228 binding branch, BEFORE any write/model call). Returns the per-request deps clone carrying
+ * the resolved `familyId` (read downstream via `familyOf`), or `"refused"` to SKIP (the caller sends the
+ * Hebrew refusal and writes nothing — NEVER falls through to FAMILY_ID="default").
+ *
+ * When a resolver IS wired (prod), `family_phones` is the DB-backed allowlist: a phone is admitted iff it
+ * resolves to a family. This is the cross-tenant chokepoint with NO RLS backstop — and it's why a phone
+ * bound via the #228 ceremony gains bot access with NO `ALLOWLIST` redeploy (the static env list seeds
+ * `family_phones` at boot but no longer gates here). When NO resolver is wired (app-only dev / unit tests)
+ * it falls back to the static `ALLOWLIST` so the gate still bounds *who* is processed; `familyId` stays
+ * unset ⇒ `familyOf` degrades to FAMILY_ID, i.e. the exact prior behavior.
  */
 export function resolveFamilyOrSkip(
   msg: InboundMessage,
@@ -21,10 +27,15 @@ export function resolveFamilyOrSkip(
   if (deps.familyResolver) {
     const resolved = deps.familyResolver.resolveFamilyByPhone(msg.from);
     if (resolved === null) {
-      log("allowlisted sender has no family binding — skipping (no write)", { from: msg.from });
+      log("sender does not resolve to a family — refusing (no write)", { from: msg.from });
       return "refused";
     }
     return { ...deps, familyId: resolved };
+  }
+  // No resolver wired (app-only dev / unit tests): fall back to the static ALLOWLIST.
+  if (!isAllowed(msg.from, deps.allowlist)) {
+    log("rejected non-allowlisted sender", { from: msg.from });
+    return "refused";
   }
   return deps;
 }

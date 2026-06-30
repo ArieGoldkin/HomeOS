@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleInbound } from "../../../src/core/handler/index.ts";
+import { REFUSAL_HE } from "../../../src/core/handler/shared/index.ts";
 import { FAMILY_ID } from "../../../src/db/schema.ts";
 import { makeDeps, sampleSaved, textMsg } from "./_setup.ts";
 
@@ -29,7 +30,7 @@ describe("#229 phone→family resolution — bot write path threading", () => {
     expect(events.deleteById).toHaveBeenCalledWith(sampleSaved.id, RESOLVED);
   });
 
-  it("an allowlisted-but-UNBOUND phone is skipped without writing — no model call, no event write, no reply", async () => {
+  it("#259 — a sender that does NOT resolve to a family is refused without writing (no model call, no event write), but the Hebrew refusal IS sent", async () => {
     const { agent, events, sendText, deps } = makeDeps({ familyResolves: null });
 
     const outcome = await handleInbound(textMsg, deps);
@@ -38,18 +39,33 @@ describe("#229 phone→family resolution — bot write path threading", () => {
     expect(agent.run).not.toHaveBeenCalled(); // never reaches a model call
     expect(events.saveEvent).not.toHaveBeenCalled(); // never falls through to FAMILY_ID="default"
     expect(events.deleteById).not.toHaveBeenCalled();
-    expect(sendText).not.toHaveBeenCalled(); // a config/bootstrap error → silent skip, no confusing reply
+    // #259: family_phones is now the source of truth — a non-resolving sender is treated as unknown and
+    // gets the refusal (the prior silent skip only existed in the old static-allowlist-then-resolve model).
+    expect(sendText).toHaveBeenCalledWith(textMsg.from, REFUSAL_HE);
   });
 
-  it("the resolver runs AFTER the allowlist gate — a non-allowlisted phone is refused and never hits the resolver", async () => {
-    const { agent, deps } = makeDeps({ familyResolves: RESOLVED });
+  it("#259 — the resolver IS the gate: a phone absent from family_phones is consulted, then refused", async () => {
+    const { agent, sendText, deps } = makeDeps({ familyResolves: RESOLVED });
 
     const outcome = await handleInbound({ ...textMsg, from: STRANGER }, deps);
 
     expect(outcome).toBe("refused");
     expect(agent.run).not.toHaveBeenCalled();
-    // Security ordering: a stranger is rejected by the allowlist before the resolver is ever consulted.
-    expect(vi.mocked(deps.familyResolver!.resolveFamilyByPhone)).not.toHaveBeenCalled();
+    // The resolver is now the single admission gate, so it IS consulted for every sender; STRANGER is not
+    // in family_phones → null → refused + refusal sent (no fall-through to FAMILY_ID="default").
+    expect(vi.mocked(deps.familyResolver!.resolveFamilyByPhone)).toHaveBeenCalledWith(STRANGER);
+    expect(sendText).toHaveBeenCalledWith(STRANGER, REFUSAL_HE);
+  });
+
+  it("#259 — a #228-bound phone ABSENT from the static allowlist is admitted with its resolved family (no ALLOWLIST redeploy)", async () => {
+    const BOUND = "972587777777"; // NOT on the static _setup allowlist; bound via the #228 ceremony
+    const { agent, deps } = makeDeps({ familyResolves: RESOLVED, boundPhones: [BOUND] });
+
+    const outcome = await handleInbound({ ...textMsg, from: BOUND }, deps);
+
+    expect(outcome).toBe("parsed"); // admitted — the activation gap closed
+    expect(agent.run).toHaveBeenCalledTimes(1);
+    expect(agent.run.mock.calls[0]?.[1].familyId).toBe(RESOLVED); // the resolved family, threaded down
   });
 
   it("is fully additive — with NO resolver wired, the ToolContext family degrades to FAMILY_ID (prior behavior)", async () => {
