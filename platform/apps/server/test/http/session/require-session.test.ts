@@ -126,6 +126,29 @@ describe("requireSession", () => {
     expect(await res.json()).toMatchObject({ familyId: "default", role: "member" });
   });
 
+  it("#260 — admits a member whose email is NOT on the static allowlist (the Slice 2 invite path)", async () => {
+    // Break-glass goal: an invited user has a family_members row but is NOT in ALLOWED_LOGIN_EMAILS, and must
+    // still be admitted with the row's {familyId, role} — membership is now a sufficient admission path.
+    const app = makeApp({
+      allowedEmails: new Set(), // empty static floor → admission can ONLY come from membership here
+      resolveMembershipByEmail: (email) =>
+        email === "dad@example.com" ? { familyId: "fam-invited", role: "member" } : null,
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` }, // dad@example.com
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ familyId: "fam-invited", role: "member" });
+  });
+
+  it("#260 — 403 when NEITHER a member row NOR the allowlist admits", async () => {
+    const app = makeApp({ allowedEmails: new Set(), resolveMembershipByEmail: () => null });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
   it("403 for a valid token whose email is NOT allowlisted", async () => {
     const app = makeApp();
     const res = await app.request("/protected", {

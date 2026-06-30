@@ -16,7 +16,8 @@ export interface RequireSessionConfig {
   getKey: KeyResolver;
   /** Verify options — issuer `${SUPABASE_URL}/auth/v1`, audience defaults to "authenticated". */
   verify: VerifyOptions;
-  /** Lower-cased allowlist of permitted login emails (`ALLOWED_LOGIN_EMAILS`). */
+  /** Lower-cased login-email allowlist (`ALLOWED_LOGIN_EMAILS`) — #260: the break-glass admission FLOOR +
+   *  owner-bootstrap path, OR'd with DB membership (a member row admits on its own). */
   allowedEmails: ReadonlySet<string>;
   /**
    * Pull the raw access-token JWT out of the request COOKIE (the same-origin SPA path), or null when
@@ -25,10 +26,11 @@ export interface RequireSessionConfig {
    */
   extractCookieToken?: (c: Context) => Promise<string | null> | string | null;
   /**
-   * #226 / uid↔member binding — resolve the verified user's membership → `{familyId, role}` from the DB,
+   * #226/#260 / uid↔member binding — resolve the verified user's membership → `{familyId, role}` from the DB,
    * keyed on the session's verified login EMAIL (the placeholder `user_id` never equals the real
-   * `auth.uid()`, so email is the link). Returns null when no member carries that email yet → the caller
-   * applies the N=1 fallback below (no lockout). Injected so the middleware stays unit-testable offline.
+   * `auth.uid()`, so email is the link). A non-null result is now an AUTHORITATIVE admission path (#260): the
+   * user is let in even if not on the static allowlist. Null ⇒ admission falls to the `allowedEmails` floor,
+   * and `{familyId, role}` to the N=1 fallback (no lockout). Injected so the middleware stays unit-testable.
    */
   resolveMembershipByEmail: (email: string) => { familyId: string; role: string } | null;
   /** #226 — familyId to attach when membership resolution returns null (N=1: the single FAMILY_ID). */
@@ -49,13 +51,14 @@ function bearerToken(c: Context): string | null {
  * #225 — Hono middleware that replaces the build-embedded shared-bearer gate (`bearerMatches`) with a
  * real per-user session check. It (1) reads the access-token JWT from `Authorization: Bearer` OR the
  * same-origin Supabase cookie, (2) verifies it LOCALLY (jose, cached JWKS — no Supabase round-trip),
- * (3) enforces the `ALLOWED_LOGIN_EMAILS` allowlist, then (4, #226) resolves DB membership and attaches
- * `{userId, email, familyId, role}` to the context (familyId/role fall back to the single family + a writer
- * role at N=1, so the live login never locks out).
- *   - missing / unverifiable token  → 401
- *   - verified but not allowlisted   → 403
+ * (3, #226/#260) resolves DB membership by the verified email and admits if EITHER a `family_members` row
+ * exists OR the email is on the `ALLOWED_LOGIN_EMAILS` floor, then attaches `{userId, email, familyId, role}`
+ * to the context (familyId/role from the row, or the single family + a writer role at N=1, so the live login
+ * never locks out).
+ *   - missing / unverifiable token          → 401
+ *   - verified but neither member nor floor  → 403
  *
- * The READ/WRITE split (formerly distinct readToken/writeToken) is now a ROLE check: every allowlisted member
+ * The READ/WRITE split (formerly distinct readToken/writeToken) is now a ROLE check: every admitted member
  * reads, and writes go through {@link requireWrite} (#226) — a `viewer` is read-only. At N=1 every member is
  * a writer, so writes behave exactly as before.
  */
@@ -65,13 +68,16 @@ export function requireSession(config: RequireSessionConfig): MiddlewareHandler 
     if (!token) return c.text("Unauthorized", 401);
     const claims = await verifyAccessToken(token, config.getKey, config.verify);
     if (!claims) return c.text("Unauthorized", 401);
-    if (!config.allowedEmails.has(claims.email.toLowerCase())) {
+    // #260 — membership is now an AUTHORITATIVE admission path (resolved FIRST, keyed on the verified email):
+    // a `family_members` row admits on its own, so a future invited user (Slice 2 / #250) is let in WITHOUT a
+    // static-list edit. The `ALLOWED_LOGIN_EMAILS` allowlist is retained as the break-glass floor (and the
+    // owner-bootstrap path), so dropping `MEMBER_EMAILS` can never lock the live login out. Admit iff EITHER
+    // holds; otherwise 403. Below, familyId/role come from the row, falling back at N=1 (allowlisted but no
+    // member row yet) to the single family + a writer role.
+    const membership = config.resolveMembershipByEmail(claims.email);
+    if (membership === null && !config.allowedEmails.has(claims.email.toLowerCase())) {
       return c.text("Forbidden", 403);
     }
-    // #226 / uid↔member binding — derive the request's family scope + role from DB membership, matched on
-    // the verified login email; fall back at N=1 (no member carries this email) to the single family + a
-    // writer role so the live login never locks out.
-    const membership = config.resolveMembershipByEmail(claims.email);
     c.set("userId", claims.userId);
     c.set("email", claims.email);
     c.set("familyId", membership?.familyId ?? config.fallbackFamilyId);
