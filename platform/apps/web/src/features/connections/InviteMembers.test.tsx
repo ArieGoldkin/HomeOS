@@ -39,7 +39,15 @@ describe("InviteMembers (#250 — owner-gated invite admin card)", () => {
     await waitFor(() => expect(screen.queryByTestId("invite-members")).not.toBeInTheDocument());
   });
 
-  it("revokes a pending invite (DELETE by invite_id) when ביטול is clicked", async () => {
+  it("shows an error notice (NOT hidden) on a non-403 failure — a real owner's transient blip", async () => {
+    server.use(http.get("*/invites", () => new HttpResponse("Server Error", { status: 500 })));
+    renderCard();
+    // A 500 is not the owner gate: the card renders with an error notice instead of vanishing.
+    expect(await screen.findByTestId("invite-members")).toBeInTheDocument();
+    expect(screen.getByText("שגיאה בטעינת ההזמנות — ננסה שוב בקרוב.")).toBeInTheDocument();
+  });
+
+  it("revokes a pending invite (DELETE by invite_id) when its revoke button is clicked", async () => {
     let revokedId: string | undefined;
     server.use(
       http.delete("*/invites/:id", ({ params }) => {
@@ -51,7 +59,8 @@ describe("InviteMembers (#250 — owner-gated invite admin card)", () => {
     renderCard();
 
     await screen.findByText("savta@example.com");
-    await user.click(screen.getByRole("button", { name: "ביטול" }));
+    // The revoke button is per-invite labelled (a11y — distinct from the dialog's "ביטול" cancel).
+    await user.click(screen.getByRole("button", { name: "ביטול הזמנה ל-savta@example.com" }));
 
     await waitFor(() => expect(revokedId).toBe(sampleInvites[0]?.invite_id));
   });
