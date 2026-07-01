@@ -7,9 +7,6 @@ import { useForm } from "react-hook-form";
 /** The user-editable fields — parsedEventSchema minus the (synthesized) source_text. */
 const formSchema = parsedEventSchema.omit({ source_text: true });
 
-/** The known people offered as assignee chips (mirrors the family roster). */
-const PEOPLE = ["אבא", "אמא", "יואב", "נועה"] as const;
-
 // Typed against EventKind so a typo'd value is a compile error and the SegmentedControl needs no cast.
 const KIND_OPTIONS: readonly SegmentedOption<EventKind>[] = [
   { value: "event", label: "אירוע" },
@@ -39,6 +36,12 @@ export interface AddItemFormProps {
   onCancel?: () => void;
   /** When true, the submit button is disabled — the double-submit guard while a create is in flight. */
   submitting?: boolean;
+  /**
+   * The family roster offered as assignee chips — real member names from `GET /family` (#235), supplied
+   * by the host ({@link AddEventDialog}) so this form stays presentational. Empty (loading/empty roster)
+   * → the "למי" selector is hidden entirely rather than showing a hardcoded or empty list.
+   */
+  people?: readonly string[];
 }
 
 /**
@@ -47,7 +50,7 @@ export interface AddItemFormProps {
  * success, synthesizes source_text → emits a full ParsedEvent via `onSubmit`. Persistence is wired
  * separately (the useCreateEvent seam) — this form only validates + emits (#96).
  */
-export function AddItemForm({ onSubmit, onCancel, submitting }: AddItemFormProps) {
+export function AddItemForm({ onSubmit, onCancel, submitting, people = [] }: AddItemFormProps) {
   const {
     register,
     handleSubmit,
@@ -142,19 +145,21 @@ export function AddItemForm({ onSubmit, onCancel, submitting }: AddItemFormProps
         {...register("location")}
       />
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className="text-[13px] font-medium text-muted-foreground">למי</legend>
-        <div className="flex flex-wrap gap-2">
-          {PEOPLE.map((name) => (
-            <PersonChip
-              key={name}
-              name={name}
-              selected={assignee === name}
-              onClick={() => setValue("assignee", assignee === name ? "" : name)}
-            />
-          ))}
-        </div>
-      </fieldset>
+      {people.length > 0 && (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-[13px] font-medium text-muted-foreground">למי</legend>
+          <div className="flex flex-wrap gap-2">
+            {people.map((name) => (
+              <PersonChip
+                key={name}
+                name={name}
+                selected={assignee === name}
+                onClick={() => setValue("assignee", assignee === name ? "" : name)}
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <div className="mt-2 flex gap-3">
         <Button type="submit" variant="primary" className="flex-1" disabled={submitting}>

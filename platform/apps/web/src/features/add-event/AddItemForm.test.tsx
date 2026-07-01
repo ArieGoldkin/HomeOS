@@ -57,10 +57,10 @@ describe("AddItemForm", () => {
     expect(event.assignee).toBeNull();
   });
 
-  it("reuses PersonChip as the assignee selector", async () => {
+  it("reuses PersonChip as the assignee selector, driven by the provided roster", async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
-    render(<AddItemForm onSubmit={onSubmit} />);
+    render(<AddItemForm onSubmit={onSubmit} people={["אבא", "אמא", "יואב", "נועה"]} />);
 
     await user.type(screen.getByLabelText("כותרת"), "חוג");
     const chip = screen.getByRole("button", { name: /אמא/ });
@@ -71,6 +71,24 @@ describe("AddItemForm", () => {
     await user.click(screen.getByRole("button", { name: "הוספה" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
     expect(onSubmit.mock.calls[0]?.[0].assignee).toBe("אמא");
+  });
+
+  it("renders a chip for each roster member, with no hardcoded names leaking through", () => {
+    render(<AddItemForm onSubmit={vi.fn()} people={["דנה", "רון"]} />);
+    expect(screen.getByRole("button", { name: /דנה/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /רון/ })).toBeInTheDocument();
+    // The old hardcoded roster (אמא/יואב/נועה) must not appear when a real roster is supplied.
+    expect(screen.queryByRole("button", { name: /אמא/ })).not.toBeInTheDocument();
+  });
+
+  it("hides the assignee selector when the roster is empty (graceful degrade)", () => {
+    render(<AddItemForm onSubmit={vi.fn()} people={[]} />);
+    expect(screen.queryByText("למי")).not.toBeInTheDocument();
+  });
+
+  it("hides the assignee selector when no roster prop is provided", () => {
+    render(<AddItemForm onSubmit={vi.fn()} />);
+    expect(screen.queryByText("למי")).not.toBeInTheDocument();
   });
 
   it("disables the submit button while submitting (double-submit guard)", () => {
