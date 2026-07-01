@@ -98,6 +98,9 @@
   /* radius scale — discrete steps (was a single 12px calc). pips/avatars stay 999px. */
   --radius: 0.875rem;                             /* 14px (md) — the base "calm" shape */
   --radius-card: 1.125rem;                        /* 18px — the standard content-card corner */
+  --radius-sm: 0.5rem;                            /* 8px — MUST live here, not only in @theme inline
+                                                   * (inline emits no runtime var, so rounded-[var(--radius-sm)]
+                                                   * call sites silently rendered square — #281) */
 
   /* elevation — 3 quiet tiers (replaces the single --shadow-paper; kept as an alias below) */
   --shadow-flat:  0 1px 2px rgba(30,28,24,.05);
@@ -184,21 +187,24 @@
     #11151B;
 
   --background: #11151B;                          /* solid base for bg-background utilities */
-  --foreground: #FFFFFF;                          /* ink */
+  --foreground: #F2EFE8;                          /* ink — warm off-white (echoes the paper), never pure #FFF (halation) */
 
-  --card: rgba(24,25,31,.62);                     /* dark translucent card (paints via bg-card) */
+  /* #281 elevation ladder — depth via SURFACE ALPHA, not shadows (shadows barely read over the
+   * night gradient). Three distinct tiers: card = ground (.72 dark), card-muted = inset (.055 white),
+   * chip-bg = raised (.13 white); --nav-active (.14) sits just above resting chips. */
+  --card: rgba(26,29,37,.72);                     /* ground — steadier, slightly navier base under text */
   --card-foreground: #EDEAE3;
   --card-border: rgba(255,255,255,.10);
-  --card-muted: rgba(255,255,255,.08);
+  --card-muted: rgba(255,255,255,.055);           /* inset — grouping clearly recedes */
   --card-glass: linear-gradient(180deg, rgba(24,25,31,.55), rgba(14,15,20,.72)); /* glass Card variant */
   --card-blur: blur(16px);
 
   /* dark ink scale + chrome surfaces (prototype DARK map) — pair with the :root defaults above. */
-  --ink: #FFFFFF;
+  --ink: #F2EFE8;                                 /* warm off-white, matches --foreground */
   --ink-2: #EDEAE3;
   --ink-soft: rgba(237, 234, 227, 0.72);
   --ink-faint: rgba(237, 234, 227, 0.52);
-  --chip-bg: rgba(255, 255, 255, 0.1);
+  --chip-bg: rgba(255, 255, 255, 0.13);           /* raised — interactive elements clearly lift */
   --chip-border: rgba(255, 255, 255, 0.16);
   --header-bg: rgba(17, 21, 27, 0.55);
   --header-border: rgba(255, 255, 255, 0.08);
@@ -214,7 +220,7 @@
   --secondary: rgba(255,255,255,.10);
   --secondary-foreground: #EDEAE3;
 
-  --muted: rgba(255,255,255,.08);
+  --muted: rgba(255,255,255,.055);                /* inset tier — aligns with --card-muted (same semantic in light) */
   --muted-foreground: rgba(237,234,227,.52);
 
   --accent: rgba(255,255,255,.10);
