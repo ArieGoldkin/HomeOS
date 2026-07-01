@@ -187,5 +187,23 @@ describe("InboundStore (in-memory SQLite)", () => {
       expect(days[0]?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(store.forwardsByDaySince(FUTURE)).toEqual([]);
     });
+
+    it("both aggregations filter by fromPhones so pre-allowlist SPAM can't inflate the gates", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "fam.1", from: "972500000001", type: "text", text: "family" });
+      store.enqueue({ id: "spam.1", from: "999999999", type: "text", text: "spam" });
+      store.enqueue({ id: "spam.2", from: "999999999", type: "text", text: "spam" });
+      store.markDone("fam.1", "parsed");
+      store.markDone("spam.1", "rephrase");
+      const family = ["972500000001"] as const;
+      // Scoped to the family sender: the two spam rows vanish from both aggregations.
+      expect(store.outcomeCountsSince(PAST, family)).toEqual({ parsed: 1 });
+      expect(store.forwardsByDaySince(PAST, family)[0]?.count).toBe(1);
+      // An empty allowlist serves nothing (mirrors listRecent/isAllowed).
+      expect(store.outcomeCountsSince(PAST, [])).toEqual({});
+      expect(store.forwardsByDaySince(PAST, [])).toEqual([]);
+      // Unfiltered still sees everything (backward-compatible).
+      expect(store.forwardsByDaySince(PAST)[0]?.count).toBe(3);
+    });
   });
 });

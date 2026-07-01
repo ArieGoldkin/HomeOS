@@ -313,6 +313,8 @@ export function createServer(deps: ServerDeps): Hono {
       computeDogfoodMetrics(deps.inbound, deps.metrics, {
         windowDays: DOGFOOD_WINDOW_DAYS,
         now: new Date(),
+        // Family-scoped: the allowlist (digit-normalized) so pre-allowlist spam can't corrupt the gates.
+        fromPhones: deps.allowlist.map(normalizePhone),
       }),
     );
   });

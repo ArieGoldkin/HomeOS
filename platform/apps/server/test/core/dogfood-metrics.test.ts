@@ -25,9 +25,28 @@ describe("computeDogfoodMetrics (#26)", () => {
     expect(m.gates.forwardHabit.pass).toBe(true);
     expect(m.gates.parseAccuracy.pass).toBe(true);
     expect(m.gates.dailyGlance.pass).toBe(true);
-    expect(m.parse.accuracy).toBeCloseTo(0.9);
+    expect(m.parse.accuracy).toBeCloseTo(18 / 21); // parsed / (parsed + clarified + rephrase) ≈ 0.857
     expect(m.forwards.perDay).toBe(1);
     expect(m.engagement.daysWithGlance).toBe(25);
+  });
+
+  it("accuracy counts a 'clarified' round-trip AGAINST clean parse (it's in the denominator)", () => {
+    const m = computeDogfoodMetrics(
+      inbound({ parsed: 8, clarified: 2 }, oneForwardPerDay), // 8/(8+2) = 0.8, NOT 8/8 = 1.0
+      metrics(30),
+      { windowDays: 30, now: NOW },
+    );
+    expect(m.parse.accuracy).toBeCloseTo(0.8);
+  });
+
+  it("board engagement is INFORMATIONAL — it does NOT gate the verdict (always-on display can't be measured)", () => {
+    const m = computeDogfoodMetrics(
+      inbound({ parsed: 10 }, oneForwardPerDay), // forward + parse both pass
+      metrics(0), // zero glance days → dailyGlance gate fails
+      { windowDays: 30, now: NOW },
+    );
+    expect(m.gates.dailyGlance.pass).toBe(false);
+    expect(m.verdict).toBe("go"); // verdict = forward AND parse only
   });
 
   it("verdict 'no-go' when parse accuracy is below threshold", () => {
