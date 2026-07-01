@@ -19,6 +19,7 @@ import { createFamilyStore, PLACEHOLDER_USER_ID_PREFIX } from "./db/family-store
 import { createInboundStore } from "./db/inbound-store.ts";
 import { createInviteClaim } from "./db/invite-claim.ts";
 import { createInviteStore } from "./db/invite-store.ts";
+import { createMetricsStore } from "./db/metrics-store.ts";
 import { FAMILY_ID } from "./db/schema.ts";
 import { httpCalendarClient } from "./google/calendar.ts";
 import { httpGmailClient } from "./google/gmail.ts";
@@ -63,6 +64,7 @@ const log = (msg: string, meta?: Record<string, unknown>) =>
 const wa = createWhatsAppClient(config);
 const events = createEventStore(config.dbPath);
 const inbound = createInboundStore(config.dbPath);
+const metrics = createMetricsStore(config.dbPath); // #26 — dogfood board-read tally + go/no-go source
 // 💬 Bounded-conversation store (#83, Milestone #8): opens its own connection on the same family DB
 // file. The constructor creates the table (CREATE TABLE IF NOT EXISTS) + the one-thread-per-sender
 // index; the boot `expireStale` below both sweeps stale threads and acts as a table-exists boot check.
@@ -266,6 +268,7 @@ const serverDeps: ServerDeps = {
   botPhone: config.botPhone, // #231 — human-readable bot number served by GET /channel (display-only)
   invites, // #250 — owner-only invite store backing POST/GET/DELETE /invites
   bindings, // #228 — phone-binding store backing POST /binding (mints the wa.me code the web shows)
+  metrics, // #26 — dogfood metrics: board-read tally on GET /events + the go/no-go GET /metrics
   appSecret: config.appSecret,
   google: googleDeps,
   calendar: calendarDeps, // #18 — POST /events auto-pushes to Calendar like the bot path (best-effort)

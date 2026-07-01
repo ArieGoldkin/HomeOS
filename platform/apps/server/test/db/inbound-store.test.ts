@@ -160,4 +160,32 @@ describe("InboundStore (in-memory SQLite)", () => {
     const b = createInboundStore(path); // re-open: migration guard must skip the ALTER
     expect(b.listRecent(10)[0]).toMatchObject({ outcome: "clarified" });
   });
+
+  describe("#26 dogfood aggregations", () => {
+    const PAST = "2000-01-01 00:00:00";
+    const FUTURE = "2999-01-01 00:00:00";
+
+    it("outcomeCountsSince histograms the terminal dispositions ('none' for no-outcome rows)", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "wamid.a", from: "9725", type: "text", text: "x" });
+      store.enqueue({ id: "wamid.b", from: "9725", type: "text", text: "y" });
+      store.enqueue({ id: "wamid.c", from: "9725", type: "text", text: "z" });
+      store.markDone("wamid.a", "parsed");
+      store.markDone("wamid.b", "rephrase");
+      store.markDone("wamid.c"); // command path → no outcome
+      expect(store.outcomeCountsSince(PAST)).toEqual({ parsed: 1, rephrase: 1, none: 1 });
+      expect(store.outcomeCountsSince(FUTURE)).toEqual({}); // since-filter excludes everything
+    });
+
+    it("forwardsByDaySince counts inbound volume per UTC day, since-filtered", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "wamid.1", from: "9725", type: "text", text: "a" });
+      store.enqueue({ id: "wamid.2", from: "9725", type: "text", text: "b" });
+      const days = store.forwardsByDaySince(PAST);
+      expect(days).toHaveLength(1); // both received "now" → one day bucket
+      expect(days[0]?.count).toBe(2);
+      expect(days[0]?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(store.forwardsByDaySince(FUTURE)).toEqual([]);
+    });
+  });
 });

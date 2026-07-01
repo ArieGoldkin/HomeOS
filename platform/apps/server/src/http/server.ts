@@ -11,11 +11,13 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
+import { computeDogfoodMetrics } from "../core/dogfood-metrics.ts";
 import type { BindingStore } from "../db/binding-store.ts";
 import type { EventStore } from "../db/event-store/index.ts";
 import type { FamilyStore } from "../db/family-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
 import type { InviteStore } from "../db/invite-store.ts";
+import type { MetricsStore } from "../db/metrics-store.ts";
 // #226 — the browser read/write surface now scopes by the per-request `familyId` the session middleware
 // resolves (`c.get("familyId")`): GET /family + setEventStatus. At N=1 it falls back to FAMILY_ID (no
 // member row keyed by the real auth.uid yet), so behavior is unchanged. The events + messages feeds aren't
@@ -63,6 +65,9 @@ export interface ServerDeps {
    *  member can echo it to the bot (the WhatsApp echo half already runs in the inbound handler). Undefined ⇒
    *  the route returns 503 (app-only/dev/tests). Always present in prod (index.ts builds it). */
   bindings?: BindingStore;
+  /** #26 — dogfood metrics store: records board reads (GET /events) + backs the go/no-go GET /metrics.
+   *  Undefined ⇒ no board-read tally + GET /metrics 503 (app-only/dev/tests). Present in prod. */
+  metrics?: MetricsStore;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
@@ -89,6 +94,9 @@ export interface ServerDeps {
 
 /** #135 — how many recent inbound rows the GET /messages feed returns (newest-first). */
 const MESSAGES_FEED_LIMIT = 200;
+
+/** #26 — the dogfood-metrics window: the trailing 30 days (a month) the go/no-go is evaluated over. */
+const DOGFOOD_WINDOW_DAYS = 30;
 
 /**
  * #250 — the owner-facing invite view (the shared {@link Invite} contract). Deliberately OMITS the reserved
@@ -168,6 +176,13 @@ export function createServer(deps: ServerDeps): Hono {
   // The read seam the family app consumes. #225 session-gated (`guard`); the events are
   // returned in the shared SavedEvent[] shape (incl. assignee/recurrence), ordered by date.
   app.get("/events", guard, (c) => {
+    // #26 — a session-gated board read = a "glance" (only a logged-in family member reaches here). Best-effort
+    // tally (counts only, no PII); never let a metrics write break the board read.
+    try {
+      deps.metrics?.recordBoardRead();
+    } catch (err) {
+      log("board-read tally failed", { error: String(err) });
+    }
     const events = [...deps.events.listEvents()].sort(
       (a, b) => a.date_iso.localeCompare(b.date_iso) || (a.time ?? "").localeCompare(b.time ?? ""),
     );
@@ -287,6 +302,19 @@ export function createServer(deps: ServerDeps): Hono {
     const { email, familyId } = c.var as SessionVars;
     deps.family.recordConsent({ email, familyId, version: CURRENT_TERMS_VERSION });
     return c.json({ consented: true, version: CURRENT_TERMS_VERSION }, 201);
+  });
+
+  // #26 — the dogfood-month go/no-go, owner-only. Lightweight counts over the last 30 days (forwards/day,
+  // parse-outcome accuracy, board-glance days) + the three Phase-6 exit gates. 503 when the metrics store is
+  // unwired (app-only/dev). Owner-gated: this is founder telemetry, not a family surface.
+  app.get("/metrics", guard, requireOwner(), (c) => {
+    if (!deps.metrics) return c.text("Metrics not configured", 503);
+    return c.json(
+      computeDogfoodMetrics(deps.inbound, deps.metrics, {
+        windowDays: DOGFOOD_WINDOW_DAYS,
+        now: new Date(),
+      }),
+    );
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

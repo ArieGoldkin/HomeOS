@@ -14,6 +14,8 @@ describe("processInbound (queue settle)", () => {
       listRecent: vi.fn(() => []),
       statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
       countFromSenderSince: vi.fn(() => 0),
+      outcomeCountsSince: vi.fn(() => ({})),
+      forwardsByDaySince: vi.fn(() => []),
     };
   }
 
