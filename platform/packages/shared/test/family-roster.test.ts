@@ -7,13 +7,13 @@ import {
   familyRosterResponseSchema,
 } from "../src/index.ts";
 
-// Fixture mirrors the server's GET /family payload (#235, +#231 `verified`). The `: FamilyRosterResponse`
-// annotation is the compile-time half — it fails typecheck if the schema/type drift from the served shape.
+// Fixture mirrors the server's GET /family payload (#235, +#266 family-level `whatsappConnected`). The
+// `: FamilyRosterResponse` annotation is the compile-time half — it fails typecheck if the schema/type drift.
 const roster: FamilyRosterResponse = {
-  family: { display_name: "HomeOS Family" },
+  family: { display_name: "HomeOS Family", whatsappConnected: true },
   members: [
-    { name: "אבא", role: "owner", verified: true },
-    { name: "אמא", role: "member", verified: false },
+    { name: "אבא", role: "owner" },
+    { name: "אמא", role: "member" },
   ],
 };
 
@@ -23,7 +23,10 @@ describe("familyRosterResponseSchema (the served GET /family payload)", () => {
   });
 
   it("parses an empty members list (a family with no seeded members yet)", () => {
-    const empty: FamilyRosterResponse = { family: { display_name: "ריק" }, members: [] };
+    const empty: FamilyRosterResponse = {
+      family: { display_name: "ריק", whatsappConnected: false },
+      members: [],
+    };
     expect(familyRosterResponseSchema.parse(empty).members).toEqual([]);
   });
 
@@ -47,25 +50,30 @@ describe("familyRosterResponseSchema (the served GET /family payload)", () => {
     ).toThrow();
   });
 
-  it("exposes a usable FamilyMember type", () => {
-    const m: FamilyMember = { name: "נועה", role: "member", verified: true };
+  it("exposes a usable FamilyMember type ({name, role} — #266 dropped per-member verified)", () => {
+    const m: FamilyMember = { name: "נועה", role: "member" };
     expect(familyMemberSchema.parse(m)).toEqual(m);
   });
 
-  it("#231 — defaults `verified` to false when omitted (additive: older payloads parse as unverified)", () => {
-    const parsed = familyMemberSchema.parse({ name: "סבא", role: "member" });
-    expect(parsed.verified).toBe(false);
-    // a whole roster whose members omit `verified` still parses (the #235 inline fixtures rely on this).
+  it("#266 — strips a stale per-member `verified` (retired field is ignored, not an error)", () => {
+    const parsed = familyMemberSchema.parse({ name: "סבא", role: "member", verified: true });
+    expect(parsed).toEqual({ name: "סבא", role: "member" });
+  });
+
+  it("#266 — defaults family.whatsappConnected to false when omitted (additive: older payloads)", () => {
     const legacy = familyRosterResponseSchema.parse({
       family: { display_name: "x" },
       members: [{ name: "אבא", role: "owner" }],
     });
-    expect(legacy.members[0]?.verified).toBe(false);
+    expect(legacy.family.whatsappConnected).toBe(false);
   });
 
-  it("#231 — rejects a non-boolean `verified` (shape-drift still fails loudly)", () => {
+  it("#266 — rejects a non-boolean family.whatsappConnected (shape-drift fails loudly)", () => {
     expect(() =>
-      familyMemberSchema.parse({ name: "אבא", role: "owner", verified: "yes" }),
+      familyRosterResponseSchema.parse({
+        family: { display_name: "x", whatsappConnected: "yes" },
+        members: [],
+      }),
     ).toThrow();
   });
 });

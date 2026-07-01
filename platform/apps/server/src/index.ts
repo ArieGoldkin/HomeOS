@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
 import { anthropicCallModel, createAgent, RESOLVE_SYSTEM } from "./core/agent/index.ts";
+import { normalizeEmail } from "./core/allowlist.ts";
 import { scheduleDigest } from "./core/digest.ts";
 import { processInbound } from "./core/handler/index.ts";
 import { sqliteUtc } from "./core/time.ts";
@@ -66,33 +67,65 @@ const inbound = createInboundStore(config.dbPath);
 // file. The constructor creates the table (CREATE TABLE IF NOT EXISTS) + the one-thread-per-sender
 // index; the boot `expireStale` below both sweeps stale threads and acts as a table-exists boot check.
 const conversations = createConversationStore(config.dbPath);
-// 👨‍👩‍👧 Identity spine (#227, milestone #13): stand up families/family_members/family_phones and
-// idempotently seed our one family on boot. The handle is RETAINED (#235) and threaded into the server
-// for GET /family (the first web reader); the phone→family resolver (#229) opens its own handle below.
-// Members come from the existing config.members (#14 phone:name) map: keyed on the UNIQUE phone — NOT the
-// display name, so two members sharing a name can't collapse under the (family_id, user_id) PK — while the
-// name becomes the member's `display_name` (#235, what GET /family serves). The whole `user_id` is a
-// PLACEHOLDER until Supabase login (#225) supplies the real auth.uid(). The role is FIRST-WINS (frozen at
-// first boot); display_name is upserted, so a config.members rename reflects on the next boot (#235).
+// 👨‍👩‍👧 Identity spine (#227, milestone #13): stand up families/family_members/family_phones on boot. The
+// handle is RETAINED (#235) and threaded into the server for GET /family; the phone→family resolver (#229)
+// opens its own handle below.
 //
-// 🔑 #229 N=1 BOOTSTRAP: seed family_phones from the allowlist so every already-trusted family number
-// RESOLVES via FamilyResolver from day one — the live bot keeps working before the wa.me/OTP ceremony's
-// web-half (the issue-code card) lands with #226. This is exactly the "commented dogfood bootstrap" the
-// FamilyStore seed reserves `phones` for: the honest binding path is still the ceremony (#228), which
-// coexists here via INSERT OR IGNORE (first-wins on the (family_id, from_phone) PK). `from_phone` is
-// stored digit-normalized by the store, matching the resolver's read-side `normalizePhone`. A SECOND
-// family never gets auto-seeded — it earns its bindings through the ceremony, never from a config list.
+// 🪪 #266 — GENESIS IS EMAIL-KEYED, not phone-keyed. The owner is DERIVED FROM THE LOGIN (the first entry of
+// ALLOWED_LOGIN_EMAILS), retiring the old MEMBERS/MEMBER_EMAILS phone seed. No members are seeded from config
+// here; the genesis owner is a guarded, fail-soft post-construct write (below), and every NON-owner member
+// self-populates via the #250 invite-claim on first login. config.members survives ONLY as the cosmetic
+// phone→name map for bot prompts (#14) — it is no longer identity.
+//
+// 🔑 #229 N=1 BOOTSTRAP: seed family_phones from the allowlist so every already-trusted family number RESOLVES
+// via FamilyResolver from day one (the live bot keeps working). This is the "dogfood bootstrap" the FamilyStore
+// `phones` reserves; the honest binding path is still the #228 ceremony (INSERT OR IGNORE, first-wins on the
+// (family_id, from_phone) PK). `from_phone` is stored digit-normalized, matching the resolver's `normalizePhone`.
 const bootVerifiedAt = sqliteUtc(new Date());
 const family = createFamilyStore(config.dbPath, {
+  // #266 — no `members`: identity is no longer phone-seeded; the genesis owner is the guarded write below.
   family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
-  members: Object.entries(config.members).map(([phone, name], i) => ({
-    userId: `${PLACEHOLDER_USER_ID_PREFIX}${phone}`,
-    role: i === 0 ? "owner" : "member",
-    displayName: name, // #235 — the #14 config name, served by GET /family (not the placeholder user_id)
-    email: config.memberEmails[phone], // uid↔member binding — the login email for membership-by-email
-  })),
   phones: config.allowlist.map((fromPhone) => ({ fromPhone, verifiedAt: bootVerifiedAt })),
 });
+
+// 🪪 #266 — email-seeded genesis: mint the FIRST owner from ALLOWED_LOGIN_EMAILS[0], ONCE. Guarded by
+// has-owner (idempotent + first-wins across boots; a migrated DB with an existing owner is left untouched) and
+// FAIL-SOFT (a failing seed logs-and-continues — never bricks boot; the #260 break-glass floor still admits the
+// owner as a writer, so a typo'd [0] degrades to "owner can't mint invites", never a lockout). The owner is
+// then admitted by the EXISTING membership-by-email read (no gate change), and reconciled to their real
+// auth.uid on first login (require-session #266). Only when Supabase auth is configured.
+if (config.supabase) {
+  const ownerEmail = config.supabase.allowedLoginEmails[0];
+  if (ownerEmail) {
+    const hasOwner = family.listMembers(FAMILY_ID).some((m) => m.role === "owner");
+    if (!hasOwner) {
+      try {
+        family.addMember({
+          familyId: FAMILY_ID,
+          userId: `${PLACEHOLDER_USER_ID_PREFIX}email:${normalizeEmail(ownerEmail)}`,
+          role: "owner",
+          displayName: ownerEmail.split("@")[0],
+          email: ownerEmail, // re-normalized inside addMember; the membership-by-email match key
+        });
+      } catch (err) {
+        log("genesis owner seed failed; owner falls to the break-glass floor", {
+          error: String(err),
+        });
+      }
+    }
+    // Soft boot assertion (warn, never crash): the owner email must now resolve to an owner row. If it doesn't
+    // (e.g. a stale email-less owner row pre-exists from the retired phone seed), the owner is admitted as a
+    // writer via the floor but can't mint invites until their member row carries this email.
+    const ownerResolves = family
+      .listMembers(FAMILY_ID)
+      .some(
+        (m) => m.role === "owner" && normalizeEmail(m.email ?? "") === normalizeEmail(ownerEmail),
+      );
+    if (!ownerResolves) {
+      log("WARNING: ALLOWED_LOGIN_EMAILS[0] does not resolve to an owner row", { ownerEmail });
+    }
+  }
+}
 // 🔑 #229 — the phone→family resolver (the security chokepoint): its own connection on the same DB file,
 // reading the family_phones rows seeded above (and, later, written by the #228 ceremony). Injected into the
 // inbound handler, which resolves `from_phone → family_id` ONCE after the allowlist gate and threads it down.
@@ -213,6 +246,11 @@ const session: RequireSessionConfig | undefined = config.supabase
       // #250 — claim-on-first-login: a verified, novel (non-member, non-floor) email claims a pending invite
       // here, self-populating the allowlist with no env edit. Dormant until an owner mints an invite.
       claimInvite,
+      // #266 — fail-open: upgrade the admitted member's placeholder row (the email-genesis owner, or a legacy
+      // placeholder:<phone>) to their real auth.uid, so auth.uid()=user_id RLS resolves later with no backfill.
+      reconcileMemberUid: (m) => {
+        family.reconcileMemberUid(m);
+      },
       fallbackFamilyId: FAMILY_ID,
       defaultRole: "member",
     }

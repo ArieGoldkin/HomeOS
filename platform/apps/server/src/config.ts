@@ -33,28 +33,6 @@ const membersMap = z
   );
 
 /**
- * uid↔member binding — comma-separated `phone:email` pairs → `{ phone: email }`. The login-identity link:
- * the same phone keys as the `#14 MEMBERS` map, so the boot seed sets each member's `email` (matched
- * against the session's verified email to resolve real membership). Optional — an unset/empty value yields
- * `{}`, so every member is unbound and the session falls back to the single-family default (no lockout).
- * Split on the FIRST `:` only — an email has none, but this stays symmetric with the MEMBERS parser.
- */
-const memberEmailsMap = z
-  .string()
-  .default("")
-  .transform((s) =>
-    s.split(",").reduce<Record<string, string>>((acc, pair) => {
-      const i = pair.indexOf(":");
-      if (i > 0) {
-        const phone = pair.slice(0, i).trim();
-        const email = pair.slice(i + 1).trim();
-        if (phone && email) acc[phone] = email;
-      }
-      return acc;
-    }, {}),
-  );
-
-/**
  * #106 — the origins WEB_BASE_URL may point at. A self-serve "Connect Google" return URL is bounded
  * to this allowlist (defence vs an attacker-set base URL diverting the post-consent redirect). Seeded
  * with the production origin; `as const` keeps it a literal tuple — extend by adding a member.
@@ -72,11 +50,9 @@ const schema = z.object({
   GRAPH_VERSION: z.string().min(1).default("v21.0"),
   // An empty allowlist means nobody could use the bot — treat it as misconfiguration.
   ALLOWLIST: csvList.pipe(z.array(z.string()).min(1)),
-  // Optional family-member map (phone:name,…) for first-person → assignee resolution (#14).
+  // Optional family-member map (phone:name,…) for first-person → assignee resolution (#14). #266 — this is
+  // now PURELY cosmetic (bot prompts); it is NO LONGER part of the identity spine (genesis is email-keyed).
   MEMBERS: membersMap,
-  // uid↔member binding — optional (phone:email,…) map linking each member to their login email, so the
-  // session's verified email resolves real DB membership instead of the N=1 fallback.
-  MEMBER_EMAILS: memberEmailsMap,
   PORT: z.coerce.number().int().positive().default(3000),
   // M2: Claude parsing model + SQLite store path. The Anthropic credential itself is read
   // straight from the environment by @anthropic-ai/sdk, so it is not modeled here. Default is
@@ -183,9 +159,8 @@ export interface Config {
   botPhone?: string;
   graphVersion: string;
   allowlist: string[];
+  /** #14 — phone→name map, PURELY cosmetic now (bot first-person→assignee prompts); NOT identity (#266). */
   members: Record<string, string>;
-  /** uid↔member binding — phone→login-email map; seeds family_members.email for membership-by-email. */
-  memberEmails: Record<string, string>;
   port: number;
   anthropicModel: string;
   dbPath: string;
@@ -363,7 +338,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     graphVersion: e.GRAPH_VERSION,
     allowlist: e.ALLOWLIST,
     members: e.MEMBERS,
-    memberEmails: e.MEMBER_EMAILS,
     port: e.PORT,
     anthropicModel: e.ANTHROPIC_MODEL,
     dbPath: e.DB_PATH,

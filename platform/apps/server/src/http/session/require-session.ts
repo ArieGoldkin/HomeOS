@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import { PLACEHOLDER_USER_ID_PREFIX } from "../../db/family-store.ts";
 import type { ClaimPendingInvite } from "../../db/invite-claim.ts";
 import { type KeyResolver, type VerifyOptions, verifyAccessToken } from "./verify.ts";
 
@@ -42,6 +43,14 @@ export interface RequireSessionConfig {
    * path (behavior identical to #260 — admission is membership OR the floor only), keeping it dormant-safe.
    */
   claimInvite?: ClaimPendingInvite;
+  /**
+   * #266 — FAIL-OPEN: after an admitted member resolves, upgrade their PLACEHOLDER `family_members.user_id`
+   * (the email-genesis owner `placeholder:email:<email>`, or a legacy `placeholder:<phone>`) to the session's
+   * real `auth.uid()`, matched by family + email — so the deferred `auth.uid() = user_id` RLS resolves later.
+   * OPTIONAL + injected; the gate wraps it so a reconcile error can NEVER block an already-admitted session
+   * (no-lockout). Undefined ⇒ no reconcile (dormant-safe).
+   */
+  reconcileMemberUid?: (member: { familyId: string; email: string; userId: string }) => void;
   /** #226 — familyId to attach when membership resolution returns null (N=1: the single FAMILY_ID). */
   fallbackFamilyId: string;
   /** #226 — role to attach when membership resolution returns null. Must permit writes (no lockout at N=1). */
@@ -90,6 +99,22 @@ export function requireSession(config: RequireSessionConfig): MiddlewareHandler 
       // claim seam is unwired (undefined), this is exactly the #260 gate — admission is membership OR floor only.
       resolved = config.claimInvite?.({ email: claims.email, userId: claims.userId }) ?? null;
       if (resolved === null) return c.text("Forbidden", 403);
+    }
+    // #266 — FAIL-OPEN uid reconcile: upgrade the admitted member's PLACEHOLDER row to the real auth.uid (the
+    // JWT `sub`), so `auth.uid() = user_id` RLS resolves at the deferred Postgres migration with no backfill.
+    // Only for an admitted member (resolved !== null) carrying a real session uid; wrapped so a reconcile
+    // error can NEVER block an already-admitted session (the no-lockout red line). A no-op once the uid is real
+    // (the store's `LIKE 'placeholder:%'` guard) and when the claim path just wrote the real-uid row.
+    if (resolved !== null && !claims.userId.startsWith(PLACEHOLDER_USER_ID_PREFIX)) {
+      try {
+        config.reconcileMemberUid?.({
+          familyId: resolved.familyId,
+          email: claims.email,
+          userId: claims.userId,
+        });
+      } catch {
+        // fail-open: an admitted session is never blocked by a reconcile failure
+      }
     }
     c.set("userId", claims.userId);
     c.set("email", claims.email);
