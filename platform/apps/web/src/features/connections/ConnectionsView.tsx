@@ -1,6 +1,7 @@
 import { WhatsAppIngestion } from "@features/ingestion";
 import type { ConnectOutcome } from "@homeos/shared";
 import { ConnectStatusBanner } from "./ConnectStatusBanner";
+import { ConnectWhatsAppCard } from "./ConnectWhatsAppCard";
 import { GoogleConnectionCard } from "./GoogleConnectionCard";
 import { InviteMembers } from "./InviteMembers";
 import { LinkedMembers } from "./LinkedMembers";
@@ -47,6 +48,9 @@ export function ConnectionsView({ connectStatus, onDismissStatus }: ConnectionsV
       )}
 
       <WhatsAppChannelCard />
+
+      {/* #228 — the wa.me phone-binding card: a member mints a code and echoes it to the bot to bind. */}
+      <ConnectWhatsAppCard />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <WhatsAppIngestion />

@@ -10,6 +10,7 @@ import {
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type MiddlewareHandler } from "hono";
 import { normalizePhone } from "../core/allowlist.ts";
+import type { BindingStore } from "../db/binding-store.ts";
 import type { EventStore } from "../db/event-store/index.ts";
 import type { FamilyStore } from "../db/family-store.ts";
 import type { InboundStore } from "../db/inbound-store.ts";
@@ -57,6 +58,10 @@ export interface ServerDeps {
   /** #250 (Slice 2) — owner-issued invite store backing the POST/GET/DELETE /invites admin surface. Undefined
    *  ⇒ those routes return 503 (app-only/dev/tests without an invite store). Always present in prod. */
   invites?: InviteStore;
+  /** #228 — phone-binding store backing POST /binding: issues the wa.me `HOME-XXXXX` code the web shows so a
+   *  member can echo it to the bot (the WhatsApp echo half already runs in the inbound handler). Undefined ⇒
+   *  the route returns 503 (app-only/dev/tests). Always present in prod (index.ts builds it). */
+  bindings?: BindingStore;
   /** Meta app secret. When set, POST /webhook enforces the X-Hub-Signature-256 HMAC; unset = skip (test number). */
   appSecret?: string;
   /** Google OAuth deps (#16). Undefined ⇒ the OAuth routes ship dark (503). */
@@ -250,6 +255,18 @@ export function createServer(deps: ServerDeps): Hono {
     const unbound = deps.family.unbindPhone((c.var as SessionVars).familyId, c.req.param("phone"));
     if (!unbound) return c.text("Not found", 404);
     return c.body(null, 204);
+  });
+
+  // #228 — mint a wa.me binding code for the logged-in member's OWN family. Session-gated (`guard`) and
+  // requireWrite() — binding a WhatsApp sender enables forwarding events, a writer capability (a read-only
+  // viewer has no reason to bind). NOT owner-only: any writer self-binds their own number. The code is
+  // scoped to the session's resolved familyId, so a member can only ever mint a code for their own family;
+  // the durable cross-tenant proof is still the WhatsApp echo (`matchBinding`), never this issue call. 503
+  // when the binding store is unwired (app-only/dev), mirroring the invite-route posture.
+  app.post("/binding", guard, requireWrite(), (c) => {
+    if (!deps.bindings) return c.text("Binding not configured", 503);
+    const code = deps.bindings.issueBinding((c.var as SessionVars).familyId);
+    return c.json({ code }, 201);
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

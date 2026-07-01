@@ -1,3 +1,4 @@
+export { useBindingCode } from "./use-binding-code";
 export { channelQueryKey, useChannel } from "./use-channel";
 export { googleStatusQueryKey, useConnectionStatus } from "./use-connection-status";
 export { useCreateEvent } from "./use-create-event";

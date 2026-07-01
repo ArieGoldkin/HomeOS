@@ -408,3 +408,13 @@ export type BoundPhone = z.infer<typeof boundPhoneSchema>;
 /** #262 — `GET /phones` response: the family's bound WhatsApp senders (`{ phones }`), oldest-first (bind order). */
 export const phonesResponseSchema = z.object({ phones: z.array(boundPhoneSchema) });
 export type PhonesResponse = z.infer<typeof phonesResponseSchema>;
+
+/**
+ * #228 — `POST /binding` response: the freshly-minted single-use `HOME-XXXXX` binding code the web shows so
+ * the logged-in member can echo it to the bot over WhatsApp (the wa.me ceremony). The code is the ONLY thing
+ * served — the family_id is the session's, never on the wire. The web data layer parses against this so shape
+ * drift fails loudly at the boundary, like the other contracts. (The durable proof is still the WhatsApp echo
+ * consumed server-side by `matchBinding`; this endpoint only issues the code.)
+ */
+export const bindingResponseSchema = z.object({ code: z.string() });
+export type BindingResponse = z.infer<typeof bindingResponseSchema>;
