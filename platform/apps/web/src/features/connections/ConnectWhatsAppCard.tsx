@@ -1,14 +1,18 @@
 import { useBindingCode, useChannel } from "@shared/hooks";
 import { Button, Card, SectionLabel } from "@shared/ui";
+import { useState } from "react";
 
-/** The prefilled WhatsApp message body carrying the binding code — the same sentinel the bot's tolerant
- *  regex matches inside surrounding prose. Kept in one place so the wa.me link and the copy text agree. */
+/** The prefilled WhatsApp message body for the wa.me deep link — the load-bearing `HOME-XXXXX` token wrapped
+ *  in prose (the bot's tolerant regex matches the token inside surrounding text). The manual copy button
+ *  copies the bare code instead; both carry the same token the bot binds on, just with/without the prose. */
 function bindingMessage(code: string): string {
   return `קוד חיבור HomeOS: ${code}`;
 }
 
 /** Digits-only form of the display number for the wa.me path (`+972 50-123 4567` → `972501234567`); wa.me
- *  wants the international number with no `+`/spaces/dashes. Null when the server has no BOT_PHONE_NUMBER. */
+ *  wants the international (E.164) number with no `+`/spaces/dashes. `BOT_PHONE_NUMBER` must be configured in
+ *  international form — a national-format value (leading 0, no country code) can't be recovered here. Null
+ *  when the server has no BOT_PHONE_NUMBER. */
 function waDigits(botPhone: string | null | undefined): string | null {
   if (!botPhone) return null;
   const digits = botPhone.replace(/\D/g, "");
@@ -24,21 +28,39 @@ function waDigits(botPhone: string | null | undefined): string | null {
  * click 403s → the error notice). The code is fetched on explicit intent (the button), not on mount, since
  * each mint burns a fresh 10-min-TTL code.
  *
- * When `BOT_PHONE_NUMBER` is set the card offers a one-tap `wa.me` deep link with the code prefilled; when it
- * is null (unconfigured server) it degrades to the copyable code + the exact message to send manually.
+ * The minted code is held in LOCAL state (not read off `mint.data`) so a "קוד חדש" re-mint keeps the current
+ * code + its wa.me link visible while the new one is in flight — and if the re-mint fails, the still-valid
+ * code isn't discarded (the error notice shows alongside it). When `BOT_PHONE_NUMBER` is set the card offers
+ * a one-tap `wa.me` deep link with the code prefilled; when it is null it degrades to the copyable code + the
+ * exact message to send manually.
  */
 export function ConnectWhatsAppCard() {
   const { data: channel } = useChannel();
   const mint = useBindingCode();
-  const code = mint.data;
+  // Local, so a re-mint doesn't blank the displayed code (mint.data goes undefined while the re-run pends).
+  const [code, setCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const digits = waDigits(channel?.botPhone);
   const waHref =
     code && digits
       ? `https://wa.me/${digits}?text=${encodeURIComponent(bindingMessage(code))}`
       : null;
 
-  const copyCode = () => {
-    if (code) void navigator.clipboard?.writeText(code);
+  const getCode = () => {
+    setCopied(false);
+    mint.mutate(undefined, { onSuccess: (fresh) => setCode(fresh) });
+  };
+
+  const copyCode = async () => {
+    // Guarded: on an insecure origin / unsupported browser navigator.clipboard is undefined — do nothing and
+    // leave `copied` false (no false "copied ✓"); the code is `select-all` as the manual fallback.
+    if (!code || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      /* clipboard denied — the select-all code is the fallback; never claim success */
+    }
   };
 
   return (
@@ -67,7 +89,7 @@ export function ConnectWhatsAppCard() {
               aria-label="העתקת הקוד"
               onClick={copyCode}
             >
-              העתקה
+              {copied ? "הועתק ✓" : "העתקה"}
             </Button>
           </div>
           {waHref ? (
@@ -87,7 +109,7 @@ export function ConnectWhatsAppCard() {
           <Button
             variant="ghost"
             className="self-start px-0 text-[12px] text-muted-foreground"
-            onClick={() => mint.mutate()}
+            onClick={getCode}
             disabled={mint.isPending}
           >
             קוד חדש
@@ -97,7 +119,7 @@ export function ConnectWhatsAppCard() {
         <Button
           variant="ink"
           className="min-h-10 self-start px-4 text-[13px]"
-          onClick={() => mint.mutate()}
+          onClick={getCode}
           disabled={mint.isPending}
         >
           {mint.isPending ? "רגע…" : "קבלת קוד חיבור"}

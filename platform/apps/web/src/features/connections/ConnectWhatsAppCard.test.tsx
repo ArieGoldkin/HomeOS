@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { server } from "../../test/msw/server";
 import { ConnectWhatsAppCard } from "./ConnectWhatsAppCard";
 
@@ -62,5 +62,34 @@ describe("ConnectWhatsAppCard (#228 — the wa.me binding card)", () => {
 
     expect(await screen.findByText("לא הצלחנו ליצור קוד חיבור. נסו שוב.")).toBeInTheDocument();
     expect(screen.queryByTestId("binding-code")).not.toBeInTheDocument();
+  });
+
+  it("keeps the current code visible when a 'קוד חדש' re-mint FAILS (no lost valid code)", async () => {
+    const user = userEvent.setup();
+    renderCard();
+    // First mint succeeds (default handler) → code shows.
+    await user.click(await screen.findByRole("button", { name: "קבלת קוד חיבור" }));
+    expect(await screen.findByTestId("binding-code")).toHaveTextContent("HOME-ABCDE");
+
+    // The re-mint now fails; the still-valid code must NOT disappear.
+    server.use(http.post("*/binding", () => new HttpResponse("Server Error", { status: 500 })));
+    await user.click(screen.getByRole("button", { name: "קוד חדש" }));
+
+    expect(await screen.findByText("לא הצלחנו ליצור קוד חיבור. נסו שוב.")).toBeInTheDocument();
+    expect(screen.getByTestId("binding-code")).toHaveTextContent("HOME-ABCDE"); // preserved, not blanked
+  });
+
+  it("confirms a successful copy (הועתק ✓); never claims success when the clipboard is unavailable", async () => {
+    const user = userEvent.setup();
+    // Stub AFTER setup() — userEvent.setup() installs its own clipboard, so define ours last to win at click
+    // time. navigator.clipboard is a getter-only prop in jsdom, hence defineProperty (not assignment).
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderCard();
+    await user.click(await screen.findByRole("button", { name: "קבלת קוד חיבור" }));
+    await user.click(await screen.findByRole("button", { name: "העתקת הקוד" }));
+
+    expect(writeText).toHaveBeenCalledWith("HOME-ABCDE");
+    expect(await screen.findByRole("button", { name: "העתקת הקוד" })).toHaveTextContent("הועתק ✓");
   });
 });
