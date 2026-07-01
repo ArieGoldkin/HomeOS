@@ -115,16 +115,24 @@ if (config.supabase) {
         });
       }
     }
-    // Soft boot assertion (warn, never crash): the owner email must now resolve to an owner row. If it doesn't
-    // (e.g. a stale email-less owner row pre-exists from the retired phone seed), the owner is admitted as a
-    // writer via the floor but can't mint invites until their member row carries this email.
-    const ownerResolves = family
-      .listMembers(FAMILY_ID)
-      .some(
-        (m) => m.role === "owner" && normalizeEmail(m.email ?? "") === normalizeEmail(ownerEmail),
-      );
-    if (!ownerResolves) {
-      log("WARNING: ALLOWED_LOGIN_EMAILS[0] does not resolve to an owner row", { ownerEmail });
+    // Boot self-heal (never crash): the owner email must resolve to an owner row, or requireOwner 403s and the
+    // owner can't mint invites. If it doesn't (a stale email-LESS owner row pre-exists from the retired phone
+    // seed, so `hasOwner` short-circuited the genesis seed above), attach the email onto that owner row. The
+    // heal is scoped to `email IS NULL` (never overwrites a real email); if it can't heal (no owner / a
+    // different non-null email), we warn for a human. Idempotent — a resolving owner never reaches the heal.
+    const ownerResolves = () =>
+      family
+        .listMembers(FAMILY_ID)
+        .some(
+          (m) => m.role === "owner" && normalizeEmail(m.email ?? "") === normalizeEmail(ownerEmail),
+        );
+    if (!ownerResolves()) {
+      const healed = family.healOwnerEmail(FAMILY_ID, ownerEmail);
+      if (healed) {
+        log("genesis owner email healed onto a pre-existing email-less owner row", { ownerEmail });
+      } else {
+        log("WARNING: ALLOWED_LOGIN_EMAILS[0] does not resolve to an owner row", { ownerEmail });
+      }
     }
   }
 }
