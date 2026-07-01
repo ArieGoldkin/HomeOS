@@ -1,5 +1,6 @@
 export { requestBindingCode } from "./binding";
 export { fetchChannel } from "./channel";
+export { acceptConsent, fetchConsent } from "./consent";
 export { createEvent, fetchEvents, setEventStatus } from "./events";
 export { fetchFamily } from "./family";
 export {

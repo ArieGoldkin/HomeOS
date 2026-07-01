@@ -1,4 +1,4 @@
-import { AppShell, ListsPlaceholder } from "@app/shell";
+import { ConsentGate, LegalPage, ListsPlaceholder } from "@app/shell";
 import { LoginScreen } from "@features/auth";
 import { ConnectionsView } from "@features/connections";
 import { TodayScreen } from "@features/day-view";
@@ -149,7 +149,9 @@ function buildRouteTree() {
         throw redirect({ to: "/login" });
       }
     },
-    component: AppShell,
+    // #270 — ConsentGate wraps the shell: an authed user who hasn't accepted the current Terms/Privacy sees
+    // the consent screen instead of the board (it renders AppShell once consented / on fail-open).
+    component: ConsentGate,
   });
 
   const todayRoute = createRoute({
@@ -218,6 +220,19 @@ function buildRouteTree() {
     component: TokensView,
   });
 
+  // #270 — standalone Terms / Privacy pages (no shell chrome), linked from the consent screen.
+  const termsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/terms",
+    component: () => <LegalPage kind="terms" />,
+  });
+
+  const privacyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/privacy",
+    component: () => <LegalPage kind="privacy" />,
+  });
+
   return rootRoute.addChildren([
     indexRoute,
     appRoute.addChildren([
@@ -231,6 +246,8 @@ function buildRouteTree() {
     loginRoute,
     welcomeRoute,
     tokensRoute,
+    termsRoute,
+    privacyRoute,
   ]);
 }
 

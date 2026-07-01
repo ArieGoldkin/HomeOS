@@ -3,8 +3,11 @@ import { ThemeProvider } from "@shared/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestRouter } from "./router";
+import { server } from "./test/msw/server";
 
 // #230 — the board screens (TodayScreen, ProfileCard) read the Google session via useCurrentUser; this
 // test mounts the router directly (no <AuthProvider>), so mock the auth module's runtime exports. The
@@ -127,5 +130,40 @@ describe("router (one responsive app)", () => {
     renderAt("/login", AUTHED);
     await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
     expect(screen.queryByTestId("login-screen")).not.toBeInTheDocument();
+  });
+
+  // #270 — consent gate
+  it("shows the consent screen (board hidden) when the user hasn't accepted the terms", async () => {
+    server.use(
+      http.get("*/consent", () => HttpResponse.json({ consented: false, version: "2026-07-01" })),
+    );
+    renderAt("/today", AUTHED);
+    await waitFor(() => expect(screen.getByTestId("consent-screen")).toBeInTheDocument());
+    expect(screen.queryByText("אסיפת הורים בגן")).not.toBeInTheDocument(); // board gated off
+  });
+
+  it("accepting consent reveals the board (POST /consent flips the gate)", async () => {
+    server.use(
+      http.get("*/consent", () => HttpResponse.json({ consented: false, version: "2026-07-01" })),
+    );
+    const user = userEvent.setup();
+    renderAt("/today", AUTHED);
+    await waitFor(() => expect(screen.getByTestId("consent-screen")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("checkbox", { name: /אני מסכים/ }));
+    await user.click(screen.getByRole("button", { name: "אני מאשר/ת וממשיך/ה" }));
+
+    // POST /consent (default handler → consented) seeds the cache → the gate renders the board.
+    await waitFor(() => expect(screen.getByText("אסיפת הורים בגן")).toBeInTheDocument());
+    expect(screen.queryByTestId("consent-screen")).not.toBeInTheDocument();
+  });
+
+  it("renders the standalone Terms and Privacy pages (placeholder legal text)", async () => {
+    renderAt("/terms", AUTHED);
+    await waitFor(() => expect(screen.getByText("תנאי שימוש")).toBeInTheDocument());
+    expect(screen.getByTestId("legal-placeholder")).toBeInTheDocument();
+
+    renderAt("/privacy", AUTHED);
+    await waitFor(() => expect(screen.getByText("מדיניות פרטיות")).toBeInTheDocument());
   });
 });
