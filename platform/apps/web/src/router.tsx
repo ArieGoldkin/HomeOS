@@ -92,10 +92,16 @@ function ConnectionsRoute() {
   );
 }
 
-// First-run onboarding (standalone, no shell chrome). onDone enters the board at /today.
+// First-run onboarding (standalone, no shell chrome). onDone enters the board at /today; the connect/
+// invite steps route to the real Connections screen (no fake QR/roster — gap #3 de-fang).
 function WelcomeScreen() {
   const navigate = useNavigate();
-  return <Onboarding onDone={() => navigate({ to: "/today" })} />;
+  return (
+    <Onboarding
+      onDone={() => navigate({ to: "/today" })}
+      onGoToConnections={() => navigate({ to: "/connections", search: { status: undefined } })}
+    />
+  );
 }
 
 /**

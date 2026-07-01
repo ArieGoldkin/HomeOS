@@ -40,4 +40,37 @@ describe("Onboarding", () => {
     await user.click(screen.getByRole("button", { name: "סגירה" }));
     expect(onDone).toHaveBeenCalledOnce();
   });
+
+  // Gap #3 de-fang: the WhatsApp-connect step routes to the real Connections screen instead of a fake
+  // QR + hardcoded bot number.
+  it("step 1 routes to the real connections screen, with no fake QR/bot number", async () => {
+    const onGoToConnections = vi.fn();
+    const user = userEvent.setup();
+    render(<Onboarding onGoToConnections={onGoToConnections} />);
+
+    await user.click(screen.getByRole("button", { name: "בואו נתחיל" }));
+    expect(screen.getByText("חברו את הוואטסאפ")).toBeInTheDocument();
+    // The old hardcoded bot number (+972 53-800-1200) must be gone.
+    expect(screen.queryByText(/53-800-1200/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /לחיבור הוואטסאפ/ }));
+    expect(onGoToConnections).toHaveBeenCalledOnce();
+  });
+
+  // Gap #3 de-fang: the invite step routes to the real Connections screen instead of a fake roster with
+  // inert invite buttons.
+  it("step 2 routes to connections, with no fake roster / inert invite buttons", async () => {
+    const onGoToConnections = vi.fn();
+    const user = userEvent.setup();
+    render(<Onboarding onGoToConnections={onGoToConnections} />);
+
+    await user.click(screen.getByRole("button", { name: "בואו נתחיל" }));
+    await user.click(screen.getByRole("button", { name: "המשך" }));
+    expect(screen.getByText("הזמינו את המשפחה")).toBeInTheDocument();
+    // The fake per-member inert "הזמנה" buttons must be gone.
+    expect(screen.queryByRole("button", { name: "הזמנה" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /להזמנת המשפחה/ }));
+    expect(onGoToConnections).toHaveBeenCalledOnce();
+  });
 });
