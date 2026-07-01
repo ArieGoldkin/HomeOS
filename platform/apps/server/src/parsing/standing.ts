@@ -15,7 +15,9 @@ const WEEKDAYS = "ראשון|שני|שלישי|רביעי|חמישי|שישי|ש
  * "יומיים" — so the gate stays conservative; richer phrases can be added later behind their own tests.
  */
 const STANDING_DAILY_RE = new RegExp(
-  `באופן קבוע|(?:ב?כל|מדי) יום(?![א-ת])(?!\\s+(?:${WEEKDAYS}))`,
+  // `(?<![א-ת])` LEFT boundary so "כל יום" doesn't false-match inside "הכל יום" / "אוכל יום"; `(?![א-ת])`
+  // RIGHT boundary excludes "יומיים" (two days); `(?!\s+weekday)` excludes "כל יום ראשון" (weekly, not daily).
+  `באופן קבוע|(?<![א-ת])(?:ב?כל|מדי) יום(?![א-ת])(?!\\s+(?:${WEEKDAYS}))`,
   "u",
 );
 

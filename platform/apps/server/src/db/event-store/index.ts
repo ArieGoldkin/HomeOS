@@ -15,7 +15,10 @@ import { rowToSaved } from "./mapping.ts";
 import { findByRefBase, prepareStatements } from "./statements.ts";
 import { BULK_CANCEL_MAX, type EventStore } from "./types.ts";
 
-/** #224 — add `days` to a `YYYY-MM-DD` date in UTC (handles month/year rollover), return `YYYY-MM-DD`. */
+// #224 — a DB-layer-local date helper. A near-identical addDaysIso lives in core/handler/shared/dates.ts,
+// but the db layer must not import from core/handler (wrong dependency direction), and core/time.ts's variant
+// returns a full RFC3339 instant, not a calendar day — so a small local copy is deliberate here.
+/** Add `days` to a `YYYY-MM-DD` date in UTC (handles month/year rollover), return `YYYY-MM-DD`. */
 function addDaysIso(dateIso: string, days: number): string {
   const d = new Date(`${dateIso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -184,6 +187,11 @@ export function createEventStore(dbPath: string): EventStore {
       const parsed = parsedEventSchema.safeParse({ ...rowToSaved(row), ...patch });
       if (!parsed.success) return null;
       const e = parsed.data;
+      // #224 — re-sync the standing columns from the merged event so an EDIT that moves the date RE-ANCHORS
+      // the window (was: standing_until stayed on the old anchor → the daily reminder silently died while the
+      // confirm still said "יומי"). `standing` is preserved from the row through rowToSaved unless the patch
+      // changes it.
+      const isStandingDaily = e.standing?.cadence === "daily";
       const updated = stmts.updateByIdStmt.get(
         e.kind,
         e.title_he,
@@ -193,6 +201,8 @@ export function createEventStore(dbPath: string): EventStore {
         e.assignee,
         e.recurrence?.freq ?? null,
         e.recurrence?.weekday ?? null,
+        isStandingDaily ? "daily" : null,
+        isStandingDaily ? standingUntil(e.date_iso) : null,
         id,
       ) as unknown as EventRow;
       return rowToSaved(updated);

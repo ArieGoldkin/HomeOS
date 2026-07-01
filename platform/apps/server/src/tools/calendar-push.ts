@@ -56,7 +56,10 @@ export async function pushSavedEventsToCalendar(
   familyId: string,
   log?: (msg: string, meta?: Record<string, unknown>) => void,
 ): Promise<{ pushed: number }> {
-  const board = saved.filter((e) => e.source_provider === null);
+  // #224 — a STANDING daily reminder is DIGEST-ONLY (slice 1): it must never be pushed to Google Calendar
+  // (it would land as a single misleading all-day event on the anchor date, contradicting the daily-digest
+  // behavior). Board rows only, and never a standing reminder.
+  const board = saved.filter((e) => e.source_provider === null && e.standing == null);
   if (board.length === 0) return { pushed: 0 };
 
   let tok: Awaited<ReturnType<typeof getValidAccessToken>>;

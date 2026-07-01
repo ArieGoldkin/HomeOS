@@ -20,6 +20,8 @@ describe("detectStandingDaily (#224 lexical gate)", () => {
       "כל יומיים להשקות", // "every TWO days" — יום followed by another Hebrew letter
       "כל יום ראשון חוג", // "every SUNDAY" — that's WEEKLY, not daily
       "מדי יום שני פגישה", // "every MONDAY" — weekly
+      "הכל יום עמוס אצלנו", // "הכל" ends in כל — must NOT match (no left boundary bug)
+      "אוכל יום כיף", // "אוכל" ends in כל — must NOT match
       "פגישה מחר בבוקר", // one-shot, no cadence
     ]) {
       expect(detectStandingDaily(t)).toBe(false);

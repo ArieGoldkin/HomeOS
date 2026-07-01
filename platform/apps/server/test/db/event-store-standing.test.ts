@@ -78,10 +78,22 @@ describe("event-store — standing daily reminders (#224)", () => {
     expect(store.remindersDueOn(FAMILY_ID, "2026-07-10")).toHaveLength(0);
   });
 
-  it("a 'done' standing reminder is excluded (acted on → stops nudging)", () => {
+  it("a 'done' toggle does NOT end a standing series — it keeps surfacing (cancel to stop, not done)", () => {
+    // A recurring reminder can't be "completed" in one tap; only cancel removes it. So marking day-3 done
+    // must not silently kill days 4-30 (the medication-reminder failure the review flagged).
     const store = createEventStore(":memory:");
     const saved = save(store, standingReminder("2026-07-01"));
     store.setEventStatus(saved.id, "done", FAMILY_ID);
-    expect(store.remindersDueOn(FAMILY_ID, "2026-07-10")).toHaveLength(0);
+    expect(store.remindersDueOn(FAMILY_ID, "2026-07-10")).toHaveLength(1);
+  });
+
+  it("editing the anchor date RE-ANCHORS the window (standing_until follows the new date)", () => {
+    const store = createEventStore(":memory:");
+    const saved = save(store, standingReminder("2026-07-01")); // window → 2026-07-31
+    store.updateEvent(saved.id, { date_iso: "2026-08-15" }, FAMILY_ID); // move it forward
+    expect(store.remindersDueOn(FAMILY_ID, "2026-07-20")).toHaveLength(0); // old window no longer matches
+    expect(store.remindersDueOn(FAMILY_ID, "2026-08-20")).toHaveLength(1); // new window is live
+    expect(store.remindersDueOn(FAMILY_ID, "2026-09-14")).toHaveLength(1); // new anchor + 30d
+    expect(store.remindersDueOn(FAMILY_ID, "2026-09-15")).toHaveLength(0); // past the re-anchored window
   });
 });

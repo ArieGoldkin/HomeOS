@@ -47,7 +47,7 @@ export function prepareStatements(db: DatabaseSync) {
   const updateByIdStmt = db.prepare(
     `UPDATE events
        SET kind = ?, title_he = ?, date_iso = ?, time = ?, location = ?, assignee = ?,
-           recurrence_freq = ?, recurrence_weekday = ?
+           recurrence_freq = ?, recurrence_weekday = ?, standing_cadence = ?, standing_until = ?
      WHERE id = ? AND source_provider IS NULL
      RETURNING *;`,
   );
@@ -74,8 +74,7 @@ export function prepareStatements(db: DatabaseSync) {
   const remindersDueStmt = db.prepare(
     `SELECT * FROM events
      WHERE source_provider IS NULL AND kind = 'reminder'
-       AND (status IS NULL OR status != 'done')
-       AND ( date_iso = ?
+       AND ( ((status IS NULL OR status != 'done') AND date_iso = ?)
              OR (standing_cadence = 'daily' AND date_iso <= ? AND standing_until >= ?) )
      ORDER BY time IS NULL, time ASC, id ASC;`,
   );

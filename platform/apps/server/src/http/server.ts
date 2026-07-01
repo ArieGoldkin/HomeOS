@@ -314,10 +314,12 @@ export function createServer(deps: ServerDeps): Hono {
     }
     const parsed = parsedEventSchema.safeParse(body);
     if (!parsed.success) return c.text("Invalid event", 400);
-    const saved = deps.events.saveEvent(parsed.data, {
-      fromPhone: "web",
-      waMessageId: `web:${randomUUID()}`,
-    });
+    // #224 — `standing` is authored ONLY by the WhatsApp-parse lexical gate, never a client. Strip any
+    // client-supplied value here so a manual web add can't mint a runaway recurring reminder outside the gate.
+    const saved = deps.events.saveEvent(
+      { ...parsed.data, standing: null },
+      { fromPhone: "web", waMessageId: `web:${randomUUID()}` },
+    );
     // #18 — auto-push the new board event to Google Calendar, the SAME seam the WhatsApp inbound handler
     // uses (parse-and-confirm.ts). FIRE-AND-FORGET (not awaited): like the bot path confirms BEFORE pushing,
     // we return the 201 first so the (non-optimistic) Add-Event dialog isn't blocked on two Google round-trips.

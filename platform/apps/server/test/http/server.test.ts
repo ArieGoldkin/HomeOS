@@ -598,6 +598,27 @@ describe("POST /events (write seam)", () => {
     expect(String(metaArg.waMessageId)).toMatch(/^web:/); // synthetic + unique per request
   });
 
+  it("#224 — STRIPS a client-supplied `standing` (only the WhatsApp lexical gate may author it)", async () => {
+    const { app, events } = makeApp();
+    // A malicious/mistaken client posts a reminder flagged standing:daily with no daily-cadence text.
+    const body = {
+      kind: "reminder" as const,
+      title_he: "לשתות מים",
+      date_iso: "2026-06-25",
+      time: null,
+      location: null,
+      assignee: null,
+      recurrence: null,
+      standing: { cadence: "daily" as const },
+      source_text: "לשתות מים",
+    };
+    const res = await postEvents(app, body, auth(await kit.sign()));
+    expect(res.status).toBe(201);
+    // The route strips standing → saveEvent never sees the client's value → no runaway recurring reminder.
+    const [parsedArg] = events.saveEvent.mock.calls[0]!;
+    expect((parsedArg as { standing: unknown }).standing).toBeNull();
+  });
+
   // #18 — the app write seam must auto-push to Google Calendar like the bot/inbound path does. Regression
   // for: an app-created event saved to the board but never synced to Calendar (CALENDAR_AUTO_PUSH=true).
   it("auto-pushes the new event to Google Calendar when calendar is connected + auto-push is on", async () => {
