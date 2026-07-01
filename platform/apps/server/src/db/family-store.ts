@@ -2,9 +2,11 @@ import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { normalizeEmail, normalizePhone } from "../core/allowlist.ts";
+import { sqliteUtc } from "../core/time.ts";
 import {
   ADD_FAMILY_MEMBERS_DISPLAY_NAME,
   ADD_FAMILY_MEMBERS_EMAIL,
+  CREATE_CONSENTS_TABLE,
   CREATE_FAMILIES_TABLE,
   CREATE_FAMILY_MEMBERS_TABLE,
   CREATE_FAMILY_PHONES_TABLE,
@@ -89,6 +91,19 @@ export interface FamilyStore {
     displayName?: string | null;
     email?: string | null;
   }): void;
+  /**
+   * #270 — record that `email` (the session's verified login) accepted terms `version` for `familyId`, NOW.
+   * Upsert on the email PK so re-consent (a new version) overwrites the prior record — we only track the
+   * LATEST accepted version. `email` is normalized (trim + lower) on write so it can't drift from the
+   * `getConsentVersion` read key. Idempotent under retry.
+   */
+  recordConsent(params: { email: string; familyId: string; version: string }): void;
+  /**
+   * #270 — the terms version `email` last accepted, or null if it has never consented. The consent route
+   * compares this to `CURRENT_TERMS_VERSION`: equal ⇒ consented; different/null ⇒ re-prompt. Matched
+   * case-insensitively (`LOWER(email)`), like the membership resolver. An empty email never resolves.
+   */
+  getConsentVersion(email: string): string | null;
 }
 
 export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStore {
@@ -98,6 +113,7 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   db.exec(CREATE_FAMILIES_TABLE);
   db.exec(CREATE_FAMILY_MEMBERS_TABLE);
   db.exec(CREATE_FAMILY_PHONES_TABLE);
+  db.exec(CREATE_CONSENTS_TABLE); // #270 — the Terms/Privacy opt-in record (keyed by email)
   // #235: ensure `display_name` exists on a PRE-EXISTING family_members table (#227 seeded it before this
   // column existed; CREATE IF NOT EXISTS won't add it). Fresh DBs get it from the DDL; older DBs here. The
   // seed below upserts the real name, so this backfills on the same boot (mirrors event-store/index.ts).
@@ -167,6 +183,16 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   const unbindPhoneStmt = db.prepare(
     "DELETE FROM family_phones WHERE family_id = ? AND from_phone = ?;",
   );
+  // #270 — upsert the opt-in on the email PK (re-consent overwrites → latest version wins). Email normalized
+  // on write; consented_at from the current instant (the value isn't a match key, so no injected clock).
+  const recordConsentStmt = db.prepare(
+    "INSERT INTO consents (email, family_id, consented_at, consent_version) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(email) DO UPDATE SET family_id = excluded.family_id, " +
+      "consented_at = excluded.consented_at, consent_version = excluded.consent_version;",
+  );
+  // No LOWER() — the email is stored already-normalized (lower+trimmed), so a plain equality on the PK
+  // column hits the primary-key index; wrapping it in LOWER() would defeat that index for no gain.
+  const getConsentStmt = db.prepare("SELECT consent_version FROM consents WHERE email = ?;");
 
   return {
     getFamily(familyId) {
@@ -180,6 +206,17 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     },
     unbindPhone(familyId, fromPhone) {
       return unbindPhoneStmt.run(familyId, normalizePhone(fromPhone)).changes > 0;
+    },
+    recordConsent({ email, familyId, version }) {
+      const normalized = normalizeEmail(email);
+      if (normalized === "") return; // never write a blank shared '' PK (mirrors the getConsentVersion guard)
+      recordConsentStmt.run(normalized, familyId, sqliteUtc(new Date()), version);
+    },
+    getConsentVersion(email) {
+      const normalized = normalizeEmail(email);
+      if (normalized === "") return null; // empty/garbage email never resolves (mirrors the resolver guard)
+      const row = getConsentStmt.get(normalized) as { consent_version: string } | undefined;
+      return row?.consent_version ?? null;
     },
     reconcileMemberUid({ familyId, email, userId }) {
       return reconcileUidStmt.run(userId, familyId, normalizeEmail(email)).changes > 0;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   type BoundPhone,
+  CURRENT_TERMS_VERSION,
   eventStatusPatchSchema,
   type InboundMessageDTO,
   type Invite,
@@ -267,6 +268,25 @@ export function createServer(deps: ServerDeps): Hono {
     if (!deps.bindings) return c.text("Binding not configured", 503);
     const code = deps.bindings.issueBinding((c.var as SessionVars).familyId);
     return c.json({ code }, 201);
+  });
+
+  // #270 — has the session's user accepted the CURRENT Terms/Privacy version? The web ConsentGate shows the
+  // consent screen iff `consented` is false. Session-gated (`guard`) — consent is per authenticated user,
+  // keyed on the verified login email. Consented iff the stored version equals CURRENT_TERMS_VERSION (a bump
+  // re-prompts everyone). `consented: false` is the safe default for a user who has never accepted.
+  app.get("/consent", guard, (c) => {
+    const email = (c.var as SessionVars).email;
+    const consented = deps.family.getConsentVersion(email) === CURRENT_TERMS_VERSION;
+    return c.json({ consented, version: CURRENT_TERMS_VERSION });
+  });
+
+  // Record the opt-in for the session's user at the CURRENT version. Idempotent (upsert on the email PK), so
+  // a double-submit is benign. Returns the now-consented status. The email + familyId are the session's, so
+  // a user can only ever consent as themselves for their own family.
+  app.post("/consent", guard, (c) => {
+    const { email, familyId } = c.var as SessionVars;
+    deps.family.recordConsent({ email, familyId, version: CURRENT_TERMS_VERSION });
+    return c.json({ consented: true, version: CURRENT_TERMS_VERSION }, 201);
   });
 
   // #135 [D2] — the raw inbound-message feed (the "what did the bot receive + what happened" inbox),

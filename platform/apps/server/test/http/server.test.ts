@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import type { SavedEvent } from "@homeos/shared";
+import { CURRENT_TERMS_VERSION, type SavedEvent } from "@homeos/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createBindingStore } from "../../src/db/binding-store.ts";
 import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
@@ -1003,5 +1003,34 @@ describe("POST /binding (#228 — mint a wa.me binding code)", () => {
   it("503 when the binding store is unwired (app-only / dev), even for a writer", async () => {
     const { app } = makeApp(); // no bindings injected
     expect((await postBinding(app)).status).toBe(503);
+  });
+});
+
+describe("consent routes (#270 — terms/privacy opt-in)", () => {
+  const auth = async () => ({ Authorization: `Bearer ${await kit.sign()}` });
+
+  it("GET /consent is { consented: false } for a user who has never accepted", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/consent", { headers: await auth() });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { consented: boolean; version: string };
+    expect(body.consented).toBe(false);
+    expect(body.version).toBe(CURRENT_TERMS_VERSION);
+  });
+
+  it("POST /consent records the opt-in → a subsequent GET /consent is consented:true", async () => {
+    const { app } = makeApp();
+    const posted = await app.request("/consent", { method: "POST", headers: await auth() });
+    expect(posted.status).toBe(201);
+    expect(((await posted.json()) as { consented: boolean }).consented).toBe(true);
+
+    const got = await app.request("/consent", { headers: await auth() });
+    expect(((await got.json()) as { consented: boolean }).consented).toBe(true);
+  });
+
+  it("401 without a session (consent is per authenticated user)", async () => {
+    const { app } = makeApp();
+    expect((await app.request("/consent")).status).toBe(401);
+    expect((await app.request("/consent", { method: "POST" })).status).toBe(401);
   });
 });

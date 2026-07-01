@@ -1,3 +1,4 @@
+import { CURRENT_TERMS_VERSION } from "@homeos/shared";
 import { HttpResponse, http } from "msw";
 
 // A wrapped { events } payload mirroring rowToSaved: a forwarded row (source_provider null)
@@ -208,6 +209,17 @@ export const handlers = [
 
   // #228 — session+writer-gated POST /binding: mints a wa.me binding code. Tests override for 403/503.
   http.post("*/binding", () => HttpResponse.json({ code: "HOME-ABCDE" }, { status: 201 })),
+
+  // #270 — session-gated GET /consent. Defaults to CONSENTED so full-router tests reach the board (the
+  // ConsentGate only blocks on a definitive consented:false); consent-flow tests override to consented:false.
+  http.get("*/consent", () =>
+    HttpResponse.json({ consented: true, version: CURRENT_TERMS_VERSION }),
+  ),
+
+  // #270 — session-gated POST /consent: records the opt-in, echoes the now-consented status.
+  http.post("*/consent", () =>
+    HttpResponse.json({ consented: true, version: CURRENT_TERMS_VERSION }, { status: 201 }),
+  ),
 
   /**
    * #225 — session-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
