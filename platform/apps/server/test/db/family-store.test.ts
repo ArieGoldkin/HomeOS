@@ -402,3 +402,29 @@ describe("FamilyStore — unbindPhone (#262 revocation)", () => {
     expect(resolver.resolveFamilyByPhone("+972 50-123 4567")).toBeNull();
   });
 });
+
+describe("FamilyStore — consent (#270 opt-in)", () => {
+  it("getConsentVersion is null for an email that has never consented", () => {
+    const store = createFamilyStore(":memory:", seed);
+    expect(store.getConsentVersion("nobody@example.com")).toBeNull();
+  });
+
+  it("records consent, then getConsentVersion returns the accepted version (case-insensitive)", () => {
+    const store = createFamilyStore(":memory:", seed);
+    store.recordConsent({ email: "  Arie@Gmail.com ", familyId: FAMILY_ID, version: "2026-07-01" });
+    // Stored + matched normalized (trim + lower), so a differently-cased read resolves.
+    expect(store.getConsentVersion("arie@gmail.com")).toBe("2026-07-01");
+  });
+
+  it("re-consent upserts on the email PK — the LATEST version wins (a terms bump re-records)", () => {
+    const store = createFamilyStore(":memory:", seed);
+    store.recordConsent({ email: "arie@gmail.com", familyId: FAMILY_ID, version: "2026-07-01" });
+    store.recordConsent({ email: "arie@gmail.com", familyId: FAMILY_ID, version: "2026-09-01" });
+    expect(store.getConsentVersion("arie@gmail.com")).toBe("2026-09-01");
+  });
+
+  it("an empty / garbage email never resolves", () => {
+    const store = createFamilyStore(":memory:", seed);
+    expect(store.getConsentVersion("   ")).toBeNull();
+  });
+});

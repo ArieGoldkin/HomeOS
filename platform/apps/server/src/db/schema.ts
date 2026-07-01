@@ -265,6 +265,31 @@ export const CREATE_FAMILY_PHONES_TABLE = `
   );
 `;
 
+/**
+ * #270 — `consents(email, family_id, consented_at, consent_version)`: the auditable record that a user
+ * accepted the Terms + Privacy conditions (the WhatsApp opt-in + Amendment 13 consent). Keyed by the
+ * verified login `email` (LOWER-cased on write) NOT by a `family_members` row — so consent is captured even
+ * for a session that falls back to the N=1 default membership (no member row yet). One row per email (PK),
+ * upserted on re-consent, so `consent_version` always reflects the LATEST accepted version; a version bump
+ * (a new `CURRENT_TERMS_VERSION`) means the stored version no longer matches → the user re-consents.
+ */
+export const CREATE_CONSENTS_TABLE = `
+  CREATE TABLE IF NOT EXISTS consents (
+    email           TEXT PRIMARY KEY,
+    family_id       TEXT NOT NULL,
+    consented_at    TEXT NOT NULL,
+    consent_version TEXT NOT NULL
+  );
+`;
+
+export interface ConsentRow {
+  /** The verified login email, LOWER-cased on write (matched case-insensitively, like the resolver). */
+  email: string;
+  family_id: string;
+  consented_at: string;
+  consent_version: string;
+}
+
 export interface FamilyRow {
   family_id: string;
   display_name: string;

@@ -418,3 +418,22 @@ export type PhonesResponse = z.infer<typeof phonesResponseSchema>;
  */
 export const bindingResponseSchema = z.object({ code: z.string() });
 export type BindingResponse = z.infer<typeof bindingResponseSchema>;
+
+/**
+ * #270 — the current Terms-of-Use + Privacy version. A user is "consented" only when their stored
+ * `consent_version` equals this; bumping this string (a terms change) invalidates prior consents and
+ * re-prompts everyone. Date-stamped for a human-legible audit trail. The server compares against it; the
+ * web renders it (e.g. on the Terms page) but never decides consent from it — the server is authoritative.
+ */
+export const CURRENT_TERMS_VERSION = "2026-07-01";
+
+/**
+ * #270 — the `GET /consent` + `POST /consent` response: whether the session's user has accepted the CURRENT
+ * terms, and which version is current. The web `ConsentGate` shows the consent screen iff `consented` is
+ * false. Parsed against this so shape drift fails loudly at the boundary, like the other contracts.
+ */
+export const consentStatusSchema = z.object({
+  consented: z.boolean(),
+  version: z.string(),
+});
+export type ConsentStatus = z.infer<typeof consentStatusSchema>;
