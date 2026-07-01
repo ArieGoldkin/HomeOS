@@ -32,6 +32,9 @@ export function rowToSaved(row: EventRow): SavedEvent {
       row.recurrence_freq === "weekly" && row.recurrence_weekday !== null
         ? { freq: "weekly", weekday: row.recurrence_weekday }
         : null,
+    // #224 — the standing daily signal (the digest labels these + surfaces them across the window). Only
+    // 'daily' is valid in slice 1; any other/null value maps to null.
+    standing: row.standing_cadence === "daily" ? { cadence: "daily" } : null,
     source_text: row.source_text,
     source_provider: row.source_provider,
     // #151 — provenance for the UI badge/detail view. `source` is derived (no stored column). F1:

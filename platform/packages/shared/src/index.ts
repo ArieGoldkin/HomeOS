@@ -73,6 +73,21 @@ export const recurrenceSchema = z.object({
 export type Recurrence = z.infer<typeof recurrenceSchema>;
 
 /**
+ * #224 — a STANDING (open-ended, cadence-based) reminder, distinct from weekly {@link recurrenceSchema}.
+ * Slice 1 is `daily` only ("תזכיר לי X באופן קבוע"): a single reminder row that surfaces on the daily
+ * digest EVERY day within a SERVER-BOUNDED window, rather than a one-shot on a single date. Deliberately
+ * separate from `recurrence` so it stays OUT of the Google-Calendar push path (slice 1 = digest-only); the
+ * gate that sets it is LEXICAL + conservative (server-side), never the model's free choice.
+ */
+export const standingSchema = z.object({ cadence: z.literal("daily") });
+export type Standing = z.infer<typeof standingSchema>;
+
+/** #224 — how far ahead a standing daily reminder surfaces (the anchor + this many days). */
+export const STANDING_WINDOW_DAYS = 30;
+/** #224 — hard cap on any standing window (defensive; daily's 30d is well under it). Never surface past this. */
+export const STANDING_MAX_DAYS = 92;
+
+/**
  * #84 — the confidence signal the MODEL emits as a CONSTRAINED ENUM (never free prose): it flags a
  * parse whose required slot is a guess so the handler can ask ONE templated Hebrew question. The
  * deterministic code gate (extract_events) decides whether to ACT on it — only required-slot reasons
@@ -111,6 +126,12 @@ export const parsedEventSchema = z.object({
   // inferred output type and break those literals). The PROMPT + the code gate enforce
   // conservativeness, not the schema. The gate treats null/undefined alike via a truthy check.
   needs_clarification: needsClarificationSchema.nullish(),
+  // #224 — a standing/daily reminder signal. `.nullish()` (optional + nullable) so it's backward-compatible
+  // in BOTH runtime and TYPE: the model omits it (→ undefined) and every existing ParsedEvent/SavedEvent
+  // literal stays valid (a `.default(null)` would force it required in the inferred output type). It is NOT
+  // model-authored on trust — a deterministic LEXICAL gate (server-side) sets it only for a `reminder` whose
+  // text carries a daily-cadence phrase, so a stray value here is conservatively ignored by that gate.
+  standing: standingSchema.nullish(),
 });
 export type ParsedEvent = z.infer<typeof parsedEventSchema>;
 

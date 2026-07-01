@@ -20,8 +20,8 @@ export function prepareStatements(db: DatabaseSync) {
   const insert = db.prepare(
     `INSERT INTO events
        (kind, title_he, date_iso, time, location, assignee, recurrence_freq, recurrence_weekday,
-        source_text, from_phone, wa_message_id, seq, source_provider)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source_text, from_phone, wa_message_id, seq, source_provider, standing_cadence, standing_until)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(wa_message_id, seq) DO UPDATE SET wa_message_id = excluded.wa_message_id
      RETURNING *;`,
   );
@@ -65,13 +65,18 @@ export function prepareStatements(db: DatabaseSync) {
      ORDER BY id DESC
      LIMIT 1;`,
   );
-  // #28: OPEN reminders due on a date (board rows only) for the daily-digest morning nudge. Earliest-time
-  // first; untimed reminders (`time IS NULL` → sorts last) trail. `done` rows excluded so a reminder fires
-  // once on its day and never re-surfaces after being acted on. `kind`/`status` are trusted enum literals.
+  // #28/#224: OPEN reminders due on a date (board rows only) for the daily-digest morning nudge. Earliest-
+  // time first; untimed reminders (`time IS NULL` → sorts last) trail. `done` rows excluded so a reminder
+  // fires once on its day and never re-surfaces after being acted on. `kind`/`status` are trusted enum
+  // literals. #224 — a row matches EITHER as a one-shot on its `date_iso`, OR as a STANDING daily reminder
+  // whose bounded window covers the queried date (anchor `date_iso <= d <= standing_until`) — so one row
+  // surfaces every in-window day without materializing per-day rows. The date `?` is bound THREE times.
   const remindersDueStmt = db.prepare(
     `SELECT * FROM events
-     WHERE source_provider IS NULL AND kind = 'reminder' AND date_iso = ?
+     WHERE source_provider IS NULL AND kind = 'reminder'
        AND (status IS NULL OR status != 'done')
+       AND ( date_iso = ?
+             OR (standing_cadence = 'daily' AND date_iso <= ? AND standing_until >= ?) )
      ORDER BY time IS NULL, time ASC, id ASC;`,
   );
 

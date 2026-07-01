@@ -1,9 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { parsedEventSchema } from "@homeos/shared";
+import { parsedEventSchema, STANDING_MAX_DAYS, STANDING_WINDOW_DAYS } from "@homeos/shared";
 import {
   ADD_EVENTS_SOURCE_PROVIDER,
+  ADD_EVENTS_STANDING_CADENCE,
+  ADD_EVENTS_STANDING_UNTIL,
   ADD_EVENTS_STATUS,
   CREATE_EVENTS_TABLE,
   type EventRow,
@@ -12,6 +14,18 @@ import { hintLikeGroups, likeArg } from "./hint-match.ts";
 import { rowToSaved } from "./mapping.ts";
 import { findByRefBase, prepareStatements } from "./statements.ts";
 import { BULK_CANCEL_MAX, type EventStore } from "./types.ts";
+
+/** #224 — add `days` to a `YYYY-MM-DD` date in UTC (handles month/year rollover), return `YYYY-MM-DD`. */
+function addDaysIso(dateIso: string, days: number): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** #224 — the last date a standing daily reminder surfaces: anchor + the window, hard-capped at the max. */
+function standingUntil(anchorIso: string): string {
+  return addDaysIso(anchorIso, Math.min(STANDING_WINDOW_DAYS, STANDING_MAX_DAYS));
+}
 
 // Public surface of the SQLite EventStore (split out of the former 424-LOC event-store.ts; see
 // docs/refactor/server-decomposition-plan.md, P1). The pure/security-relevant pieces are isolated:
@@ -40,11 +54,18 @@ export function createEventStore(dbPath: string): EventStore {
   if (!cols.some((c) => c.name === "source_provider")) db.exec(ADD_EVENTS_SOURCE_PROVIDER);
   // #19: same idempotent add for the open/done status column (DEFAULT 'open' backfills legacy rows).
   if (!cols.some((c) => c.name === "status")) db.exec(ADD_EVENTS_STATUS);
+  // #224: same self-healing add for the standing-reminder columns (both nullable — non-standing rows stay null).
+  if (!cols.some((c) => c.name === "standing_cadence")) db.exec(ADD_EVENTS_STANDING_CADENCE);
+  if (!cols.some((c) => c.name === "standing_until")) db.exec(ADD_EVENTS_STANDING_UNTIL);
 
   const stmts = prepareStatements(db);
 
   return {
     saveEvent(event, meta) {
+      // #224 — a standing daily reminder gets a bounded window (anchor + STANDING_WINDOW_DAYS); every other
+      // row leaves both columns null. `standing` is deterministic (the parser's lexical gate set it), so we
+      // trust it here. Only `daily` is a valid cadence in slice 1.
+      const isStandingDaily = event.standing?.cadence === "daily";
       const row = stmts.insert.get(
         event.kind,
         event.title_he,
@@ -59,6 +80,8 @@ export function createEventStore(dbPath: string): EventStore {
         meta.waMessageId,
         meta.seq ?? 0,
         meta.sourceProvider ?? null,
+        isStandingDaily ? "daily" : null,
+        isStandingDaily ? standingUntil(event.date_iso) : null,
       ) as unknown as EventRow;
       return rowToSaved(row);
     },
@@ -140,7 +163,9 @@ export function createEventStore(dbPath: string): EventStore {
       return rows.map(rowToSaved);
     },
     remindersDueOn(_familyId, dateIso) {
-      const rows = stmts.remindersDueStmt.all(dateIso) as unknown as EventRow[];
+      // The date `?` is bound three times: the one-shot `date_iso = ?` plus the standing window bounds
+      // (`date_iso <= ?` AND `standing_until >= ?`) — see remindersDueStmt.
+      const rows = stmts.remindersDueStmt.all(dateIso, dateIso, dateIso) as unknown as EventRow[];
       return rows.map(rowToSaved);
     },
     findSlotConflict(_familyId, slot) {

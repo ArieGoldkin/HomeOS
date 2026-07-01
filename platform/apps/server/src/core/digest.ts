@@ -57,7 +57,11 @@ export function buildDigest(
   if (healthLine) lines.push("", healthLine);
   if (reminders.length > 0) {
     lines.push("", "🔔 תזכורות להיום");
-    for (const r of reminders) lines.push(`• ${r.time ? `${r.time} ` : ""}${r.title_he}`);
+    // #224 — a standing daily reminder surfaces here every in-window day; tag it "(יומי)" so a recurring
+    // nudge reads as intentional, not a duplicate.
+    for (const r of reminders) {
+      lines.push(`• ${r.time ? `${r.time} ` : ""}${r.title_he}${r.standing ? " (יומי)" : ""}`);
+    }
   }
   return lines.join("\n");
 }

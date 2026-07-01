@@ -50,6 +50,13 @@ describe("buildDigest", () => {
     expect(msg).toContain("• להתקשר לרופא"); // untimed → no prefix
   });
 
+  it("tags a standing daily reminder with (יומי) so a recurring nudge reads as intentional (#224)", () => {
+    const msg = buildDigest({ events: 0, handled: 0, errors: 0, pending: 0 }, [
+      reminder({ time: null, title_he: "לשתות מים", standing: { cadence: "daily" } }),
+    ]);
+    expect(msg).toContain("• לשתות מים (יומי)");
+  });
+
   it("omits the reminders section when there are none (heartbeat stays clean)", () => {
     expect(buildDigest({ events: 0, handled: 0, errors: 0, pending: 0 })).not.toContain("🔔");
   });
