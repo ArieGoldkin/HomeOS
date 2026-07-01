@@ -1,5 +1,4 @@
 import { CURRENT_TERMS_VERSION } from "@homeos/shared";
-import { Link } from "@tanstack/react-router";
 
 export interface LegalPageProps {
   /** Which legal doc — drives the heading + the placeholder body. */
@@ -28,13 +27,9 @@ export function LegalPage({ kind }: LegalPageProps) {
   return (
     <div className="paper-grain min-h-dvh px-6 py-10">
       <div className="mx-auto max-w-[680px]">
-        <Link
-          to="/welcome"
-          className="text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          → חזרה
-        </Link>
-        <h1 className="mt-4 font-display font-extrabold text-[30px] text-[color:var(--ink)] leading-tight">
+        {/* No in-page back link: this page is opened in a NEW TAB from the consent screen (target=_blank),
+            so "back" has no sensible target — the user closes the tab. Direct visitors use the browser back. */}
+        <h1 className="font-display font-extrabold text-[30px] text-[color:var(--ink)] leading-tight">
           {copy.title}
         </h1>
         <p className="mt-1 font-mono text-[11px] text-muted-foreground uppercase tracking-wider">

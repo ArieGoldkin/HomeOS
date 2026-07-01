@@ -190,7 +190,9 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
       "ON CONFLICT(email) DO UPDATE SET family_id = excluded.family_id, " +
       "consented_at = excluded.consented_at, consent_version = excluded.consent_version;",
   );
-  const getConsentStmt = db.prepare("SELECT consent_version FROM consents WHERE LOWER(email) = ?;");
+  // No LOWER() — the email is stored already-normalized (lower+trimmed), so a plain equality on the PK
+  // column hits the primary-key index; wrapping it in LOWER() would defeat that index for no gain.
+  const getConsentStmt = db.prepare("SELECT consent_version FROM consents WHERE email = ?;");
 
   return {
     getFamily(familyId) {
@@ -206,7 +208,9 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
       return unbindPhoneStmt.run(familyId, normalizePhone(fromPhone)).changes > 0;
     },
     recordConsent({ email, familyId, version }) {
-      recordConsentStmt.run(normalizeEmail(email), familyId, sqliteUtc(new Date()), version);
+      const normalized = normalizeEmail(email);
+      if (normalized === "") return; // never write a blank shared '' PK (mirrors the getConsentVersion guard)
+      recordConsentStmt.run(normalized, familyId, sqliteUtc(new Date()), version);
     },
     getConsentVersion(email) {
       const normalized = normalizeEmail(email);

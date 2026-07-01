@@ -158,6 +158,14 @@ describe("router (one responsive app)", () => {
     expect(screen.queryByTestId("consent-screen")).not.toBeInTheDocument();
   });
 
+  it("FAIL-CLOSED: a GET /consent error blocks the board (retry panel, never the board)", async () => {
+    server.use(http.get("*/consent", () => new HttpResponse("err", { status: 500 })));
+    renderAt("/today", AUTHED);
+    await waitFor(() => expect(screen.getByTestId("consent-fallback")).toBeInTheDocument());
+    // A never-consented user must NOT slip past the gate during a server blip.
+    expect(screen.queryByText("אסיפת הורים בגן")).not.toBeInTheDocument();
+  });
+
   it("renders the standalone Terms and Privacy pages (placeholder legal text)", async () => {
     renderAt("/terms", AUTHED);
     await waitFor(() => expect(screen.getByText("תנאי שימוש")).toBeInTheDocument());
