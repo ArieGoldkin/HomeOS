@@ -1,8 +1,6 @@
 import { Button, Card } from "@shared/ui";
 import { useState } from "react";
 import { ArtGlyph } from "./components/ArtGlyph";
-import { MemberInviteRow } from "./components/MemberInviteRow";
-import { QRConnectBlock } from "./components/QRConnectBlock";
 import { StepDots } from "./components/StepDots";
 
 interface OnboardStep {
@@ -29,16 +27,14 @@ const STEPS: OnboardStep[] = [
   { art: "✓", title: "הכול מוכן", body: "הלוח שלכם מחכה.", cta: "לפתיחת הלוח" },
 ];
 
-const ROSTER = [
-  { name: "אבא", role: "הורה" },
-  { name: "אמא", role: "הורה" },
-  { name: "יואב", role: "ילד" },
-  { name: "נועה", role: "ילדה" },
-];
-
 export interface OnboardingProps {
   /** Called when the user finishes the last step (the final CTA) or dismisses via the close X. */
   onDone?: () => void;
+  /**
+   * Routes to the real Connections screen. The connect (step 1) and invite (step 2) steps link here
+   * instead of showing fake widgets — the actual WhatsApp binding + family invites live on that page.
+   */
+  onGoToConnections?: () => void;
 }
 
 /**
@@ -47,7 +43,7 @@ export interface OnboardingProps {
  * Back, with a close X that dismisses to the board. A standalone no-shell route (/welcome); `onDone` is
  * wired by the route to enter the board (→ /today). Internal step atoms live in components/.
  */
-export function Onboarding({ onDone }: OnboardingProps) {
+export function Onboarding({ onDone, onGoToConnections }: OnboardingProps) {
   const [step, setStep] = useState(0);
   const last = STEPS.length - 1;
   const current = STEPS[step] ?? STEPS[0]!;
@@ -87,13 +83,10 @@ export function Onboarding({ onDone }: OnboardingProps) {
           </h2>
           <p className="text-[15px] text-muted-foreground">{current.body}</p>
 
-          {step === 1 && <QRConnectBlock phone="+972 53-800-1200" />}
-          {step === 2 && (
-            <div className="flex w-full flex-col gap-2">
-              {ROSTER.map((m) => (
-                <MemberInviteRow key={m.name} name={m.name} role={m.role} />
-              ))}
-            </div>
+          {(step === 1 || step === 2) && onGoToConnections && (
+            <Button variant="ghost" onClick={onGoToConnections} className="w-full">
+              {step === 1 ? "לחיבור הוואטסאפ →" : "להזמנת המשפחה →"}
+            </Button>
           )}
 
           <div className="mt-2 flex w-full flex-col gap-2">
