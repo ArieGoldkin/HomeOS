@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { SavedEvent } from "@homeos/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createBindingStore } from "../../src/db/binding-store.ts";
 import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
 import { createInviteStore } from "../../src/db/invite-store.ts";
 import { FAMILY_ID, type InboundRow } from "../../src/db/schema.ts";
@@ -113,6 +114,8 @@ function makeApp(
     calendarInsertThrows?: boolean;
     /** #250 — wire a real in-memory invite store so the POST/GET/DELETE /invites routes exercise it. */
     invites?: boolean;
+    /** #228 — wire a real in-memory binding store so POST /binding exercises the actual issueBinding path. */
+    bindings?: boolean;
   } = {
     appSecret: appKey,
   },
@@ -190,6 +193,8 @@ function makeApp(
         } as unknown as CalendarToolDeps);
   // #250 — a real in-memory invite store when requested, so the /invites routes drive the actual store path.
   const invites = opts.invites ? createInviteStore(":memory:") : undefined;
+  // #228 — a real in-memory binding store when requested, so POST /binding drives the actual issueBinding path.
+  const bindings = opts.bindings ? createBindingStore(":memory:") : undefined;
   const deps: ServerDeps = {
     verifyToken: "secret",
     inbound,
@@ -197,6 +202,7 @@ function makeApp(
     events,
     family,
     invites,
+    bindings,
     botPhone: opts.botPhone,
     calendar,
     autoPushCalendar: opts.autoPush,
@@ -963,5 +969,39 @@ describe("phone admin routes (#262 — owner-only WhatsApp-sender revocation)", 
     const { app } = makeApp(asOwnerWithPhone);
     expect((await app.request("/phones")).status).toBe(401);
     expect((await app.request(`/phones/${BOUND}`, { method: "DELETE" })).status).toBe(401);
+  });
+});
+
+describe("POST /binding (#228 — mint a wa.me binding code)", () => {
+  const auth = async () => ({ Authorization: `Bearer ${await kit.sign()}` });
+  const postBinding = async (app: ReturnType<typeof makeApp>["app"]) =>
+    app.request("/binding", { method: "POST", headers: await auth() });
+
+  it("a writer mints a single-use HOME-XXXXX code (201), scoped to the session's family", async () => {
+    // Default membership → N=1 fallback role 'member' (a writer). No owner gate on binding your own phone.
+    const { app } = makeApp({ bindings: true });
+    const res = await postBinding(app);
+    expect(res.status).toBe(201);
+    const { code } = (await res.json()) as { code: string };
+    // The store mints from the unambiguous alphabet (no 0/O, 1/I/L) — assert the shape, not a fixed value.
+    expect(code).toMatch(/^HOME-[2-9A-HJ-NP-Z]{5}$/);
+  });
+
+  it("a viewer is FORBIDDEN (403 — binding a sender is a writer capability)", async () => {
+    const { app } = makeApp({
+      bindings: true,
+      resolveMembershipByEmail: () => ({ familyId: FAMILY_ID, role: "viewer" }),
+    });
+    expect((await postBinding(app)).status).toBe(403);
+  });
+
+  it("401 without a session", async () => {
+    const { app } = makeApp({ bindings: true });
+    expect((await app.request("/binding", { method: "POST" })).status).toBe(401);
+  });
+
+  it("503 when the binding store is unwired (app-only / dev), even for a writer", async () => {
+    const { app } = makeApp(); // no bindings injected
+    expect((await postBinding(app)).status).toBe(503);
   });
 });

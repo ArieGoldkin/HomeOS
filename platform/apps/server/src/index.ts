@@ -265,6 +265,7 @@ const serverDeps: ServerDeps = {
   allowlist: config.allowlist, // #135 — filters the GET /messages feed (pre-allowlist text never served)
   botPhone: config.botPhone, // #231 — human-readable bot number served by GET /channel (display-only)
   invites, // #250 — owner-only invite store backing POST/GET/DELETE /invites
+  bindings, // #228 — phone-binding store backing POST /binding (mints the wa.me code the web shows)
   appSecret: config.appSecret,
   google: googleDeps,
   calendar: calendarDeps, // #18 — POST /events auto-pushes to Calendar like the bot path (best-effort)

@@ -206,6 +206,9 @@ export const handlers = [
   // #262 — owner-gated DELETE /phones/:phone unbind → 204 No Content. Tests override for the 404 case.
   http.delete("*/phones/:phone", () => new HttpResponse(null, { status: 204 })),
 
+  // #228 — session+writer-gated POST /binding: mints a wa.me binding code. Tests override for 403/503.
+  http.post("*/binding", () => HttpResponse.json({ code: "HOME-ABCDE" }, { status: 201 })),
+
   /**
    * #225 — session-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
    * (id: 999, source_provider: null). Mirrors what the real server returns; auth is the session cookie.
