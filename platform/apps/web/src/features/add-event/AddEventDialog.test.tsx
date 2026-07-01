@@ -21,7 +21,9 @@ function Harness({ onCreate }: { onCreate?: (e: ParsedEvent) => void }) {
 }
 
 function renderHarness(props: { onCreate?: (e: ParsedEvent) => void } = {}) {
-  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={client}>
       <Harness {...props} />
@@ -40,6 +42,28 @@ describe("AddEventDialog (the unified responsive Add host)", () => {
 
     await user.click(screen.getByRole("button", { name: "ביטול" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("offers the real family roster (GET /family) as assignee chips, not a hardcoded list", async () => {
+    // Override /family with a distinctive roster so this fails against any hardcoded PEOPLE array.
+    const { server } = await import("../../test/msw/server");
+    const { HttpResponse, http } = await import("msw");
+    server.use(
+      http.get("*/family", () =>
+        HttpResponse.json({
+          family: { display_name: "בית", whatsappConnected: false },
+          members: [{ name: "סבתא", role: "member" }],
+        }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderHarness();
+
+    await user.click(screen.getByRole("button", { name: "פתח" }));
+    expect(await screen.findByRole("button", { name: /סבתא/ })).toBeInTheDocument();
+    // The old hardcoded roster (אמא/יואב/נועה) must not appear.
+    expect(screen.queryByRole("button", { name: /אמא/ })).not.toBeInTheDocument();
   });
 
   it("persists via the create mutation, fires onCreate, and closes on success", async () => {
