@@ -20,23 +20,25 @@ const { DatabaseSync } = createRequire(import.meta.url)(
 ) as typeof import("node:sqlite");
 
 /**
- * #231 (Slice B) — the `user_id` prefix index.ts stamps on a seeded member until Supabase login (#225's
- * successor) supplies the real `auth.uid()`. EXPORTED so the seed (index.ts) and the verified-join below
- * share ONE source of truth: if the convention changes in one place but not the other, the join silently
- * zeroes out every member's `verified`. The honest fix is the uid↔member binding; this is the N=1 link.
+ * #266 — the `user_id` prefix for a member row whose real `auth.uid()` is not yet known. Two conventions
+ * have used it: the email-genesis owner (`placeholder:email:<email>`, written at boot from
+ * `ALLOWED_LOGIN_EMAILS[0]`) and the LEGACY phone seed (`placeholder:<phone>`, retired). Either is upgraded
+ * to the real `auth.uid()` on first login by {@link FamilyStore.reconcileMemberUid}. EXPORTED so index.ts's
+ * genesis seed and the reconcile share ONE source of truth.
  */
 export const PLACEHOLDER_USER_ID_PREFIX = "placeholder:";
 
 /**
- * One-time, idempotent seed for our single dogfood family (#227). The composition root (index.ts)
- * builds `members` from the existing `config.members` (#14 phone:name) map, with a PLACEHOLDER
- * `userId` until the Supabase-login issue (#225) supplies the real `auth.uid()`. `phones` is optional
- * and intended ONLY for a commented dogfood bootstrap — the real path earns `family_phones` bindings
- * through the wa.me/OTP ceremony (#228), so production seeding leaves it empty.
+ * One-time, idempotent seed for our single dogfood family (#227). The composition root (index.ts) writes the
+ * genesis OWNER from `ALLOWED_LOGIN_EMAILS[0]` (email-keyed, `userId = placeholder:email:<email>`) — #266
+ * retired the phone-keyed `MEMBERS`/`MEMBER_EMAILS` identity seed. `phones` is optional and intended ONLY for
+ * a dogfood bootstrap of `family_phones` — the real path earns bindings through the wa.me/OTP ceremony (#228).
  */
 export interface FamilySeed {
   family: { familyId: string; displayName: string };
-  members: Array<{ userId: string; role: string; displayName: string; email?: string }>;
+  /** #266 — optional: genesis seeds the OWNER via {@link FamilyStore.addMember} (not this array), so a seed
+   *  may carry only `{ family }`. Kept for tests + any future config-seeded member set. */
+  members?: Array<{ userId: string; role: string; displayName: string; email?: string }>;
   phones?: Array<{ fromPhone: string; verifiedAt: string }>;
 }
 
@@ -47,20 +49,19 @@ export interface FamilySeed {
  * this issue's surface is deliberately read-only. At N=1 every lookup is `WHERE family_id = ?`, which
  * is trivially correct with no second tenant to leak to (no RLS needed; that's deferred).
  */
-/** #231 (Slice B) — a roster member plus a derived `verified`: whether their phone is bound in family_phones. */
-export type VerifiedMemberRow = FamilyMemberRow & { verified: boolean };
-
 export interface FamilyStore {
   getFamily(familyId: string): FamilyRow | null;
   listMembers(familyId: string): FamilyMemberRow[];
   listPhones(familyId: string): FamilyPhoneRow[];
   /**
-   * #231 (Slice B) — members with a derived `verified` flag: true iff the member's placeholder phone
-   * (the digits after {@link PLACEHOLDER_USER_ID_PREFIX} in `user_id`) is bound in family_phones. Both
-   * sides reduce to digits via `normalizePhone`, so a config "+972 50-…" member matches the normalized
-   * stored `from_phone`. A non-placeholder `user_id` (a future real auth.uid) carries no phone here → false.
+   * #266 — upgrade a member's PLACEHOLDER `user_id` to the real `auth.uid()` in place, matched by
+   * `(family_id, LOWER(email))`. Matches BOTH the email-genesis owner (`placeholder:email:<email>`) AND the
+   * legacy `placeholder:<phone>` row (so the live prod owner is upgraded on next login) via
+   * `user_id LIKE 'placeholder:%'`. IDEMPOTENT: once the uid is real it no longer matches the LIKE, so a
+   * retried/concurrent reconcile is a no-op. Returns true iff a row was upgraded. This lights up the deferred
+   * `auth.uid() = user_id` RLS NOW — no placeholder backfill needed at the Postgres migration.
    */
-  listMembersWithVerification(familyId: string): VerifiedMemberRow[];
+  reconcileMemberUid(member: { familyId: string; email: string; userId: string }): boolean;
   /**
    * #250 (Slice 2) — upsert a member, exposing the boot-seed upsert for the claim-on-first-login path. Runs
    * the EXACT same `INSERT … ON CONFLICT(family_id, user_id) DO UPDATE` as the seed (role FIRST-WINS;
@@ -113,7 +114,7 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
       seed.family.familyId,
       seed.family.displayName,
     );
-    for (const m of seed.members) {
+    for (const m of seed.members ?? []) {
       // role stays first-wins (frozen); display_name + email are upserted so a config change reflects on
       // the next boot (uid↔member binding — the email is the membership-by-email match key, normalized on
       // write so the stored column can never drift from the resolver's LOWER(email) match).
@@ -144,6 +145,11 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   const listPhonesStmt = db.prepare(
     "SELECT * FROM family_phones WHERE family_id = ? ORDER BY created_at, from_phone;",
   );
+  // #266 — flip a placeholder member to the real auth.uid in place. The `LIKE 'placeholder:%'` guard makes it
+  // idempotent (a real uid never matches) and scopes it to un-reconciled rows; matched by family + email.
+  const reconcileUidStmt = db.prepare(
+    "UPDATE family_members SET user_id = ? WHERE family_id = ? AND LOWER(email) = ? AND user_id LIKE 'placeholder:%';",
+  );
 
   return {
     getFamily(familyId) {
@@ -155,18 +161,8 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     listPhones(familyId) {
       return listPhonesStmt.all(familyId) as unknown as FamilyPhoneRow[];
     },
-    listMembersWithVerification(familyId) {
-      const members = listMembersStmt.all(familyId) as unknown as FamilyMemberRow[];
-      // from_phone is stored digit-normalized by the seed/ceremony, so the set holds comparable digits.
-      const verifiedPhones = new Set(
-        (listPhonesStmt.all(familyId) as unknown as FamilyPhoneRow[]).map((p) => p.from_phone),
-      );
-      return members.map((m) => {
-        const phone = m.user_id.startsWith(PLACEHOLDER_USER_ID_PREFIX)
-          ? normalizePhone(m.user_id.slice(PLACEHOLDER_USER_ID_PREFIX.length))
-          : "";
-        return { ...m, verified: phone !== "" && verifiedPhones.has(phone) };
-      });
+    reconcileMemberUid({ familyId, email, userId }) {
+      return reconcileUidStmt.run(userId, familyId, normalizeEmail(email)).changes > 0;
     },
     addMember({ familyId, userId, role, displayName, email }) {
       insertMemberStmt.run(

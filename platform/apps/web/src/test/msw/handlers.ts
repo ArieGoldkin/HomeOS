@@ -56,16 +56,16 @@ export const sampleMessages = [
   },
 ];
 
-// #235/#231 — a wrapped { family, members } payload mirroring GET /family: the family display name + the
-// 4-member roster with real Hebrew names (what the web app reads instead of the hardcoded KNOWN_ROSTER/
-// HOUSEHOLD). `verified` (#231) marks who has a bound phone — the parents here, so LinkedMembers shows them.
+// #235 — a wrapped { family, members } payload mirroring GET /family: the family display name + the 4-member
+// roster with real Hebrew names (what the web app reads instead of the hardcoded KNOWN_ROSTER/HOUSEHOLD).
+// #266 — per-member `verified` retired; `family.whatsappConnected` is the family-level WhatsApp signal.
 export const sampleFamily = {
-  family: { display_name: "משפחת הבית" },
+  family: { display_name: "משפחת הבית", whatsappConnected: true },
   members: [
-    { name: "אבא", role: "owner", verified: true },
-    { name: "אמא", role: "member", verified: true },
-    { name: "יואב", role: "member", verified: false },
-    { name: "נועה", role: "member", verified: false },
+    { name: "אבא", role: "owner" },
+    { name: "אמא", role: "member" },
+    { name: "יואב", role: "member" },
+    { name: "נועה", role: "member" },
   ],
 };
 

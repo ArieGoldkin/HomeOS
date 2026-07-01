@@ -9,11 +9,12 @@ describe("fetchFamily", () => {
     const roster = await fetchFamily();
     expect(roster.family.display_name).toBe("משפחת הבית");
     expect(roster.members).toHaveLength(4);
-    // #231 — members now carry `verified` (אבא is a bound parent in the sample roster).
-    expect(roster.members[0]).toEqual({ name: "אבא", role: "owner", verified: true });
+    // #266 — members are {name, role}; per-member `verified` was retired.
+    expect(roster.members[0]).toEqual({ name: "אבא", role: "owner" });
   });
 
-  it("#231 — defaults `verified` to false when the server omits it (additive schema)", async () => {
+  it("#266 — reads the family-level whatsappConnected signal; defaults to false when omitted", async () => {
+    expect((await fetchFamily()).family.whatsappConnected).toBe(true); // sampleFamily has it true
     server.use(
       http.get("*/family", () =>
         HttpResponse.json({
@@ -23,7 +24,7 @@ describe("fetchFamily", () => {
       ),
     );
     const roster = await fetchFamily();
-    expect(roster.members[0]?.verified).toBe(false);
+    expect(roster.family.whatsappConnected).toBe(false); // additive default
   });
 
   it("throws on a 401 (bad/missing session)", async () => {

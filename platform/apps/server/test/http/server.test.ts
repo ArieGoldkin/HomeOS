@@ -354,30 +354,30 @@ describe("GET /events (read seam)", () => {
 });
 
 describe("GET /family (roster read seam, #235)", () => {
-  it("returns family.display_name + seeded members (real names, not the placeholder user_id)", async () => {
+  it("returns family.display_name + seeded members ({name, role}); whatsappConnected false with no phones", async () => {
     const { app } = makeApp();
     const res = await app.request("/family", {
       headers: { Authorization: `Bearer ${await kit.sign()}` },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      family: { display_name: string };
-      members: Array<{ name: string; role: string; verified: boolean }>;
+      family: { display_name: string; whatsappConnected: boolean };
+      members: Array<{ name: string; role: string }>;
     };
     expect(body.family.display_name).toBe("משפחת הבית");
-    // #231 — `verified` is present and false here: the default seed binds NO phones (production default).
+    // #266 — per-member `verified` retired; the default seed binds NO phones → family-level not connected.
+    expect(body.family.whatsappConnected).toBe(false);
     expect(body.members).toEqual([
-      { name: "אבא", role: "owner", verified: false },
-      { name: "אמא", role: "member", verified: false },
+      { name: "אבא", role: "owner" },
+      { name: "אמא", role: "member" },
     ]);
   });
 
-  it("#231 — marks a member verified when their placeholder phone is bound in family_phones", async () => {
+  it("#266 — family.whatsappConnected is true when the family has any bound phone (family-level signal)", async () => {
     const familySeed: FamilySeed = {
       family: { familyId: FAMILY_ID, displayName: "משפחת הבית" },
       members: [
-        { userId: "placeholder:+972 50-123 4567", role: "owner", displayName: "אבא" },
-        { userId: "placeholder:+972 54-999 8888", role: "member", displayName: "אמא" },
+        { userId: "auth-uid-1", role: "owner", displayName: "אבא", email: "dad@example.com" },
       ],
       phones: [{ fromPhone: "972501234567", verifiedAt: "2026-06-26 09:00:00" }],
     };
@@ -385,9 +385,8 @@ describe("GET /family (roster read seam, #235)", () => {
     const res = await app.request("/family", {
       headers: { Authorization: `Bearer ${await kit.sign()}` },
     });
-    const body = (await res.json()) as { members: Array<{ name: string; verified: boolean }> };
-    expect(body.members.find((m) => m.name === "אבא")?.verified).toBe(true);
-    expect(body.members.find((m) => m.name === "אמא")?.verified).toBe(false);
+    const body = (await res.json()) as { family: { whatsappConnected: boolean } };
+    expect(body.family.whatsappConnected).toBe(true);
   });
 
   it("returns 401 without a token or with an invalid one", async () => {

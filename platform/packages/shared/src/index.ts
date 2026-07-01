@@ -291,18 +291,18 @@ export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 
 /**
  * #235 — one family-roster member as served by `GET /family`: a display `name` (sourced from the #14
- * `config.members` map, NOT the placeholder `user_id`) + a free-text `role` ("owner"/"member" today).
- * `name` is a Hebrew display string; render numerals/phones LTR-wrapped per the RTL rules.
+ * `config.members` map / a member's display_name, NOT the placeholder `user_id`) + a free-text `role`
+ * ("owner"/"member" today). `name` is a Hebrew display string; render numerals/phones LTR-wrapped per the RTL rules.
  *
- * #231 (Slice B) — `verified` reports whether this member's phone is bound in `family_phones` (a completed
- * binding, `verified_at` set). The connections page's `LinkedMembers` shows verified members; the People
- * board (`FamilyView`) ignores the flag and lists everyone. `.default(false)` keeps the field additive: the
- * server always emits it, while older fixtures/consumers that omit it parse as unverified rather than failing.
+ * #266 — the per-member `verified` flag was RETIRED. It derived from a `placeholder:<phone>` ∩ `family_phones`
+ * intersection, which is unanswerable once members carry real `auth.uid()`s (genesis is email-keyed now) AND
+ * is conceptually wrong: `family_phones` is FAMILY-scoped, never member-scoped. WhatsApp connectivity is now a
+ * FAMILY-level signal — see {@link familyRosterResponseSchema}'s `family.whatsappConnected`. A genuine
+ * per-member verified needs a real `uid↔phone` binding table (deferred to N>1).
  */
 export const familyMemberSchema = z.object({
   name: z.string(),
   role: z.string(),
-  verified: z.boolean().default(false),
 });
 export type FamilyMember = z.infer<typeof familyMemberSchema>;
 
@@ -312,9 +312,17 @@ export type FamilyMember = z.infer<typeof familyMemberSchema>;
  * fails loudly at the boundary, exactly like {@link savedEventsResponseSchema}. `family_id` is intentionally
  * NOT served — the route is already `familyId`-scoped server-side (N=1 `FAMILY_ID`), and a tenant id on the
  * wire is noise the single-family web app never needs (it stays additive for Phase-B/RLS).
+ *
+ * #266 — `family.whatsappConnected` is the FAMILY-level WhatsApp signal that replaces the retired per-member
+ * `verified` flag: true iff the family has ≥1 bound phone in `family_phones` (a completed #228 binding). The
+ * connections page renders it as "WhatsApp connected to this home". `.default(false)` keeps it additive (older
+ * fixtures/consumers that omit it parse as not-connected rather than failing).
  */
 export const familyRosterResponseSchema = z.object({
-  family: z.object({ display_name: z.string() }),
+  family: z.object({
+    display_name: z.string(),
+    whatsappConnected: z.boolean().default(false),
+  }),
   members: z.array(familyMemberSchema),
 });
 export type FamilyRosterResponse = z.infer<typeof familyRosterResponseSchema>;

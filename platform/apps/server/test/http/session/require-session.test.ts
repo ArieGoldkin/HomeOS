@@ -259,6 +259,47 @@ describe("requireSession", () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it("#266 — reconciles an admitted member's placeholder uid to the real session uid (family+email)", async () => {
+    const seen: Array<{ familyId: string; email: string; userId: string }> = [];
+    const app = makeApp({
+      resolveMembershipByEmail: () => ({ familyId: "fam-x", role: "owner" }),
+      reconcileMemberUid: (m) => seen.push(m),
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` }, // sub user-123 / dad@example.com
+    });
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([{ familyId: "fam-x", email: "dad@example.com", userId: "user-123" }]);
+  });
+
+  it("#266 — does NOT reconcile when admission falls to the floor (no member row to upgrade)", async () => {
+    const reconcile = vi.fn();
+    const app = makeApp({
+      allowedEmails: new Set(["dad@example.com"]),
+      resolveMembershipByEmail: () => null, // floor admits; resolved stays null → nothing to reconcile
+      reconcileMemberUid: reconcile,
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(200);
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it("#266 — FAIL-OPEN: a reconcile error never blocks an already-admitted session", async () => {
+    const app = makeApp({
+      resolveMembershipByEmail: () => ({ familyId: "fam-x", role: "owner" }),
+      reconcileMemberUid: () => {
+        throw new Error("db write failed");
+      },
+    });
+    const res = await app.request("/protected", {
+      headers: { authorization: `Bearer ${await sign()}` },
+    });
+    expect(res.status).toBe(200); // admitted despite the reconcile throw
+    expect(await res.json()).toMatchObject({ familyId: "fam-x", role: "owner" });
+  });
 });
 
 describe("requireWrite (#226 — role gate, not a second secret)", () => {

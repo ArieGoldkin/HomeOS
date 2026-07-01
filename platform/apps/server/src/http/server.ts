@@ -163,13 +163,14 @@ export function createServer(deps: ServerDeps): Hono {
     const familyId = (c.var as SessionVars).familyId;
     const row = deps.family.getFamily(familyId);
     if (row === null) return c.text("Not found", 404);
-    // #231 (Slice B) — each member carries `verified` (their placeholder phone ∈ family_phones). The People
-    // board ignores it; the connections page's LinkedMembers filters on it. Additive — the {name,role} shape
-    // is unchanged for existing consumers.
     const members = deps.family
-      .listMembersWithVerification(familyId)
-      .map((m) => ({ name: m.display_name ?? "", role: m.role, verified: m.verified }));
-    return c.json({ family: { display_name: row.display_name }, members });
+      .listMembers(familyId)
+      .map((m) => ({ name: m.display_name ?? "", role: m.role }));
+    // #266 — WhatsApp connectivity is now a FAMILY-level signal (was a per-member `verified` flag, retired):
+    // family_phones is family-scoped, so "is a number bound to this home?" is the honest question. The
+    // connections page renders it; a per-member badge needs a real uid↔phone binding (deferred to N>1).
+    const whatsappConnected = deps.family.listPhones(familyId).length > 0;
+    return c.json({ family: { display_name: row.display_name, whatsappConnected }, members });
   });
 
   // #231 (Slice B) — the WhatsApp channel's human-readable bot number for the connections page. Session-gated

@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFamilyStore, type FamilySeed } from "../../src/db/family-store.ts";
+import {
+  createFamilyStore,
+  type FamilySeed,
+  PLACEHOLDER_USER_ID_PREFIX,
+} from "../../src/db/family-store.ts";
 import { FAMILY_ID } from "../../src/db/schema.ts";
 
 const { DatabaseSync } = createRequire(import.meta.url)(
@@ -174,38 +178,133 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(arie?.display_name).toBe("אבא"); // the pre-existing display_name path still works
   });
 
-  it("#231 — listMembersWithVerification flags a member whose placeholder phone is bound; others false", () => {
-    // Two members keyed by their (raw, un-normalized) phones; only the first phone is bound in family_phones.
-    const withPhones: FamilySeed = {
-      family: { familyId: FAMILY_ID, displayName: "Test Household" },
-      members: [
-        { userId: "placeholder:+972 50-123 4567", role: "owner", displayName: "אבא" },
-        { userId: "placeholder:+972 54-999 8888", role: "member", displayName: "אמא" },
-      ],
-      // stored digit-normalized by the store → "972501234567" — matches אבא's number despite the formatting.
-      phones: [{ fromPhone: "+972-50-123-4567", verifiedAt: "2026-06-26 09:00:00" }],
-    };
-    const store = createFamilyStore(":memory:", withPhones);
-    const members = store.listMembersWithVerification(FAMILY_ID);
-    const byName = (n: string) => members.find((m) => m.display_name === n);
-    expect(byName("אבא")?.verified).toBe(true); // bound phone (normalized match across formats)
-    expect(byName("אמא")?.verified).toBe(false); // no binding → unverified
-  });
-
-  it("#231 — every member is unverified when no phones are bound (the production default)", () => {
-    const store = createFamilyStore(":memory:", seed); // seed has NO phones
-    const members = store.listMembersWithVerification(FAMILY_ID);
-    expect(members).toHaveLength(2);
-    expect(members.every((m) => m.verified === false)).toBe(true);
-  });
-
-  it("#231 — a non-placeholder user_id (a future real auth.uid) carries no phone → unverified", () => {
+  it("#266 — reconcileMemberUid upgrades the email-genesis placeholder owner to the real auth.uid in place", () => {
     const store = createFamilyStore(":memory:", {
       family: { familyId: FAMILY_ID, displayName: "Test Household" },
-      members: [{ userId: "auth-uid-abc123", role: "owner", displayName: "אבא" }],
-      phones: [{ fromPhone: "972501234567", verifiedAt: "2026-06-26 09:00:00" }],
+      members: [
+        {
+          userId: "placeholder:email:arie@gmail.com",
+          role: "owner",
+          displayName: "arie",
+          email: "arie@gmail.com",
+        },
+      ],
     });
-    expect(store.listMembersWithVerification(FAMILY_ID)[0]?.verified).toBe(false);
+    // Matched case-insensitively by email; the verified JWT email may differ in case.
+    expect(
+      store.reconcileMemberUid({
+        familyId: FAMILY_ID,
+        email: "Arie@Gmail.com",
+        userId: "auth-uid-real",
+      }),
+    ).toBe(true);
+    const owner = store.listMembers(FAMILY_ID)[0];
+    expect(owner?.user_id).toBe("auth-uid-real");
+    expect(owner?.role).toBe("owner"); // role untouched
+    expect(owner?.email).toBe("arie@gmail.com");
+  });
+
+  it("#266 — reconcileMemberUid also upgrades a LEGACY placeholder:<phone> owner (prod migration, for free)", () => {
+    const path = tmpDbPath();
+    // Simulate the live prod row: phone-keyed placeholder + the owner's email already on it.
+    const store = createFamilyStore(path, {
+      family: { familyId: FAMILY_ID, displayName: "Test Household" },
+      members: [
+        {
+          userId: "placeholder:972547039199",
+          role: "owner",
+          displayName: "אבא",
+          email: "arie@gmail.com",
+        },
+      ],
+    });
+    expect(
+      store.reconcileMemberUid({
+        familyId: FAMILY_ID,
+        email: "arie@gmail.com",
+        userId: "auth-uid-real",
+      }),
+    ).toBe(true);
+    expect(store.listMembers(FAMILY_ID)[0]?.user_id).toBe("auth-uid-real");
+  });
+
+  it("#266 — reconcileMemberUid is idempotent: a second/concurrent call (uid already real) is a no-op", () => {
+    const store = createFamilyStore(":memory:", {
+      family: { familyId: FAMILY_ID, displayName: "Test Household" },
+      members: [
+        {
+          userId: "placeholder:email:arie@gmail.com",
+          role: "owner",
+          displayName: "arie",
+          email: "arie@gmail.com",
+        },
+      ],
+    });
+    expect(
+      store.reconcileMemberUid({
+        familyId: FAMILY_ID,
+        email: "arie@gmail.com",
+        userId: "auth-uid-real",
+      }),
+    ).toBe(true);
+    // The row no longer matches LIKE 'placeholder:%' → false, and never flips to a different uid.
+    expect(
+      store.reconcileMemberUid({
+        familyId: FAMILY_ID,
+        email: "arie@gmail.com",
+        userId: "auth-uid-OTHER",
+      }),
+    ).toBe(false);
+    expect(store.listMembers(FAMILY_ID)[0]?.user_id).toBe("auth-uid-real");
+  });
+
+  it("#266 — reconcileMemberUid returns false for an unknown email (no row upgraded)", () => {
+    const store = createFamilyStore(":memory:", seed);
+    expect(
+      store.reconcileMemberUid({ familyId: FAMILY_ID, email: "stranger@example.com", userId: "x" }),
+    ).toBe(false);
+  });
+
+  // The exact has-owner-guarded email-genesis the composition root (index.ts) runs — verified against the
+  // real store + the resolver the gate reads, so the owner is admitted as `owner` by a pure read.
+  function genesisSeed(store: ReturnType<typeof createFamilyStore>, ownerEmail: string) {
+    const hasOwner = store.listMembers(FAMILY_ID).some((m) => m.role === "owner");
+    if (!hasOwner) {
+      store.addMember({
+        familyId: FAMILY_ID,
+        userId: `${PLACEHOLDER_USER_ID_PREFIX}email:${ownerEmail.toLowerCase()}`,
+        role: "owner",
+        displayName: ownerEmail.split("@")[0],
+        email: ownerEmail,
+      });
+    }
+  }
+
+  it("#266 — email genesis: a fresh DB seeds the owner from [0]; the resolver resolves it as owner (admit-by-read)", async () => {
+    const path = tmpDbPath();
+    const store = createFamilyStore(path, {
+      family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
+    });
+    genesisSeed(store, "arie@gmail.com");
+    const { createFamilyResolver } = await import("../../src/db/family-resolver.ts");
+    expect(createFamilyResolver(path).resolveMembershipByEmail("arie@gmail.com")).toEqual({
+      familyId: FAMILY_ID,
+      role: "owner",
+    });
+  });
+
+  it("#266 — email genesis is idempotent: re-running on a DB that already has an owner adds no second owner", () => {
+    const path = tmpDbPath();
+    const store = createFamilyStore(path, {
+      family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
+    });
+    genesisSeed(store, "arie@gmail.com");
+    genesisSeed(createFamilyStore(path), "someone-else@gmail.com"); // second boot, different [0]
+    const owners = createFamilyStore(path)
+      .listMembers(FAMILY_ID)
+      .filter((m) => m.role === "owner");
+    expect(owners).toHaveLength(1);
+    expect(owners[0]?.email).toBe("arie@gmail.com"); // first-wins; the genesis never moves ownership
   });
 
   it("#250 — addMember inserts a member with the real auth.uid and a normalized email (the claim path)", () => {
