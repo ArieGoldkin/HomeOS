@@ -104,6 +104,17 @@ function WelcomeScreen() {
   );
 }
 
+// The People screen (roster). Its "+ הזמנת בן בית" affordance routes to the real Connections invite surface
+// (the owner-only InviteMembers card) — previously the button had no handler and did nothing.
+function PeopleScreen() {
+  const navigate = useNavigate();
+  return (
+    <FamilyView
+      onAddMember={() => navigate({ to: "/connections", search: { status: undefined } })}
+    />
+  );
+}
+
 /**
  * #225 — the router carries the live Supabase auth state in its context (App.tsx feeds it in from
  * `useCurrentUser`). The default is UNAUTHENTICATED so a router that's never given context fails safe to
@@ -177,7 +188,7 @@ function buildRouteTree() {
   const peopleRoute = createRoute({
     getParentRoute: () => appRoute,
     path: "/people",
-    component: FamilyView,
+    component: PeopleScreen,
   });
 
   const connectionsRoute = createRoute({

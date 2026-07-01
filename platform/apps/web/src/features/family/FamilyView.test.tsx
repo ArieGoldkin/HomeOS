@@ -15,17 +15,22 @@ function wrap(node: ReactNode) {
 const INVITE = "+ הזמנת בן בית";
 
 describe("FamilyView (People, data-connected)", () => {
-  it("renders the household header + a data table of the known roster", async () => {
+  it("renders the household header + a data table of the real GET /family roster", async () => {
     render(wrap(<FamilyView />));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("בני הבית");
     await waitFor(() => expect(screen.getByText("אבא")).toBeInTheDocument());
     for (const name of ["אמא", "יואב", "נועה"]) {
       expect(screen.getByText(name)).toBeInTheDocument();
     }
-    for (const col of ["שם", "סטטוס", "תפקיד"]) {
+    // Columns are name + role only — the fake "סטטוס"/"פעיל" presence column is gone.
+    for (const col of ["שם", "תפקיד"]) {
       expect(screen.getByText(col)).toBeInTheDocument();
     }
-    expect(screen.getAllByText("הורה").length).toBeGreaterThanOrEqual(2); // אבא + אמא
+    expect(screen.queryByText("סטטוס")).not.toBeInTheDocument();
+    expect(screen.queryByText("פעיל")).not.toBeInTheDocument();
+    // Honest role from the server ownership axis: אבא is the owner (בעלים), the rest are household members.
+    expect(screen.getByText("בעלים")).toBeInTheDocument();
+    expect(screen.getAllByText("בן בית")).toHaveLength(3); // אמא + יואב + נועה
   });
 
   it("shows the household-count stat chip", async () => {
@@ -33,7 +38,8 @@ describe("FamilyView (People, data-connected)", () => {
     await waitFor(() => expect(screen.getByText(/בני בית/)).toBeInTheDocument());
   });
 
-  it("derives a new assignee from events into the roster", async () => {
+  it("does NOT fabricate members from event assignees — the roster is only GET /family (honest roster)", async () => {
+    // Even with an event assigned to a non-member (סבתא), the People roster must not list them as a member.
     server.use(
       http.get("*/events", () =>
         HttpResponse.json({
@@ -55,8 +61,8 @@ describe("FamilyView (People, data-connected)", () => {
       ),
     );
     render(wrap(<FamilyView />));
-    await waitFor(() => expect(screen.getByText("סבתא")).toBeInTheDocument());
-    expect(screen.getByText("אבא")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("אבא")).toBeInTheDocument()); // a real member renders
+    expect(screen.queryByText("סבתא")).not.toBeInTheDocument(); // an event-only assignee is NOT a member
   });
 
   it("renders members from the GET /family payload, not a hardcoded list (#235 un-mock)", async () => {

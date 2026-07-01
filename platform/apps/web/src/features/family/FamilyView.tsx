@@ -1,8 +1,7 @@
-import type { SavedEvent } from "@homeos/shared";
 import { PersonAvatar } from "@shared/board";
-import { useEvents, useFamily } from "@shared/hooks";
+import { useFamily } from "@shared/hooks";
 import { cn } from "@shared/lib";
-import { Button, Card, Skeleton, StatusPill } from "@shared/ui";
+import { Button, Card, Skeleton } from "@shared/ui";
 
 const SKELETON_ROWS = ["sk1", "sk2", "sk3", "sk4"];
 
@@ -13,39 +12,22 @@ export interface FamilyViewProps {
 }
 
 /**
- * #235 — the displayed role label stays a NAME-based parent/household heuristic. The server `role` is an
- * ownership axis ("owner"/"member"), NOT the parent-vs-household-member taxonomy the table shows (e.g. אמא
- * is a "member" by ownership but a "הורה"/parent here), so mapping the server role would mislabel her.
+ * The role label from the server's ownership axis — the family owner vs a household member. That axis is the
+ * ONLY role HomeOS actually stores (there is no parent-vs-child taxonomy), so we show it honestly rather than
+ * guessing "parent" from a name.
  */
-function roleOf(name: string): string {
-  return name === "אבא" || name === "אמא" ? "הורה" : "בן בית";
-}
-
-/** #235 — the roster = the server family members (names) UNION any distinct event assignees not already
- *  listed (so a person who only shows up as an assignee still appears). */
-function rosterFrom(memberNames: string[], events: SavedEvent[] | undefined): string[] {
-  const seen = new Set<string>(memberNames);
-  const extra: string[] = [];
-  for (const event of events ?? []) {
-    const a = event.assignee;
-    if (a && a !== "כולם" && !seen.has(a)) {
-      seen.add(a);
-      extra.push(a);
-    }
-  }
-  return [...memberNames, ...extra];
+function roleLabel(role: string): string {
+  return role === "owner" ? "בעלים" : "בן בית";
 }
 
 /**
- * The People screen (#181) — the Modern "household" layout: kicker + heading + invite, a stat chip, and
- * a data table (avatar+name · status · role) per design-system §08. The roster derives from the known
- * names UNION any distinct event assignees. Status is a static placeholder ("פעיל") — real presence is
- * deferred (not server-backed); roles are a simple parent/member mapping.
+ * The People screen (#181) — the "household" layout: kicker + heading + invite, a stat chip, and a data
+ * table (avatar+name · role) per design-system §08. The roster is EXACTLY the real `GET /family` members
+ * (no fabricated entries — previously it also unioned in distinct event-assignee names, which are NOT
+ * members). Role is the server's owner/member axis; there is no fake presence status.
  */
 export function FamilyView({ onAddMember, className }: FamilyViewProps) {
-  // #235 — roster names from the real GET /family route; events still supply any extra assignees.
   const { status, data: family } = useFamily();
-  const { data: events } = useEvents();
 
   const header = (
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -89,7 +71,7 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
     );
   }
 
-  const members = rosterFrom(family?.members.map((m) => m.name) ?? [], events);
+  const members = family?.members ?? [];
 
   return (
     <div className={cn("flex flex-col gap-6", className)}>
@@ -106,11 +88,8 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-[var(--line)] border-b">
-              <th className="w-1/2 px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
+              <th className="w-2/3 px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
                 שם
-              </th>
-              <th className="px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
-                סטטוס
               </th>
               <th className="px-5 py-3 text-start font-mono text-[11px] font-medium text-muted-foreground uppercase tracking-[0.05em]">
                 תפקיד
@@ -118,23 +97,20 @@ export function FamilyView({ onAddMember, className }: FamilyViewProps) {
             </tr>
           </thead>
           <tbody>
-            {members.map((name, i) => (
+            {members.map((member, i) => (
               <tr
-                key={name}
+                key={member.name}
                 className={cn(i < members.length - 1 && "border-[var(--line)] border-b")}
               >
                 <td className="px-5 py-3">
                   <span className="flex items-center gap-3">
-                    <PersonAvatar name={name} size={30} />
+                    <PersonAvatar name={member.name} size={30} />
                     <span className="font-semibold text-[13.5px] text-[color:var(--ink-2)]">
-                      {name}
+                      {member.name}
                     </span>
                   </span>
                 </td>
-                <td className="px-5 py-3">
-                  <StatusPill tone="active">פעיל</StatusPill>
-                </td>
-                <td className="px-5 py-3 text-[13px] text-ink-soft">{roleOf(name)}</td>
+                <td className="px-5 py-3 text-[13px] text-ink-soft">{roleLabel(member.role)}</td>
               </tr>
             ))}
           </tbody>

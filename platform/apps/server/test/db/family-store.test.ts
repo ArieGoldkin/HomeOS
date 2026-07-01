@@ -307,6 +307,45 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(owners[0]?.email).toBe("arie@gmail.com"); // first-wins; the genesis never moves ownership
   });
 
+  it("#266 heal — healOwnerEmail attaches the genesis email to a pre-existing email-LESS owner row", async () => {
+    const path = tmpDbPath();
+    const store = createFamilyStore(path, {
+      family: { familyId: FAMILY_ID, displayName: "HomeOS Family" },
+    });
+    // A legacy phone-seed owner row: role=owner, NO email — the row that short-circuits the genesis seed.
+    store.addMember({
+      familyId: FAMILY_ID,
+      userId: "placeholder:972500000000",
+      role: "owner",
+      displayName: "אבא",
+    });
+    expect(store.healOwnerEmail(FAMILY_ID, "arie@gmail.com")).toBe(true);
+    // After the heal the membership-by-email resolver admits the owner (requireOwner would pass).
+    const { createFamilyResolver } = await import("../../src/db/family-resolver.ts");
+    expect(createFamilyResolver(path).resolveMembershipByEmail("arie@gmail.com")).toEqual({
+      familyId: FAMILY_ID,
+      role: "owner",
+    });
+  });
+
+  it("#266 heal — healOwnerEmail never overwrites an owner that already carries an email", () => {
+    const store = createFamilyStore(":memory:");
+    store.addMember({
+      familyId: FAMILY_ID,
+      userId: "placeholder:email:arie@gmail.com",
+      role: "owner",
+      displayName: "אבא",
+      email: "arie@gmail.com",
+    });
+    expect(store.healOwnerEmail(FAMILY_ID, "someone-else@gmail.com")).toBe(false);
+    expect(store.listMembers(FAMILY_ID)[0]?.email).toBe("arie@gmail.com"); // unchanged
+  });
+
+  it("#266 heal — healOwnerEmail returns false when there is no owner row", () => {
+    const store = createFamilyStore(":memory:");
+    expect(store.healOwnerEmail(FAMILY_ID, "arie@gmail.com")).toBe(false);
+  });
+
   it("#250 — addMember inserts a member with the real auth.uid and a normalized email (the claim path)", () => {
     const store = createFamilyStore(":memory:", seed);
     store.addMember({

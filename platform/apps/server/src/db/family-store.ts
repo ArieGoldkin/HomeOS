@@ -77,6 +77,17 @@ export interface FamilyStore {
    */
   reconcileMemberUid(member: { familyId: string; email: string; userId: string }): boolean;
   /**
+   * #266 heal — attach the genesis owner `email` to a pre-existing **email-LESS** owner row. The genesis seed
+   * (index.ts) only writes the email-carrying owner when NO owner exists yet; a migrated DB whose owner row
+   * came from the retired phone seed (`placeholder:<phone>`, email null) short-circuits that guard, leaving an
+   * owner who never resolves via membership-by-email → `requireOwner` 403s (they can't mint invites). This sets
+   * the email ON THAT owner row (scoped `role='owner' AND email IS NULL`), so it never overwrites a genuine
+   * non-null email (a different real owner is left for a human). Returns true iff a row was healed. Idempotent:
+   * once the email is set the row no longer matches. MUST run on THIS connection (the one that ran the `email`
+   * ALTER). `email` is normalized on write so it can't drift from the resolver's `LOWER(email)` key.
+   */
+  healOwnerEmail(familyId: string, email: string): boolean;
+  /**
    * #250 (Slice 2) — upsert a member, exposing the boot-seed upsert for the claim-on-first-login path. Runs
    * the EXACT same `INSERT … ON CONFLICT(family_id, user_id) DO UPDATE` as the seed (role FIRST-WINS;
    * display_name + email upserted), and MUST run on THIS store's connection — the one that ran the
@@ -178,6 +189,12 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   const reconcileUidStmt = db.prepare(
     "UPDATE family_members SET user_id = ? WHERE family_id = ? AND LOWER(email) = ? AND user_id LIKE 'placeholder:%';",
   );
+  // #266 heal — attach the genesis email to an email-LESS owner row (the legacy phone-seed case). Scoped to
+  // `role='owner' AND email IS NULL` so it heals ONLY email-less owner rows (exactly one at N=1) and NEVER
+  // overwrites a real email.
+  const healOwnerEmailStmt = db.prepare(
+    "UPDATE family_members SET email = ? WHERE family_id = ? AND role = 'owner' AND email IS NULL;",
+  );
   // #262 — owner-driven unbind. Scoped by (family_id, from_phone) — the PK — so it deletes at most the one
   // targeted row and never reaches another family. `from_phone` is bound digit-normalized (see unbindPhone).
   const unbindPhoneStmt = db.prepare(
@@ -220,6 +237,11 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     },
     reconcileMemberUid({ familyId, email, userId }) {
       return reconcileUidStmt.run(userId, familyId, normalizeEmail(email)).changes > 0;
+    },
+    healOwnerEmail(familyId, email) {
+      const normalized = normalizeEmail(email);
+      if (normalized === "") return false; // never heal to a blank email (mirrors the resolver guard)
+      return healOwnerEmailStmt.run(normalized, familyId).changes > 0;
     },
     addMember({ familyId, userId, role, displayName, email }) {
       insertMemberStmt.run(
