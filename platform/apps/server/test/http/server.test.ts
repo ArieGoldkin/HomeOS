@@ -913,3 +913,55 @@ describe("invite admin routes (#250 — owner-only self-serve invites)", () => {
     expect(list.status).toBe(503);
   });
 });
+
+describe("phone admin routes (#262 — owner-only WhatsApp-sender revocation)", () => {
+  // An owner session over a family with one bound phone (the #229 seed / #228 ceremony result).
+  const BOUND = "972501234567";
+  const asOwnerWithPhone = {
+    resolveMembershipByEmail: () => ({ familyId: FAMILY_ID, role: "owner" }),
+    familySeed: {
+      ...defaultFamilySeed,
+      phones: [{ fromPhone: "+972 50-123 4567", verifiedAt: "2026-06-26 09:00:00" }],
+    } satisfies FamilySeed,
+  };
+  const auth = async () => ({ Authorization: `Bearer ${await kit.sign()}` });
+
+  it("an owner lists the family's bound phones (200); the internal family_id is NOT exposed", async () => {
+    const { app } = makeApp(asOwnerWithPhone);
+    const res = await app.request("/phones", { headers: await auth() });
+    expect(res.status).toBe(200);
+    const { phones } = (await res.json()) as { phones: Array<Record<string, unknown>> };
+    expect(phones).toHaveLength(1);
+    expect(phones[0]).toMatchObject({ from_phone: BOUND, verified_at: "2026-06-26 09:00:00" });
+    expect(phones[0]).not.toHaveProperty("family_id"); // family-scoped route → no tenant id on the wire
+  });
+
+  it("an owner unbinds a phone (204); it then leaves GET /phones; an unknown phone is 404", async () => {
+    const { app } = makeApp(asOwnerWithPhone);
+    const del = await app.request(`/phones/${BOUND}`, { method: "DELETE", headers: await auth() });
+    expect(del.status).toBe(204);
+
+    const list = await app.request("/phones", { headers: await auth() });
+    expect(((await list.json()) as { phones: unknown[] }).phones).toEqual([]);
+
+    const missing = await app.request("/phones/972500000000", {
+      method: "DELETE",
+      headers: await auth(),
+    });
+    expect(missing.status).toBe(404); // fail-closed: nothing to unbind
+  });
+
+  it("a non-owner (member) is FORBIDDEN from the phone surface (403 on GET and DELETE)", async () => {
+    // Default membership → N=1 fallback role 'member' (a writer, but NOT an owner).
+    const { app } = makeApp({ familySeed: asOwnerWithPhone.familySeed });
+    expect((await app.request("/phones", { headers: await auth() })).status).toBe(403);
+    const del = await app.request(`/phones/${BOUND}`, { method: "DELETE", headers: await auth() });
+    expect(del.status).toBe(403);
+  });
+
+  it("401 without a session (requireSession rejects before requireOwner)", async () => {
+    const { app } = makeApp(asOwnerWithPhone);
+    expect((await app.request("/phones")).status).toBe(401);
+    expect((await app.request(`/phones/${BOUND}`, { method: "DELETE" })).status).toBe(401);
+  });
+});

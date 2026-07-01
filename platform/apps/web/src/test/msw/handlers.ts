@@ -89,6 +89,17 @@ export const sampleInvites = [
   },
 ];
 
+// #262 — a bound-phone fixture mirroring the GET /phones { phones } envelope (the owner's bound WhatsApp
+// senders). `from_phone` is digit-normalized, as the server serves it. Tests override with `server.use(...)`
+// to assert the 403 owner-gate + the empty/error states.
+export const samplePhones = [
+  {
+    from_phone: "972501234567",
+    verified_at: "2026-06-26T09:00:00Z",
+    created_at: "2026-06-26T09:00:00Z",
+  },
+];
+
 /**
  * #111 — a CONNECTED `GET /oauth/google/status` payload (mirrors the shared `connectionStatusSchema`
  * connected member): the granted scopes + the access-token `expiresAt`. Use it with `server.use(...)` or
@@ -185,6 +196,15 @@ export const handlers = [
 
   // #250 — owner-gated DELETE /invites/:id revoke → 204 No Content. Tests override for the 404 case.
   http.delete("*/invites/:id", () => new HttpResponse(null, { status: 204 })),
+
+  // #262 — session+owner-gated GET /phones, returning the wrapped { phones } bound-sender list. Defaults to a
+  // single bound phone (the owner case); tests override to 403 (non-owner → the card hides) or empty/error.
+  http.get("*/phones", () => {
+    return HttpResponse.json({ phones: samplePhones });
+  }),
+
+  // #262 — owner-gated DELETE /phones/:phone unbind → 204 No Content. Tests override for the 404 case.
+  http.delete("*/phones/:phone", () => new HttpResponse(null, { status: 204 })),
 
   /**
    * #225 — session-gated POST /events handler — echoes the parsed-event body back as a SavedEvent
