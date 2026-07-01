@@ -241,8 +241,8 @@ export const ADD_FAMILY_MEMBERS_DISPLAY_NAME =
  * uid↔member binding — idempotent migration: add the `email` column to a PRE-EXISTING family_members
  * table (same self-healing pattern as display_name). This is the login-identity link: the session's
  * verified, allowlisted email is matched against it (`resolveMembershipByEmail`) to derive the member's
- * real `{familyId, role}` — retiring the placeholder `user_id` for membership resolution. Nullable; the
- * boot seed upserts it from the new `MEMBER_EMAILS` (phone:email) config so it backfills on the same boot.
+ * real `{familyId, role}`. Nullable; written by the genesis owner seed (`ALLOWED_LOGIN_EMAILS[0]`, #266)
+ * and by `addMember` on the invite claim (#250) — normalized on write so it can't drift from the matcher.
  */
 export const ADD_FAMILY_MEMBERS_EMAIL = "ALTER TABLE family_members ADD COLUMN email TEXT;";
 
@@ -280,9 +280,9 @@ export interface FamilyMemberRow {
    *  for every config member, so it's populated for every seeded row (null only for a hypothetical
    *  non-config member written by a future path). */
   display_name: string | null;
-  /** uid↔member binding — the member's login email (from the new `MEMBER_EMAILS` config), matched against
-   *  the session's verified email to resolve real membership. Nullable: a member with no configured email
-   *  isn't bindable yet and falls back. Stored as configured; matched case-insensitively. */
+  /** uid↔member binding — the member's login email (the genesis owner from `ALLOWED_LOGIN_EMAILS[0]` #266,
+   *  or an invited member via `addMember` #250), matched against the session's verified email to resolve real
+   *  membership. Nullable: a member with no email falls back. Normalized on write; matched case-insensitively. */
   email: string | null;
   created_at: string;
 }
