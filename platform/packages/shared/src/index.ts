@@ -390,3 +390,21 @@ export type InviteResponse = z.infer<typeof inviteResponseSchema>;
 /** #250 — `GET /invites` response: the owner's pending invites (`{ invites }`), newest-first. */
 export const invitesResponseSchema = z.object({ invites: z.array(inviteSchema) });
 export type InvitesResponse = z.infer<typeof invitesResponseSchema>;
+
+/**
+ * #262 — one bound WhatsApp phone as served by `GET /phones`: a row of `family_phones` (the DURABLE result
+ * of the #228 binding / the #229 boot seed), the family's authorized WhatsApp senders. `from_phone` is
+ * digit-normalized (the resolver's exact-match key); render it LTR-wrapped inside the RTL layout. Owner-only
+ * — the route is `requireOwner()`-gated, so a member never sees the household's raw numbers. The web data
+ * layer parses against this so any shape drift fails loudly at the boundary, like the other contracts.
+ */
+export const boundPhoneSchema = z.object({
+  from_phone: z.string(),
+  verified_at: z.string(),
+  created_at: z.string(),
+});
+export type BoundPhone = z.infer<typeof boundPhoneSchema>;
+
+/** #262 — `GET /phones` response: the family's bound WhatsApp senders (`{ phones }`), oldest-first (bind order). */
+export const phonesResponseSchema = z.object({ phones: z.array(boundPhoneSchema) });
+export type PhonesResponse = z.infer<typeof phonesResponseSchema>;

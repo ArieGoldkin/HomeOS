@@ -44,15 +44,27 @@ export interface FamilySeed {
 
 /**
  * Read-shaped identity store (#227). Mirrors `createCredentialStore`: its own `node:sqlite` connection
- * on the shared family DB file, prepared statements, no ORM. WRITES beyond the boot seed belong to the
- * binding ceremony (#228 → `family_phones`) and the phone→family resolver (#229 reads all three) — so
- * this issue's surface is deliberately read-only. At N=1 every lookup is `WHERE family_id = ?`, which
- * is trivially correct with no second tenant to leak to (no RLS needed; that's deferred).
+ * on the shared family DB file, prepared statements, no ORM. Mostly reads; the few writes are the boot
+ * seed, the `addMember` claim (#250), the `reconcileMemberUid` upgrade (#266), and `unbindPhone` (#262 —
+ * owner-driven de-authorization). At N=1 every lookup is `WHERE family_id = ?`, which is trivially correct
+ * with no second tenant to leak to (no RLS needed; that's deferred).
  */
 export interface FamilyStore {
   getFamily(familyId: string): FamilyRow | null;
   listMembers(familyId: string): FamilyMemberRow[];
   listPhones(familyId: string): FamilyPhoneRow[];
+  /**
+   * #262 — revoke a WhatsApp sender: DELETE its `family_phones` row, scoped to `familyId` so an owner can
+   * only ever unbind within their own family (a foreign `family_id` matches nothing → false, never a
+   * cross-family revoke). `fromPhone` is digit-normalized on the way in (the same `normalizePhone` the seed
+   * and resolver use) so a formatted number matches the stored digit form. Returns true iff a row was
+   * deleted (false for an unknown/already-unbound phone — fail-closed, idempotent). Once the row is gone the
+   * #229 resolver (its own connection on the same DB file) no longer resolves the sender → the next inbound
+   * forward from it is refused with no write. This is a PHONE-only revoke: `family_members` is untouched (the
+   * two identities are independent, joined by `family_id`, not by a person — revoking a sender must not
+   * silently revoke a web login).
+   */
+  unbindPhone(familyId: string, fromPhone: string): boolean;
   /**
    * #266 — upgrade a member's PLACEHOLDER `user_id` to the real `auth.uid()` in place, matched by
    * `(family_id, LOWER(email))`. Matches BOTH the email-genesis owner (`placeholder:email:<email>`) AND the
@@ -150,6 +162,11 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
   const reconcileUidStmt = db.prepare(
     "UPDATE family_members SET user_id = ? WHERE family_id = ? AND LOWER(email) = ? AND user_id LIKE 'placeholder:%';",
   );
+  // #262 — owner-driven unbind. Scoped by (family_id, from_phone) — the PK — so it deletes at most the one
+  // targeted row and never reaches another family. `from_phone` is bound digit-normalized (see unbindPhone).
+  const unbindPhoneStmt = db.prepare(
+    "DELETE FROM family_phones WHERE family_id = ? AND from_phone = ?;",
+  );
 
   return {
     getFamily(familyId) {
@@ -160,6 +177,9 @@ export function createFamilyStore(dbPath: string, seed?: FamilySeed): FamilyStor
     },
     listPhones(familyId) {
       return listPhonesStmt.all(familyId) as unknown as FamilyPhoneRow[];
+    },
+    unbindPhone(familyId, fromPhone) {
+      return unbindPhoneStmt.run(familyId, normalizePhone(fromPhone)).changes > 0;
     },
     reconcileMemberUid({ familyId, email, userId }) {
       return reconcileUidStmt.run(userId, familyId, normalizeEmail(email)).changes > 0;

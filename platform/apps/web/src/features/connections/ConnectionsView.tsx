@@ -4,6 +4,7 @@ import { ConnectStatusBanner } from "./ConnectStatusBanner";
 import { GoogleConnectionCard } from "./GoogleConnectionCard";
 import { InviteMembers } from "./InviteMembers";
 import { LinkedMembers } from "./LinkedMembers";
+import { LinkedPhones } from "./LinkedPhones";
 import { RecentIngestion } from "./RecentIngestion";
 import { WhatsAppChannelCard } from "./WhatsAppChannelCard";
 
@@ -56,6 +57,9 @@ export function ConnectionsView({ connectStatus, onDismissStatus }: ConnectionsV
 
       {/* #250 — owner-only self-serve invite admin (renders only for an owner; capability-gated). */}
       <InviteMembers />
+
+      {/* #262 — owner-only WhatsApp-sender revocation (renders only for an owner; capability-gated). */}
+      <LinkedPhones />
 
       <GoogleConnectionCard />
     </div>

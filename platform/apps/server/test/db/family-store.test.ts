@@ -353,3 +353,52 @@ describe("FamilyStore — seed + reads (#227)", () => {
     expect(phones[0]?.verified_at).toBe("2026-06-26 09:00:00");
   });
 });
+
+describe("FamilyStore — unbindPhone (#262 revocation)", () => {
+  const seedWithPhone: FamilySeed = {
+    ...seed,
+    phones: [{ fromPhone: "+972 50-123 4567", verifiedAt: "2026-06-26 09:00:00" }],
+  };
+
+  it("unbinds a bound phone from its own family → true, and the row is gone", () => {
+    const store = createFamilyStore(":memory:", seedWithPhone);
+    expect(store.unbindPhone(FAMILY_ID, "972501234567")).toBe(true);
+    expect(store.listPhones(FAMILY_ID)).toEqual([]);
+  });
+
+  it("normalizes the input phone — a formatted number unbinds the stored digit form", () => {
+    const store = createFamilyStore(":memory:", seedWithPhone);
+    expect(store.unbindPhone(FAMILY_ID, "+972 50-123 4567")).toBe(true);
+    expect(store.listPhones(FAMILY_ID)).toEqual([]);
+  });
+
+  it("is family-scoped — a foreign familyId unbinds nothing (fail-closed), the row stays", () => {
+    const store = createFamilyStore(":memory:", seedWithPhone);
+    expect(store.unbindPhone("someone-elses-family", "972501234567")).toBe(false);
+    expect(store.listPhones(FAMILY_ID)).toHaveLength(1); // untouched
+  });
+
+  it("is idempotent — a second unbind of the already-removed phone → false", () => {
+    const store = createFamilyStore(":memory:", seedWithPhone);
+    expect(store.unbindPhone(FAMILY_ID, "972501234567")).toBe(true);
+    expect(store.unbindPhone(FAMILY_ID, "972501234567")).toBe(false); // nothing left to delete
+  });
+
+  it("an unknown / never-bound phone → false (nothing deleted)", () => {
+    const store = createFamilyStore(":memory:", seedWithPhone);
+    expect(store.unbindPhone(FAMILY_ID, "972500000000")).toBe(false);
+    expect(store.listPhones(FAMILY_ID)).toHaveLength(1); // the real binding is untouched
+  });
+
+  it("after unbind, the resolver (own connection, same DB) no longer resolves → the next forward is refused", async () => {
+    const path = tmpDbPath();
+    const store = createFamilyStore(path, seedWithPhone);
+    const { createFamilyResolver } = await import("../../src/db/family-resolver.ts");
+    const resolver = createFamilyResolver(path);
+    // Before: the seeded sender resolves to its family (the bot admits + writes).
+    expect(resolver.resolveFamilyByPhone("+972 50-123 4567")).toBe(FAMILY_ID);
+    expect(store.unbindPhone(FAMILY_ID, "972501234567")).toBe(true);
+    // After: the resolver's separate connection sees the committed DELETE → unbound → REFUSAL_HE, no write.
+    expect(resolver.resolveFamilyByPhone("+972 50-123 4567")).toBeNull();
+  });
+});

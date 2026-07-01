@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  type BoundPhone,
   eventStatusPatchSchema,
   type InboundMessageDTO,
   type Invite,
@@ -19,7 +20,7 @@ import type { InviteStore } from "../db/invite-store.ts";
 // family-keyed in the stores yet — that migration rides the multi-family/RLS work (so they keep the
 // FAMILY_ID constant). The bot WRITE path — the chokepoint with no RLS backstop — resolves via
 // db/family-resolver.ts.
-import { FAMILY_ID, type InboundRow, type InviteRow } from "../db/schema.ts";
+import { FAMILY_ID, type FamilyPhoneRow, type InboundRow, type InviteRow } from "../db/schema.ts";
 import { type CalendarToolDeps, pushSavedEventsToCalendar } from "../tools/index.ts";
 import { type GoogleOAuthDeps, registerOAuthRoutes } from "./oauth-routes/index.ts";
 import {
@@ -98,6 +99,19 @@ function toInviteDTO(row: InviteRow): Invite {
     status: row.status as Invite["status"],
     invited_by: row.invited_by,
     expires_at: row.expires_at,
+    created_at: row.created_at,
+  };
+}
+
+/**
+ * #262 — the owner-facing bound-phone view (the shared {@link BoundPhone} contract). Drops the internal
+ * `family_id` (the route is already family-scoped, like the roster's omitted id) and serves the digit-
+ * normalized `from_phone` + the bind timestamps so the owner can identify a sender to revoke.
+ */
+function toBoundPhoneDTO(row: FamilyPhoneRow): BoundPhone {
+  return {
+    from_phone: row.from_phone,
+    verified_at: row.verified_at,
     created_at: row.created_at,
   };
 }
@@ -217,6 +231,24 @@ export function createServer(deps: ServerDeps): Hono {
     if (!deps.invites) return c.text("Invites not configured", 503);
     const revoked = deps.invites.revokeInvite(c.req.param("id"), (c.var as SessionVars).familyId);
     if (!revoked) return c.text("Not found", 404);
+    return c.body(null, 204);
+  });
+
+  // #262 — owner-only, family-scoped WhatsApp-sender revocation. Since #259 made `family_phones` the SOLE
+  // bot admission gate, dropping a number from the ALLOWLIST env no longer de-authorizes a bound sender —
+  // this is the admin path that does. Rides the same requireOwner() surface as invite-revoke; `family` is
+  // always wired (no 503 case, unlike the optional invite store). Raw household numbers are owner-only PII.
+  app.get("/phones", guard, requireOwner(), (c) => {
+    const phones = deps.family.listPhones((c.var as SessionVars).familyId).map(toBoundPhoneDTO);
+    return c.json({ phones });
+  });
+
+  // Unbind a sender. `unbindPhone` is family-scoped + normalizes the path phone, so a foreign / unknown /
+  // already-unbound number matches nothing → 404 (never a cross-family revoke). 204 on success; the next
+  // inbound forward from that phone is then refused by the resolver gate with no write.
+  app.delete("/phones/:phone", guard, requireOwner(), (c) => {
+    const unbound = deps.family.unbindPhone((c.var as SessionVars).familyId, c.req.param("phone"));
+    if (!unbound) return c.text("Not found", 404);
     return c.body(null, 204);
   });
 

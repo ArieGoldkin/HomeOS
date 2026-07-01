@@ -11,3 +11,4 @@ export {
 } from "./google";
 export { createInvite, fetchInvites, revokeInvite } from "./invites";
 export { fetchMessages } from "./messages";
+export { fetchPhones, unbindPhone } from "./phones";
