@@ -297,6 +297,18 @@ export const CREATE_CONSENTS_TABLE = `
   );
 `;
 
+/**
+ * #26 — `board_reads(day, count)`: a lightweight per-day tally of how often the family OPENED the board
+ * (incremented on each session-gated `GET /events`). The dogfood "daily glance" gate reads it. COUNTS ONLY
+ * — no user, no time-of-day, no PII — so it stays well inside the privacy red line. `day` is the UTC date.
+ */
+export const CREATE_BOARD_READS_TABLE = `
+  CREATE TABLE IF NOT EXISTS board_reads (
+    day   TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0
+  );
+`;
+
 export interface ConsentRow {
   /** The verified login email, LOWER-cased on write (matched case-insensitively, like the resolver). */
   email: string;

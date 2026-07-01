@@ -160,4 +160,50 @@ describe("InboundStore (in-memory SQLite)", () => {
     const b = createInboundStore(path); // re-open: migration guard must skip the ALTER
     expect(b.listRecent(10)[0]).toMatchObject({ outcome: "clarified" });
   });
+
+  describe("#26 dogfood aggregations", () => {
+    const PAST = "2000-01-01 00:00:00";
+    const FUTURE = "2999-01-01 00:00:00";
+
+    it("outcomeCountsSince histograms the terminal dispositions ('none' for no-outcome rows)", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "wamid.a", from: "9725", type: "text", text: "x" });
+      store.enqueue({ id: "wamid.b", from: "9725", type: "text", text: "y" });
+      store.enqueue({ id: "wamid.c", from: "9725", type: "text", text: "z" });
+      store.markDone("wamid.a", "parsed");
+      store.markDone("wamid.b", "rephrase");
+      store.markDone("wamid.c"); // command path → no outcome
+      expect(store.outcomeCountsSince(PAST)).toEqual({ parsed: 1, rephrase: 1, none: 1 });
+      expect(store.outcomeCountsSince(FUTURE)).toEqual({}); // since-filter excludes everything
+    });
+
+    it("forwardsByDaySince counts inbound volume per UTC day, since-filtered", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "wamid.1", from: "9725", type: "text", text: "a" });
+      store.enqueue({ id: "wamid.2", from: "9725", type: "text", text: "b" });
+      const days = store.forwardsByDaySince(PAST);
+      expect(days).toHaveLength(1); // both received "now" → one day bucket
+      expect(days[0]?.count).toBe(2);
+      expect(days[0]?.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(store.forwardsByDaySince(FUTURE)).toEqual([]);
+    });
+
+    it("both aggregations filter by fromPhones so pre-allowlist SPAM can't inflate the gates", () => {
+      const store = createInboundStore(":memory:");
+      store.enqueue({ id: "fam.1", from: "972500000001", type: "text", text: "family" });
+      store.enqueue({ id: "spam.1", from: "999999999", type: "text", text: "spam" });
+      store.enqueue({ id: "spam.2", from: "999999999", type: "text", text: "spam" });
+      store.markDone("fam.1", "parsed");
+      store.markDone("spam.1", "rephrase");
+      const family = ["972500000001"] as const;
+      // Scoped to the family sender: the two spam rows vanish from both aggregations.
+      expect(store.outcomeCountsSince(PAST, family)).toEqual({ parsed: 1 });
+      expect(store.forwardsByDaySince(PAST, family)[0]?.count).toBe(1);
+      // An empty allowlist serves nothing (mirrors listRecent/isAllowed).
+      expect(store.outcomeCountsSince(PAST, [])).toEqual({});
+      expect(store.forwardsByDaySince(PAST, [])).toEqual([]);
+      // Unfiltered still sees everything (backward-compatible).
+      expect(store.forwardsByDaySince(PAST)[0]?.count).toBe(3);
+    });
+  });
 });

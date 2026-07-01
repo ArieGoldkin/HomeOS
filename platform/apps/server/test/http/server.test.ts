@@ -116,6 +116,8 @@ function makeApp(
     invites?: boolean;
     /** #228 — wire a real in-memory binding store so POST /binding exercises the actual issueBinding path. */
     bindings?: boolean;
+    /** #26 — set false to leave the metrics store unwired (GET /metrics → 503). Defaults to a stub. */
+    metrics?: boolean;
   } = {
     appSecret: appKey,
   },
@@ -135,6 +137,8 @@ function makeApp(
     listRecent: vi.fn((): InboundRow[] => []),
     statsSince: vi.fn(() => ({ done: 0, failed: 0, pending: 0 })),
     countFromSenderSince: vi.fn(() => 0),
+    outcomeCountsSince: vi.fn(() => ({})),
+    forwardsByDaySince: vi.fn(() => []),
   };
   const events = {
     // Echo the parsed event back as a SavedEvent (DB assigns id; source_provider null for a manual add).
@@ -195,6 +199,11 @@ function makeApp(
   const invites = opts.invites ? createInviteStore(":memory:") : undefined;
   // #228 — a real in-memory binding store when requested, so POST /binding drives the actual issueBinding path.
   const bindings = opts.bindings ? createBindingStore(":memory:") : undefined;
+  // #26 — a metrics stub unless the test opts out (metrics:false → GET /metrics 503, no board-read tally).
+  const metrics =
+    opts.metrics === false
+      ? undefined
+      : { recordBoardRead: vi.fn(), boardReadDaysSince: vi.fn(() => 0) };
   const deps: ServerDeps = {
     verifyToken: "secret",
     inbound,
@@ -203,6 +212,7 @@ function makeApp(
     family,
     invites,
     bindings,
+    metrics,
     botPhone: opts.botPhone,
     calendar,
     autoPushCalendar: opts.autoPush,
@@ -221,7 +231,7 @@ function makeApp(
         });
   deps.session = gate;
   deps.webDist = opts.webDist;
-  return { app: createServer(deps), process, inbound, events, calendar, invites };
+  return { app: createServer(deps), process, inbound, events, calendar, invites, metrics };
 }
 
 function post(
@@ -1053,5 +1063,43 @@ describe("consent routes (#270 — terms/privacy opt-in)", () => {
     const { app } = makeApp();
     expect((await app.request("/consent")).status).toBe(401);
     expect((await app.request("/consent", { method: "POST" })).status).toBe(401);
+  });
+});
+
+describe("GET /metrics (#26 — owner-only dogfood go/no-go)", () => {
+  const asOwner = {
+    resolveMembershipByEmail: () => ({ familyId: FAMILY_ID, role: "owner" as const }),
+  };
+  const auth = async () => ({ Authorization: `Bearer ${await kit.sign()}` });
+
+  it("an owner gets the metrics shape + a verdict (200)", async () => {
+    const { app } = makeApp(asOwner);
+    const res = await app.request("/metrics", { headers: await auth() });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { windowDays: number; verdict: string; gates: unknown };
+    expect(body.windowDays).toBe(30);
+    expect(["go", "no-go"]).toContain(body.verdict);
+    expect(body.gates).toBeDefined();
+  });
+
+  it("a non-owner (member) is FORBIDDEN (403 — founder telemetry, not a family surface)", async () => {
+    const { app } = makeApp(); // default membership → N=1 fallback 'member'
+    expect((await app.request("/metrics", { headers: await auth() })).status).toBe(403);
+  });
+
+  it("401 without a session", async () => {
+    const { app } = makeApp(asOwner);
+    expect((await app.request("/metrics")).status).toBe(401);
+  });
+
+  it("503 when the metrics store is unwired", async () => {
+    const { app } = makeApp({ ...asOwner, metrics: false });
+    expect((await app.request("/metrics", { headers: await auth() })).status).toBe(503);
+  });
+
+  it("records a board read on a session-gated GET /events", async () => {
+    const { app, metrics } = makeApp(asOwner);
+    await app.request("/events", { headers: await auth() });
+    expect(metrics?.recordBoardRead).toHaveBeenCalledTimes(1);
   });
 });

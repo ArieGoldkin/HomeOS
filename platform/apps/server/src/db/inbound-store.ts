@@ -53,6 +53,24 @@ export interface InboundStore {
    * one is included in the count.
    */
   countFromSenderSince(fromPhone: string, sinceIso: string): number;
+  /**
+   * #26 — the disposition histogram for inbounds received at/after `sinceIso`: a count per terminal
+   * `outcome` (parsed/clarified/rephrase/refused/…), with a `"none"` bucket for rows that carry no
+   * outcome (command paths / pending / failed). Feeds the dogfood parse-accuracy gate. Counts only — no
+   * message text — so it stays inside the privacy red line. `fromPhones` scopes to those (digit-normalized)
+   * senders so pre-allowlist SPAM (persisted before the gate) can't corrupt the metric; omitted ⇒ every
+   * row, an empty array ⇒ none (mirrors `listRecent`/`isAllowed`).
+   */
+  outcomeCountsSince(sinceIso: string, fromPhones?: readonly string[]): Record<string, number>;
+  /**
+   * #26 — inbound volume PER DAY at/after `sinceIso`, `{ day: "YYYY-MM-DD", count }` oldest-first (day is
+   * the UTC calendar date of `received_at`). Feeds the dogfood "forward ≥1/day" gate. `fromPhones` scopes
+   * to family senders so spam can't inflate the gate (same contract as `outcomeCountsSince`). Counts only.
+   */
+  forwardsByDaySince(
+    sinceIso: string,
+    fromPhones?: readonly string[],
+  ): Array<{ day: string; count: number }>;
 }
 
 function rowToMsg(row: InboundRow): InboundMessage {
@@ -104,6 +122,10 @@ export function createInboundStore(dbPath: string): InboundStore {
   const countFromSenderStmt = db.prepare(
     "SELECT COUNT(*) AS c FROM inbound_messages WHERE from_phone = ? AND received_at >= ?;",
   );
+  // #26 — an optional `from_phone IN (…)` clause so the aggregations can be family-scoped (spam-safe). The
+  // IN-arity varies, so these are built per call (the /metrics endpoint is low-traffic — no prepare-cache).
+  const inFilter = (fromPhones?: readonly string[]) =>
+    fromPhones ? ` AND from_phone IN (${fromPhones.map(() => "?").join(", ")})` : "";
 
   return {
     enqueue(msg) {
@@ -145,6 +167,30 @@ export function createInboundStore(dbPath: string): InboundStore {
     },
     countFromSenderSince(fromPhone, sinceIso) {
       return Number((countFromSenderStmt.get(fromPhone, sinceIso) as { c: number }).c);
+    },
+    outcomeCountsSince(sinceIso, fromPhones) {
+      if (fromPhones !== undefined && fromPhones.length === 0) return {}; // empty allowlist → nothing
+      const stmt = db.prepare(
+        `SELECT outcome, COUNT(*) AS c FROM inbound_messages WHERE received_at >= ?${inFilter(fromPhones)} GROUP BY outcome;`,
+      );
+      const rows = stmt.all(sinceIso, ...(fromPhones ?? [])) as unknown as Array<{
+        outcome: string | null;
+        c: number;
+      }>;
+      const counts: Record<string, number> = {};
+      for (const row of rows) counts[row.outcome ?? "none"] = Number(row.c);
+      return counts;
+    },
+    forwardsByDaySince(sinceIso, fromPhones) {
+      if (fromPhones !== undefined && fromPhones.length === 0) return []; // empty allowlist → nothing
+      const stmt = db.prepare(
+        `SELECT date(received_at) AS day, COUNT(*) AS c FROM inbound_messages WHERE received_at >= ?${inFilter(fromPhones)} GROUP BY date(received_at) ORDER BY day;`,
+      );
+      const rows = stmt.all(sinceIso, ...(fromPhones ?? [])) as unknown as Array<{
+        day: string;
+        c: number;
+      }>;
+      return rows.map((r) => ({ day: r.day, count: Number(r.c) }));
     },
   };
 }

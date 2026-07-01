@@ -458,3 +458,46 @@ export const consentStatusSchema = z.object({
   version: z.string(),
 });
 export type ConsentStatus = z.infer<typeof consentStatusSchema>;
+
+/**
+ * #26 — one dogfood exit gate: whether a measured `value` clears its `threshold`. `value` is null when there
+ * is no data yet to evaluate it (e.g. parse accuracy with zero parse attempts) → the gate can't PASS.
+ */
+export const dogfoodGateSchema = z.object({
+  pass: z.boolean(),
+  value: z.number().nullable(),
+  threshold: z.number(),
+});
+export type DogfoodGate = z.infer<typeof dogfoodGateSchema>;
+
+/**
+ * #26 — the dogfood-month validation metrics served by `GET /metrics` (owner-only). Lightweight COUNTS over
+ * the existing pipeline (no PII): forward volume, parse-outcome dispositions, and board-glance days over a
+ * `windowDays` window, plus the three Phase-6 exit gates (≥1 forward/day · ~80% parse · daily glances) and a
+ * `verdict` (go iff all three pass). `parse.accuracy` is `parsed ÷ (parsed + rephrase)`, null when no attempts.
+ */
+export const dogfoodMetricsResponseSchema = z.object({
+  windowDays: z.number().int(),
+  forwards: z.object({
+    total: z.number().int(),
+    perDay: z.number(),
+    byDay: z.array(z.object({ day: z.string(), count: z.number().int() })),
+  }),
+  parse: z.object({
+    parsed: z.number().int(),
+    rephrase: z.number().int(),
+    clarified: z.number().int(),
+    accuracy: z.number().nullable(),
+  }),
+  engagement: z.object({
+    daysWithGlance: z.number().int(),
+    glanceRate: z.number(),
+  }),
+  gates: z.object({
+    forwardHabit: dogfoodGateSchema,
+    parseAccuracy: dogfoodGateSchema,
+    dailyGlance: dogfoodGateSchema,
+  }),
+  verdict: z.enum(["go", "no-go"]),
+});
+export type DogfoodMetricsResponse = z.infer<typeof dogfoodMetricsResponseSchema>;
