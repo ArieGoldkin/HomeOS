@@ -20,16 +20,20 @@ export async function fetchPhones(signal?: AbortSignal): Promise<BoundPhone[]> {
 }
 
 /**
- * #262 — owner-revoke a WhatsApp sender via `DELETE /phones/:phone` (family-scoped server-side → a foreign /
- * unknown number is 404). `fromPhone` is the digit-normalized value the list serves. Authorized by the
- * session cookie. Resolves on 204; throws on any non-2xx so the mutation surfaces it.
+ * #262 — owner-revoke a WhatsApp sender via `DELETE /phones/:phone` (family-scoped server-side). `fromPhone`
+ * is the digit-normalized value the list serves. Authorized by the session cookie. Resolves on 204 (unbound
+ * now) AND on 404 — the server returns 404 when no row was deleted, which for a revoke means the number is
+ * already not authorized (a stale list, a second tab/device, or a double-confirm). That is the DESIRED end
+ * state, so unbind is idempotent: a 404 resolves rather than showing the owner a spurious "revoke failed"
+ * (the mutation's onSuccess then refetches and the stale row drops out). Only a REAL failure (401/403/5xx)
+ * throws so the caller surfaces it.
  */
 export async function unbindPhone(fromPhone: string): Promise<void> {
   const res = await fetch(`${API_BASE}/phones/${encodeURIComponent(fromPhone)}`, {
     method: "DELETE",
     credentials: "include",
   });
-  if (!res.ok) {
+  if (!res.ok && res.status !== 404) {
     throw new Error(`DELETE /phones/${fromPhone} failed (${res.status})`);
   }
 }

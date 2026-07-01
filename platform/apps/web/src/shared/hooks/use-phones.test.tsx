@@ -48,13 +48,25 @@ describe("useUnbindPhone", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: familyQueryKey });
   });
 
-  it("surfaces a 404 (unknown / already-unbound phone) as an error", async () => {
+  it("a 404 (already-unbound) SUCCEEDS idempotently and still invalidates (the stale row drops)", async () => {
     server.use(
       http.delete("*/phones/:phone", () => new HttpResponse("Not found", { status: 404 })),
     );
-    const { result } = renderHook(() => useUnbindPhone(), { wrapper: makeWrapper(makeClient()) });
+    const client = makeClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    const { result } = renderHook(() => useUnbindPhone(), { wrapper: makeWrapper(client) });
     result.current.mutate("972500000000");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith({ queryKey: phonesQueryKey });
+  });
+
+  it("surfaces a REAL failure (500) as an error", async () => {
+    server.use(
+      http.delete("*/phones/:phone", () => new HttpResponse("Server Error", { status: 500 })),
+    );
+    const { result } = renderHook(() => useUnbindPhone(), { wrapper: makeWrapper(makeClient()) });
+    result.current.mutate("972501234567");
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toMatch(/404/);
+    expect(result.current.error?.message).toMatch(/500/);
   });
 });

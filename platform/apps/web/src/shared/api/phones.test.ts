@@ -45,10 +45,17 @@ describe("unbindPhone", () => {
     await expect(unbindPhone("972501234567")).resolves.toBeUndefined();
   });
 
-  it("throws on a 404 (unknown / cross-family / already-unbound phone)", async () => {
+  it("RESOLVES on a 404 (idempotent — already unbound is the desired end state, not a failure)", async () => {
     server.use(
       http.delete("*/phones/:phone", () => new HttpResponse("Not found", { status: 404 })),
     );
-    await expect(unbindPhone("972500000000")).rejects.toThrow(/404/);
+    await expect(unbindPhone("972500000000")).resolves.toBeUndefined();
+  });
+
+  it("throws on a REAL failure (403 non-owner / 500) so the caller surfaces it", async () => {
+    server.use(
+      http.delete("*/phones/:phone", () => new HttpResponse("Forbidden", { status: 403 })),
+    );
+    await expect(unbindPhone("972501234567")).rejects.toThrow(/403/);
   });
 });
