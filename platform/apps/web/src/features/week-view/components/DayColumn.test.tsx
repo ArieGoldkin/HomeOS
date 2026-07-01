@@ -87,4 +87,72 @@ describe("DayColumn", () => {
     await user.click(screen.getByRole("button", { name: /אסיפת הורים/ }));
     expect(onOpenDetail).toHaveBeenCalledWith(event);
   });
+
+  // #282 — density cap: the week is a map, not a document. Beyond 3 cards the column collapses
+  // to a "+N עוד" toggle; the cap must NEVER silently truncate (the pill always carries the count).
+  describe("density cap (#282)", () => {
+    const evs = (n: number) => Array.from({ length: n }, (_, i) => ev(i + 1, `סנטינל ${i + 1}`));
+
+    const renderCol = (events: SavedEvent[], onOpenDetail?: (e: SavedEvent) => void) =>
+      render(
+        <DayColumn
+          dateIso="2026-06-21"
+          weekdayLabel="ראשון"
+          dayLabel="21"
+          events={events}
+          onOpenDetail={onOpenDetail}
+        />,
+      );
+
+    it("renders all events with no pill at the cap (3)", () => {
+      renderCol(evs(3));
+      expect(screen.getByText("סנטינל 3")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /עוד/ })).toBeNull();
+    });
+
+    it("caps at 3 and shows '+N עוד' with the exact hidden count", () => {
+      renderCol(evs(5));
+      expect(screen.getByText("סנטינל 3")).toBeInTheDocument();
+      expect(screen.queryByText("סנטינל 4")).toBeNull();
+      expect(screen.queryByText("סנטינל 5")).toBeNull();
+      const pill = screen.getByRole("button", { name: /עוד/ });
+      expect(pill).toHaveTextContent("+2");
+      expect(pill).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("never silently truncates — exactly 4 events still yields a '+1' pill", () => {
+      renderCol(evs(4));
+      expect(screen.queryByText("סנטינל 4")).toBeNull();
+      expect(screen.getByRole("button", { name: /עוד/ })).toHaveTextContent("+1");
+    });
+
+    it("expands to reveal all events and collapses back", async () => {
+      const user = userEvent.setup();
+      renderCol(evs(5));
+      await user.click(screen.getByRole("button", { name: /עוד/ }));
+      expect(screen.getByText("סנטינל 5")).toBeInTheDocument();
+      const less = screen.getByRole("button", { name: "הצג פחות" });
+      expect(less).toHaveAttribute("aria-expanded", "true");
+      await user.click(less);
+      expect(screen.queryByText("סנטינל 5")).toBeNull();
+      expect(screen.getByRole("button", { name: /עוד/ })).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("renders the hidden count as a dir=ltr tabular atom (RTL-safe)", () => {
+      renderCol(evs(5));
+      const count = screen.getByText("+2");
+      expect(count).toHaveAttribute("dir", "ltr");
+      expect(count.className).toMatch(/tabular-nums/);
+    });
+
+    it("threads onOpenDetail to cards revealed by expansion", async () => {
+      const onOpenDetail = vi.fn();
+      const user = userEvent.setup();
+      const events = evs(5);
+      renderCol(events, onOpenDetail);
+      await user.click(screen.getByRole("button", { name: /עוד/ }));
+      await user.click(screen.getByRole("button", { name: /סנטינל 5/ }));
+      expect(onOpenDetail).toHaveBeenCalledWith(events[4]);
+    });
+  });
 });
