@@ -24,6 +24,8 @@ export const CREATE_EVENTS_TABLE = `
     source_provider    TEXT,
     created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
     status             TEXT    NOT NULL DEFAULT 'open',
+    standing_cadence   TEXT,
+    standing_until     TEXT,
     UNIQUE(wa_message_id, seq)
   );
 `;
@@ -43,6 +45,15 @@ export const ADD_EVENTS_SOURCE_PROVIDER = "ALTER TABLE events ADD COLUMN source_
  */
 export const ADD_EVENTS_STATUS =
   "ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'open';";
+
+/**
+ * #224 — idempotent migrations for the standing-reminder columns on a PRE-EXISTING events table (same
+ * self-healing pattern as source_provider/status). Both nullable: a non-standing row leaves them NULL; a
+ * standing daily reminder writes `standing_cadence = 'daily'` + `standing_until` (the anchor + bounded
+ * window, computed server-side). `remindersDueOn` reads them to surface the reminder every in-window day.
+ */
+export const ADD_EVENTS_STANDING_CADENCE = "ALTER TABLE events ADD COLUMN standing_cadence TEXT;";
+export const ADD_EVENTS_STANDING_UNTIL = "ALTER TABLE events ADD COLUMN standing_until TEXT;";
 
 /**
  * Inbound queue: every webhook message is persisted here BEFORE the 200 ack, so a crash
@@ -88,6 +99,10 @@ export interface EventRow {
   wa_message_id: string;
   seq: number;
   source_provider: string | null;
+  /** #224 — `'daily'` for a standing daily reminder, else null. */
+  standing_cadence: string | null;
+  /** #224 — the last date (YYYY-MM-DD) a standing reminder surfaces on the digest (anchor + bounded window). */
+  standing_until: string | null;
   created_at: string;
   status: string;
 }

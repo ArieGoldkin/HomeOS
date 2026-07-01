@@ -19,6 +19,9 @@ export function formatWhen(event: ParsedEvent): string {
   const dateHe = hebrewDate.format(new Date(`${event.date_iso}T12:00:00Z`));
   const parts = [event.time ? `${dateHe} · ${event.time}` : dateHe];
   if (event.recurrence) parts.push("(שבועי)");
+  // #224 — a standing daily reminder: the save-then-confirm makes the daily cadence explicit (parallel to
+  // the weekly marker), so the family SEES it's recurring and can cancel via the existing path if unintended.
+  if (event.standing) parts.push("(יומי)");
   if (event.assignee) parts.push(`— ${event.assignee}`);
   return parts.join(" ");
 }

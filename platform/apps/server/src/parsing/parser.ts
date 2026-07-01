@@ -2,6 +2,23 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { type ParsedEvent, parsedMessageSchema } from "@homeos/shared";
 import { isProgrammingError, isTransient, TransientError } from "../core/errors.ts";
+import { detectStandingDaily } from "./standing.ts";
+
+/**
+ * #224 — the DETERMINISTIC standing-reminder gate, applied to every parsed event. `standing` is set iff the
+ * event is a `reminder` whose text carries a daily-cadence phrase (see {@link detectStandingDaily}) — and
+ * explicitly set to null otherwise, so a model-hallucinated value is scrubbed. This keeps a runaway recurring
+ * reminder impossible from a stray parse; the gate, not the model, owns the field.
+ */
+function applyStandingGate(events: ParsedEvent[]): ParsedEvent[] {
+  return events.map((ev) => ({
+    ...ev,
+    standing:
+      ev.kind === "reminder" && detectStandingDaily(ev.source_text)
+        ? ({ cadence: "daily" } as const)
+        : null,
+  }));
+}
 
 /** Raw extraction call: (system, userText) → the model's structured object (or null). */
 export type RawParse = (system: string, userText: string) => Promise<unknown>;
@@ -94,7 +111,8 @@ export function createParser(rawParse: RawParse, opts: ParserOptions = {}): Pars
       try {
         const raw = await rawParse(system, text);
         const result = parsedMessageSchema.safeParse(raw);
-        return result.success ? result.data.events : null; // valid call, bad shape → rephrase
+        // valid call, bad shape → rephrase; otherwise apply the #224 deterministic standing gate.
+        return result.success ? applyStandingGate(result.data.events) : null;
       } catch (err) {
         if (isProgrammingError(err)) throw err; // programming bug → permanent + visible → markFailed (OG10/#57)
         if (!isTransient(err)) return null; // permanent (e.g. 4xx) → rephrase fallback
