@@ -38,6 +38,20 @@ describe("AnytimeSidebar — standing (קבוע) section (#284)", () => {
     render(<AnytimeSidebar tasks={[task({ id: 1 })]} tomorrow={[]} />);
     expect(screen.queryByText("קבוע")).toBeNull();
   });
+
+  // #284 fold (review #295 finding 1) — a TIMED standing reminder shows its time on the board (matching
+  // the digest); the group is no longer rendered showTime=false, so the time-then-title sort is honest.
+  it("shows the time for a timed standing reminder", () => {
+    render(
+      <AnytimeSidebar
+        tasks={[]}
+        tomorrow={[]}
+        standing={[{ ...standingRem(1, "כדור"), time: "08:00" }]}
+      />,
+    );
+    const t = screen.getByText("08:00");
+    expect(t).toHaveAttribute("dir", "ltr");
+  });
 });
 
 describe("AnytimeSidebar", () => {

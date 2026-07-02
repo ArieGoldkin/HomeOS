@@ -71,12 +71,9 @@ export function AnytimeSidebar({
           <div>
             {standing.map((s) => (
               <div key={s.id} className="border-border border-t py-2.5">
-                <EventCard
-                  event={s}
-                  showTime={false}
-                  density="compact"
-                  onOpenDetail={onOpenDetail}
-                />
+                {/* #284 — standing reminders CAN be timed ("כדור ב-08:00 באופן קבוע"); show the time so
+                    the board matches the digest (which shows it) and the time-then-title sort is honest. */}
+                <EventCard event={s} density="compact" onOpenDetail={onOpenDetail} />
               </div>
             ))}
           </div>

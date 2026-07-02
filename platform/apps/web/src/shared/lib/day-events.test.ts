@@ -99,6 +99,24 @@ describe("partitionDay — standing bucket (#284)", () => {
     expect(standing).toEqual([]);
     expect(tm).toEqual([{ time: null, title: "מתחיל מחר" }]);
   });
+
+  // #284 fold (review #295 finding 2) — the transient DEGRADE when an old server (mid-deploy) serves a
+  // standing signal WITHOUT `until`: isStandingDueOn is false, so it can't join קבוע. Documented + locked:
+  // on its ANCHOR day it still shows (as a normal dated reminder); on a non-anchor day it's absent (exactly
+  // the pre-#284 anchor-only behavior — self-heals the moment the new server ships `until`).
+  it("degrades to anchor-day-only when `until` is missing (old-server payload)", () => {
+    const noUntil = (date: string) =>
+      ev({ id: 1, kind: "reminder", time: null, date_iso: date, standing: { cadence: "daily" } });
+    // Anchor day: not in קבוע, but present as a dated (untimed) reminder.
+    const onAnchor = partitionDay([noUntil(today)], today, tomorrow);
+    expect(onAnchor.standing).toEqual([]);
+    expect(onAnchor.untimed).toHaveLength(1);
+    // Past-anchor, no window to place it → absent everywhere (the transient blank-off).
+    const pastAnchor = partitionDay([noUntil("2026-06-10")], today, tomorrow);
+    expect(pastAnchor.standing).toEqual([]);
+    expect(pastAnchor.untimed).toEqual([]);
+    expect(pastAnchor.timed).toEqual([]);
+  });
 });
 
 describe("partitionDay", () => {
