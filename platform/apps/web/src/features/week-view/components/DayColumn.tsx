@@ -1,6 +1,11 @@
 import type { SavedEvent } from "@homeos/shared";
 import { EventCard } from "@shared/board";
 import { cn } from "@shared/lib";
+import { useState } from "react";
+
+/** #282 — max cards a column shows collapsed; beyond it, a "+N עוד" toggle reveals the rest.
+ * The week is a map, not a document — but the cap must NEVER silently truncate. */
+const VISIBLE_CAP = 3;
 
 export interface DayColumnProps {
   /** ISO date `YYYY-MM-DD` for this column. */
@@ -25,7 +30,8 @@ export interface DayColumnProps {
 
 /**
  * One day cell in the web {@link WeekGrid}: a tappable header (weekday + day number, ocean accent +
- * inset ring when today) over a vertical stack of compact EventCards (or an em-dash when empty). Pure —
+ * inset ring when today) over a vertical stack of compact EventCards (or an em-dash when empty),
+ * density-capped at {@link VISIBLE_CAP} with an expand/collapse "+N עוד" toggle (#282). Pure —
  * no data fetching. EventCard adapts to the narrow column via its own `@container/card` query.
  */
 export function DayColumn({
@@ -39,6 +45,10 @@ export function DayColumn({
   onSelect,
   onOpenDetail,
 }: DayColumnProps) {
+  const [expanded, setExpanded] = useState(false);
+  const hiddenCount = events.length - VISIBLE_CAP;
+  const capped = hiddenCount > 0 && !expanded;
+  const visible = capped ? events.slice(0, VISIBLE_CAP) : events;
   return (
     <div
       className={cn(
@@ -91,15 +101,36 @@ export function DayColumn({
             —
           </span>
         ) : (
-          events.map((ev) => (
-            <EventCard
-              key={ev.id}
-              event={ev}
-              surface="web"
-              density="compact"
-              onOpenDetail={onOpenDetail}
-            />
-          ))
+          <>
+            {visible.map((ev) => (
+              <EventCard
+                key={ev.id}
+                event={ev}
+                surface="web"
+                density="compact"
+                onOpenDetail={onOpenDetail}
+              />
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => setExpanded((v) => !v)}
+                className="min-h-11 w-full rounded-sm text-[13px] text-muted-foreground transition-colors hover:bg-secondary/60"
+              >
+                {expanded ? (
+                  "הצג פחות"
+                ) : (
+                  <>
+                    <span dir="ltr" className="tabular-nums">
+                      +{hiddenCount}
+                    </span>{" "}
+                    עוד
+                  </>
+                )}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
