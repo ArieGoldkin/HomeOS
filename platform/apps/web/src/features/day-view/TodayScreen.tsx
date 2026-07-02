@@ -3,15 +3,18 @@ import { EventDetailDrawer, useEventDetail } from "@features/event-detail";
 import type { SavedEvent } from "@homeos/shared";
 import { useCurrentUser } from "@shared/auth";
 import { PersonAvatar } from "@shared/board";
-import { useDayEvents, useFamily, useNow, useToggleEventStatus } from "@shared/hooks";
+import { useDayEvents, useFamily, useNow, useToggleEventStatus, useWeekDays } from "@shared/hooks";
 import { greetingHe, hebDateLong, hebrewDateLabel, holidaysOn } from "@shared/lib";
 import { Button, Card, SectionLabel, Skeleton } from "@shared/ui";
 import { useState } from "react";
 import { DayView } from "./DayView";
+import { WeekStrip } from "./WeekStrip";
 
 export interface TodayScreenProps {
   /** The selected day (`YYYY-MM-DD`) from the route's `?date=` search param (already coerced). */
   dateIso: string;
+  /** #283 — called with a week-strip day's `dateIso`; the route wrapper navigates `?date=`. */
+  onSelectDate?: (dateIso: string) => void;
 }
 
 /**
@@ -23,8 +26,10 @@ export interface TodayScreenProps {
 // #235 — skeleton-row keys for the household card while the roster loads (avoids flashing "0 בני בית").
 const HOUSEHOLD_SKELETON = ["hh1", "hh2", "hh3"];
 
-export function TodayScreen({ dateIso }: TodayScreenProps) {
+export function TodayScreen({ dateIso, onSelectDate }: TodayScreenProps) {
   const now = useNow();
+  // #283 — the week strip rides the same GET /events cache as the day view (no extra fetch).
+  const { days } = useWeekDays(dateIso);
   const { full_name, email } = useCurrentUser();
   // #235 — the household roster from the real GET /family route (was the hardcoded HOUSEHOLD mock).
   const { data: family, status: familyStatus } = useFamily();
@@ -81,6 +86,8 @@ export function TodayScreen({ dateIso }: TodayScreenProps) {
           </Button>
         </div>
       </header>
+
+      <WeekStrip days={days} onSelectDay={onSelectDate} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="p-[18px] lg:col-span-2">

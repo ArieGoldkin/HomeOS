@@ -60,7 +60,13 @@ function RootLayout() {
 const todayApi = getRouteApi("/app/today");
 function TodayRoute() {
   const { date } = todayApi.useSearch();
-  return <TodayScreen dateIso={coerceDateIso(date)} />;
+  const navigate = useNavigate();
+  return (
+    <TodayScreen
+      dateIso={coerceDateIso(date)}
+      onSelectDate={(d) => navigate({ to: "/today", search: { date: d } })}
+    />
+  );
 }
 
 const calendarApi = getRouteApi("/app/calendar");
