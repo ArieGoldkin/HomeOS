@@ -17,6 +17,29 @@ const task = (over: Partial<SavedEvent>): SavedEvent => ({
   ...over,
 });
 
+// #284 — the קבוע (standing daily) section sits between the tasks and the tomorrow peek.
+describe("AnytimeSidebar — standing (קבוע) section (#284)", () => {
+  const standingRem = (id: number, title: string): SavedEvent =>
+    task({
+      id,
+      kind: "reminder",
+      title_he: title,
+      standing: { cadence: "daily", until: "2026-07-20" },
+    });
+
+  it("renders the קבוע header + reminder cards (with the (יומי) marker) when standing items exist", () => {
+    render(<AnytimeSidebar tasks={[]} tomorrow={[]} standing={[standingRem(1, "לשתות מים")]} />);
+    expect(screen.getByText("קבוע")).toBeInTheDocument();
+    expect(screen.getByText("לשתות מים")).toBeInTheDocument();
+    expect(screen.getByText("(יומי)")).toBeInTheDocument();
+  });
+
+  it("omits the section entirely when standing is absent", () => {
+    render(<AnytimeSidebar tasks={[task({ id: 1 })]} tomorrow={[]} />);
+    expect(screen.queryByText("קבוע")).toBeNull();
+  });
+});
+
 describe("AnytimeSidebar", () => {
   it("renders both default Hebrew section labels when both have content", () => {
     render(

@@ -17,6 +17,8 @@ export interface DayViewProps {
   nowTime: string | null;
   /** How many timed events were curated away (drives the "+N more" cue). */
   moreCount?: number;
+  /** #284 — standing daily reminders due on the shown day (the sidebar's "קבוע" group). */
+  standing?: SavedEvent[];
   todayLabel?: string;
   /** #153 — when set, the day's EventCards open the detail drawer; omitted ⇒ inert (a read-only render). */
   onOpenDetail?: (event: SavedEvent) => void;
@@ -39,6 +41,7 @@ export function DayView({
   tomorrow,
   nowTime,
   moreCount = 0,
+  standing = [],
   todayLabel = "היום",
   onOpenDetail,
   onToggleDone,
@@ -62,12 +65,17 @@ export function DayView({
     );
   }
 
-  if (timed.length === 0 && untimed.length === 0 && tomorrow.length === 0) {
+  if (
+    timed.length === 0 &&
+    untimed.length === 0 &&
+    tomorrow.length === 0 &&
+    standing.length === 0
+  ) {
     return <p className={cn("text-muted-foreground", className)}>אין אירועים היום ✦</p>;
   }
 
   const hasTimed = timed.length > 0;
-  const hasAside = untimed.length > 0 || tomorrow.length > 0;
+  const hasAside = untimed.length > 0 || tomorrow.length > 0 || standing.length > 0;
 
   // Container-query layout: stack the timed column above the anytime rail on a narrow surface (the
   // phone "today" lives inside max-w-md), switch to side-by-side once the board is wide enough (the
@@ -101,6 +109,7 @@ export function DayView({
             )}
             tasks={untimed}
             tomorrow={tomorrow}
+            standing={standing}
             onOpenDetail={onOpenDetail}
             onToggleDone={onToggleDone}
           />

@@ -2,6 +2,10 @@
 // zodOutputFormat can convert this schema to JSON Schema for structured outputs.
 import { z } from "zod/v4";
 
+// #284 — shared pure helpers (one day-boundary + standing-due truth for server AND web).
+export { jerusalemTodayIso } from "./dates.ts";
+export { isStandingDueOn, type StandingDueInput } from "./standing.ts";
+
 /** The kinds of thing a forwarded message can become on the family board. */
 export const EVENT_KINDS = ["event", "task", "reminder"] as const;
 export const eventKindSchema = z.enum(EVENT_KINDS);
@@ -81,6 +85,13 @@ export type Recurrence = z.infer<typeof recurrenceSchema>;
  */
 export const standingSchema = z.object({ cadence: z.literal("daily") });
 export type Standing = z.infer<typeof standingSchema>;
+
+/** #284 — the standing signal as SERVED (savedEventSchema only): adds the stored window end. */
+export const savedStandingSchema = z.object({
+  cadence: z.literal("daily"),
+  until: dateIso.optional(),
+});
+export type SavedStanding = z.infer<typeof savedStandingSchema>;
 
 /** #224 — how far ahead a standing daily reminder surfaces (the anchor + this many days). */
 export const STANDING_WINDOW_DAYS = 30;
@@ -188,6 +199,13 @@ export const savedEventSchema = parsedEventSchema.extend({
   // it (defaulting legacy NULL rows to "open"), older fixtures/payloads stay valid, and the UI treats
   // absence as "open".
   status: eventStatusSchema.optional(),
+  // #284 — the standing signal AS SERVED gains the stored window end (`until`, INCLUSIVE) so a client
+  // can compute "due today" with the SAME window the digest uses (isStandingDueOn) instead of
+  // re-deriving the anchor+30d math. Overrides ONLY the served shape — parsedEventSchema keeps the
+  // narrow {cadence} form, so the POST /events input surface is unchanged (the widening gotcha).
+  // `until` is `.optional()`: an old server omits it (new bundle degrades: not due), an old bundle's
+  // non-strict object strips it (deploy-window safe in both directions).
+  standing: savedStandingSchema.nullish(),
 });
 export type SavedEvent = z.infer<typeof savedEventSchema>;
 

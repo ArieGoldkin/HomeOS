@@ -14,8 +14,11 @@ export interface AnytimeSidebarProps {
   tasks: SavedEvent[];
   /** A quiet preview of tomorrow (rendered as PeekRows). */
   tomorrow: PeekItem[];
+  /** #284 — standing daily reminders due today (the "קבוע" group; reminders, so no done-toggle). */
+  standing?: SavedEvent[];
   tasksLabel?: string;
   tomorrowLabel?: string;
+  standingLabel?: string;
   /** #153 — pass-through to the untimed task EventCards (the tomorrow PeekRows are previews, not openable). */
   onOpenDetail?: (event: SavedEvent) => void;
   /** #19 — pass-through: when set, a task card's checkbox toggles open/done. */
@@ -31,8 +34,10 @@ export interface AnytimeSidebarProps {
 export function AnytimeSidebar({
   tasks,
   tomorrow,
+  standing = [],
   tasksLabel = "משימות להיום",
   tomorrowLabel = "מחר",
+  standingLabel = "קבוע",
   onOpenDetail,
   onToggleDone,
   className,
@@ -58,9 +63,31 @@ export function AnytimeSidebar({
         </>
       )}
 
+      {standing.length > 0 && (
+        <>
+          <SectionHeader className={cn("mb-3", tasks.length > 0 && "mt-6")}>
+            {standingLabel}
+          </SectionHeader>
+          <div>
+            {standing.map((s) => (
+              <div key={s.id} className="border-border border-t py-2.5">
+                <EventCard
+                  event={s}
+                  showTime={false}
+                  density="compact"
+                  onOpenDetail={onOpenDetail}
+                />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {tomorrow.length > 0 && (
         <>
-          <SectionHeader className={cn("mb-2", tasks.length > 0 && "mt-6")}>
+          <SectionHeader
+            className={cn("mb-2", (tasks.length > 0 || standing.length > 0) && "mt-6")}
+          >
             {tomorrowLabel}
           </SectionHeader>
           <div>

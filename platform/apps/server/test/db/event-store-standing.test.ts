@@ -42,7 +42,8 @@ describe("event-store — standing daily reminders (#224)", () => {
   it("saveEvent stamps standing_until = anchor + 30d and echoes standing on the row", () => {
     const store = createEventStore(":memory:");
     const saved = save(store, standingReminder("2026-07-01"));
-    expect(saved.standing).toEqual({ cadence: "daily" });
+    // #284 — the served row carries the stored window end (was silently dropped pre-#284).
+    expect(saved.standing).toEqual({ cadence: "daily", until: "2026-07-31" });
     // Surfaces on the anchor day and is still due 30 days later, but not on day 31.
     expect(store.remindersDueOn(FAMILY_ID, "2026-07-01")).toHaveLength(1);
     expect(store.remindersDueOn(FAMILY_ID, "2026-07-31")).toHaveLength(1); // anchor + 30d = last day

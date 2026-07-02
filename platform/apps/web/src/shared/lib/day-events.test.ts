@@ -19,6 +19,88 @@ const ev = (over: Partial<SavedEvent>): SavedEvent => ({
 const today = "2026-06-20";
 const tomorrow = "2026-06-21";
 
+// #284 — the standing bucket: a due standing daily reminder gets ONE home (the קבוע group), computed
+// via the shared isStandingDueOn (the digest's window), and never double-listed in the date buckets.
+describe("partitionDay — standing bucket (#284)", () => {
+  const standingRem = (over: Partial<SavedEvent>): SavedEvent =>
+    ev({
+      kind: "reminder",
+      time: null,
+      standing: { cadence: "daily", until: "2026-07-10" },
+      ...over,
+    });
+
+  it("routes an in-window standing reminder (non-anchor day) into standing, not untimed", () => {
+    const { standing, untimed, timed } = partitionDay(
+      [standingRem({ id: 1, date_iso: "2026-06-10", title_he: "סנטינל קבוע" })],
+      today,
+      tomorrow,
+    );
+    expect(standing.map((e) => e.title_he)).toEqual(["סנטינל קבוע"]);
+    expect(untimed).toEqual([]);
+    expect(timed).toEqual([]);
+  });
+
+  it("never double-lists on the ANCHOR day — standing is the one home", () => {
+    const { standing, untimed } = partitionDay(
+      [standingRem({ id: 1, date_iso: today, title_he: "עוגן" })],
+      today,
+      tomorrow,
+    );
+    expect(standing).toHaveLength(1);
+    expect(untimed).toEqual([]);
+  });
+
+  it("window end is inclusive; a past-window row drops back to its date bucket rules", () => {
+    const untilToday = standingRem({
+      id: 1,
+      date_iso: "2026-05-21",
+      title_he: "עד היום",
+      standing: { cadence: "daily", until: today },
+    });
+    const expired = standingRem({
+      id: 2,
+      date_iso: "2026-05-01",
+      title_he: "פג",
+      standing: { cadence: "daily", until: "2026-06-19" },
+    });
+    const { standing } = partitionDay([untilToday, expired], today, tomorrow);
+    expect(standing.map((e) => e.title_he)).toEqual(["עד היום"]);
+  });
+
+  it("keeps a done standing reminder in the group (done never ends the series)", () => {
+    const { standing } = partitionDay(
+      [standingRem({ id: 1, date_iso: "2026-06-10", status: "done" })],
+      today,
+      tomorrow,
+    );
+    expect(standing).toHaveLength(1);
+  });
+
+  it("sorts standing time-then-title deterministically", () => {
+    const { standing } = partitionDay(
+      [
+        standingRem({ id: 1, date_iso: "2026-06-10", time: null, title_he: "ב" }),
+        standingRem({ id: 2, date_iso: "2026-06-10", time: "08:00", title_he: "ג" }),
+        standingRem({ id: 3, date_iso: "2026-06-10", time: null, title_he: "א" }),
+      ],
+      today,
+      tomorrow,
+    );
+    expect(standing.map((e) => e.title_he)).toEqual(["ג", "א", "ב"]);
+  });
+
+  it("a standing reminder anchored TOMORROW peeks as tomorrow's item (not yet in קבוע)", () => {
+    const { standing, tomorrow: tm } = partitionDay(
+      [standingRem({ id: 1, date_iso: tomorrow, title_he: "מתחיל מחר" })],
+      today,
+      tomorrow,
+    );
+    expect(standing).toEqual([]);
+    expect(tm).toEqual([{ time: null, title: "מתחיל מחר" }]);
+  });
+});
+
 describe("partitionDay", () => {
   it("splits today into timed/untimed and drops other days", () => {
     const {
