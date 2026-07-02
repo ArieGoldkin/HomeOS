@@ -25,6 +25,30 @@ const base = {
   nowTime: "12:00",
 };
 
+// #284 — standing daily reminders (the קבוע group) count as content: they suppress the empty state
+// and render through the sidebar even when the day has nothing else.
+describe("DayView — standing (#284)", () => {
+  const standingRem = ev({
+    id: 9,
+    kind: "reminder",
+    time: null,
+    title_he: "לשתות מים",
+    standing: { cadence: "daily", until: "2026-07-20" },
+  });
+
+  it("a standing-only day is NOT empty — the קבוע group renders", () => {
+    render(<DayView {...base} standing={[standingRem]} />);
+    expect(screen.queryByText(/אין אירועים היום/)).toBeNull();
+    expect(screen.getByText("קבוע")).toBeInTheDocument();
+    expect(screen.getByText("לשתות מים")).toBeInTheDocument();
+  });
+
+  it("stays empty when standing is absent too", () => {
+    render(<DayView {...base} />);
+    expect(screen.getByText(/אין אירועים היום/)).toBeInTheDocument();
+  });
+});
+
 describe("DayView", () => {
   it("shows skeletons while loading", () => {
     const { container } = render(<DayView {...base} status="loading" />);

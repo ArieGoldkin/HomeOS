@@ -1,4 +1,4 @@
-import type { SavedEvent } from "@homeos/shared";
+import { isStandingDueOn, type SavedEvent } from "@homeos/shared";
 
 export interface DayPeekItem {
   time: string | null;
@@ -12,15 +12,27 @@ export interface DayPartition {
   untimed: SavedEvent[];
   /** Tomorrow's events as quiet peek rows (untimed sort last). */
   tomorrow: DayPeekItem[];
+  /** #284 — standing daily reminders whose window covers the selected day (the "קבוע" group). */
+  standing: SavedEvent[];
 }
 
-/** Split the flat `/events` list into today-timed / today-untimed / tomorrow-peek buckets. */
+/** Split the flat `/events` list into today-timed / today-untimed / tomorrow-peek / standing buckets. */
 export function partitionDay(
   events: SavedEvent[],
   todayIso: string,
   tomorrowIso: string,
 ): DayPartition {
-  const today = events.filter((e) => e.date_iso === todayIso);
+  // #284 — a standing daily reminder gets ONE home, the "קבוע" group: due every in-window day via the
+  // shared isStandingDueOn (the same window the digest uses), and EXCLUDED from the date buckets even
+  // on its anchor day so it never double-lists. Sorted time-then-title (deterministic).
+  const standing = events
+    .filter((e) => isStandingDueOn(e, todayIso))
+    .sort(
+      (a, b) =>
+        (a.time ?? "99:99").localeCompare(b.time ?? "99:99") ||
+        a.title_he.localeCompare(b.title_he),
+    );
+  const today = events.filter((e) => e.date_iso === todayIso && !isStandingDueOn(e, todayIso));
   const timed = today
     .filter((e) => e.time != null)
     .sort((a, b) => (a.time as string).localeCompare(b.time as string));
@@ -29,7 +41,7 @@ export function partitionDay(
     .filter((e) => e.date_iso === tomorrowIso)
     .sort((a, b) => (a.time ?? "99:99").localeCompare(b.time ?? "99:99"))
     .map((e) => ({ time: e.time, title: e.title_he }));
-  return { timed, untimed, tomorrow };
+  return { timed, untimed, tomorrow, standing };
 }
 
 /**

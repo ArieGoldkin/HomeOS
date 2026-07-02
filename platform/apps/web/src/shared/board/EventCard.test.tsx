@@ -81,6 +81,18 @@ describe("EventCard (canonical anti-slop spec)", () => {
     expect(screen.getByText(/↻/)).toBeInTheDocument();
   });
 
+  // #284 — the standing-daily marker mirrors the bot's confirm/digest "(יומי)" vocabulary.
+  it("shows the (יומי) marker for a standing daily reminder, none otherwise", () => {
+    const { rerender } = render(
+      <EventCard
+        event={make({ kind: "reminder", standing: { cadence: "daily", until: "2026-07-20" } })}
+      />,
+    );
+    expect(screen.getByText("(יומי)")).toBeInTheDocument();
+    rerender(<EventCard event={make({ kind: "reminder", standing: null })} />);
+    expect(screen.queryByText("(יומי)")).toBeNull();
+  });
+
   // DESIGN.md §13: kind must be conveyed by shape + TEXT, not the visual marker alone — the pip/
   // checkbox are aria-hidden, so a screen-reader-only label carries the kind for assistive tech.
   it("conveys reminder/task kind to assistive tech as text", () => {

@@ -126,6 +126,8 @@ export function EventCard({
           <span aria-hidden="true">↻</span> {HE_DAYS[event.recurrence.weekday]}
         </span>
       )}
+      {/* #284 — the standing-daily marker, the SAME "(יומי)" vocabulary the bot confirm + digest use. */}
+      {event.standing?.cadence === "daily" && <span className="text-muted-foreground">(יומי)</span>}
       <ProviderBadge source={event.source} />
     </div>
   );

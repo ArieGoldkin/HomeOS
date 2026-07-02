@@ -1,4 +1,4 @@
-import type { EventStatus, ParsedEvent, SavedEventSource } from "@homeos/shared";
+import type { EventStatus, ParsedEvent, SavedEventSource, SavedStanding } from "@homeos/shared";
 
 /** #86 — the fields a `שנה <ref>` / correction may change in place. A subset of ParsedEvent; merged
  *  onto the target row and re-validated (G20) before the write. */
@@ -33,6 +33,8 @@ export interface SavedEvent extends ParsedEvent {
   created_at?: string;
   /** #19 — open/done completion state; the server always populates it (legacy NULL rows → "open"). */
   status?: EventStatus;
+  /** #284 — the SERVED standing shape widens the parsed one with the stored window end (`until`). */
+  standing?: SavedStanding | null;
 }
 
 /** Persistence seam — handlers depend on this, not on the driver. */

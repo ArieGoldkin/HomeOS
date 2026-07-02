@@ -24,6 +24,8 @@ export interface DayEvents {
   nowTime: string | null;
   /** How many timed events were curated away (drives the "+N more" cue). */
   moreCount: number;
+  /** #284 — standing daily reminders due on the selected day (the "קבוע" group). */
+  standing: SavedEvent[];
 }
 
 /**
@@ -40,7 +42,7 @@ export function useDayEvents(dateIso: string, now: Date): DayEvents {
   const nowTime = isToday ? jerusalemHhmm(now) : null;
   const tomorrowIso = addDaysIso(dateIso, 1);
 
-  const { timed, untimed, tomorrow } = partitionDay(data ?? [], dateIso, tomorrowIso);
+  const { timed, untimed, tomorrow, standing } = partitionDay(data ?? [], dateIso, tomorrowIso);
   // #20 — rank the anytime list: overdue open tasks carried forward (today view only), then the day's
   // open items, then done (sunk). The bucket tag stays inside prioritizeUntimed (tested there); the UI
   // consumes the flat ordered events for now.
@@ -55,5 +57,6 @@ export function useDayEvents(dateIso: string, now: Date): DayEvents {
     tomorrow,
     nowTime,
     moreCount,
+    standing,
   };
 }

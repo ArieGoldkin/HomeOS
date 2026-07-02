@@ -36,7 +36,10 @@ export function TodayScreen({ dateIso, onSelectDate }: TodayScreenProps) {
   const household = family?.members.map((m) => m.name) ?? [];
   // #230 — first name from the Google session; no hardcoded fallback (empty greeting beats a fake name).
   const me = full_name?.split(" ")[0] ?? email?.split("@")[0] ?? "";
-  const { status, timed, untimed, tomorrow, nowTime, moreCount } = useDayEvents(dateIso, now);
+  const { status, timed, untimed, tomorrow, nowTime, moreCount, standing } = useDayEvents(
+    dateIso,
+    now,
+  );
   const { selected, openDetail, closeDetail } = useEventDetail();
   const toggleStatus = useToggleEventStatus();
   const [addOpen, setAddOpen] = useState(false);
@@ -98,6 +101,7 @@ export function TodayScreen({ dateIso, onSelectDate }: TodayScreenProps) {
             tomorrow={tomorrow}
             nowTime={nowTime}
             moreCount={moreCount}
+            standing={standing}
             onOpenDetail={openDetail}
             onToggleDone={handleToggleDone}
           />

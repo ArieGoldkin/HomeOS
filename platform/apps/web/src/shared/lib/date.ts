@@ -1,4 +1,10 @@
+import { jerusalemTodayIso } from "@homeos/shared";
+
 const TZ = "Asia/Jerusalem";
+
+// #284 — jerusalemTodayIso moved to @homeos/shared (ONE day-boundary truth for web + server/digest);
+// re-exported here so every existing @shared/lib caller keeps working unchanged.
+export { jerusalemTodayIso };
 
 /**
  * Shape guard for an ISO calendar date `YYYY-MM-DD`. Shape only — it does NOT verify the date is real
@@ -13,17 +19,6 @@ export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export function coerceDateIso(raw: string | null | undefined, now: Date = new Date()): string {
   return typeof raw === "string" && ISO_DATE_RE.test(raw) ? raw : jerusalemTodayIso(now);
-}
-
-/** Today's date in Asia/Jerusalem as `YYYY-MM-DD` (the board's anchor; the bot parses to this TZ). */
-export function jerusalemTodayIso(now: Date = new Date()): string {
-  // en-CA renders as YYYY-MM-DD; timeZone does the Asia/Jerusalem shift.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
 }
 
 /** Weekday for a `YYYY-MM-DD` date — 0=Sunday … 6=Saturday (the Israeli week starts Sunday). */
