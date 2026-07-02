@@ -85,4 +85,21 @@ describe("WeekStrip (#283)", () => {
     expect(num).toHaveAttribute("dir", "ltr");
     expect(num.className).toMatch(/tabular-nums/);
   });
+
+  // #283 fold (review #294 finding) — the DEFAULT /today state is a cell that is BOTH today and selected;
+  // both cues must apply at once (aria-current="date" AND the "(מוצג)" name + ring), not one masking the other.
+  it("applies both cues when a cell is today AND selected (the default Today state)", () => {
+    render(<WeekStrip days={week({ 2: { isToday: true, isSelected: true } })} />);
+    const cell = screen.getByRole("button", { name: /שלישי 23 \(מוצג\)/ });
+    expect(cell).toHaveAttribute("aria-current", "date");
+  });
+
+  // #283 fold — cells are inert when onSelectDay is omitted: clicking must not throw (the `?.` guard).
+  it("is inert (no throw) when onSelectDay is omitted", async () => {
+    const user = userEvent.setup();
+    render(<WeekStrip days={week()} />);
+    await user.click(screen.getByRole("button", { name: /רביעי/ }));
+    // no callback, no error — reaching here is the assertion
+    expect(screen.getAllByRole("button")).toHaveLength(7);
+  });
 });
